@@ -11,7 +11,7 @@ WORKDIR /build
 RUN pip install --no-cache-dir build wheel
 
 # ddoc core 소스 복사 및 wheel 생성
-COPY ./ddoc /build/ddoc
+COPY ../ddoc /build/ddoc
 RUN cd /build/ddoc && \
     python -m build --wheel --outdir /build/wheels
 

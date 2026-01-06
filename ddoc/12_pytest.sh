@@ -1,0 +1,1 @@
+pytest tests/test_cli_golden.py
