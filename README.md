@@ -16,9 +16,15 @@
 
 - 소스코드를 호스트 컴퓨터에 다운로드 합니다.
 ```bash
-git clone https://github.com/keti-datadrift/datadrift_base_framework.git
-cd drift_studio
-bash up.sh
+$ git clone https://github.com/keti-datadrift/datadrift_base_framework.git
+$ cd drift_studio
+
+$ docker-compose up --build
+ 
+ or
+
+$ docker compose up --build
+
 ```
 
 ### 빠른 사용 (Quick start)
