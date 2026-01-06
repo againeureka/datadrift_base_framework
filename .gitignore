@@ -13,7 +13,6 @@
 **/*.egg-info
 **/node_modules
 **/dvc_storage
-**/ddoc-plugin-vision
 **/server/sample_dataset/yolo
 **/server/ddoc
 
