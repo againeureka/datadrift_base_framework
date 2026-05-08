@@ -4,9 +4,12 @@ from __future__ import annotations
 import os
 from typing import Any, Dict
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .runner import RunError
 
@@ -100,8 +103,24 @@ def create_app(*, bind_info: str = "127.0.0.1:8765") -> FastAPI:
     from .routers import (
         analyze, commands as commands_router, examples,
         export as export_router, fetch as fetch_router,
-        health, plugins, report as report_router,
+        health, plugins, recipe as recipe_router,
+        report as report_router,
     )
+
+    # Round 15 — mount the GUI before any router that could claim
+    # ``/``. FastAPI matches routes in registration order, so the GUI
+    # ``/`` must be registered first to win over health.router's
+    # legacy JSON-metadata ``/``. When the static dir is missing
+    # (dev checkout without reinstall), we skip the override and the
+    # health router's JSON ``/`` stays as the fallback.
+    static_dir = Path(__file__).resolve().parent / "static"
+    index_html = static_dir / "index.html"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    if index_html.exists():
+        @app.get("/", include_in_schema=False)
+        def _index() -> FileResponse:  # noqa: D401
+            return FileResponse(str(index_html), media_type="text/html")
 
     app.include_router(health.router)
     app.include_router(commands_router.router)
@@ -111,6 +130,7 @@ def create_app(*, bind_info: str = "127.0.0.1:8765") -> FastAPI:
     app.include_router(report_router.router)
     app.include_router(export_router.router)
     app.include_router(fetch_router.router)
+    app.include_router(recipe_router.router)
 
     @app.exception_handler(RunError)
     async def _run_error_handler(request: Request, exc: RunError):  # noqa: ARG001

@@ -137,6 +137,10 @@ def register(app: typer.Typer) -> None:
         help="Start a FastAPI server exposing every ddoc CLI command over HTTP",
     )(serve_command)
 
+    # Round 16 — multi-step recipes.
+    from .recipe import recipe_app
+    app.add_typer(recipe_app, name="recipe", help="Run a multi-step workflow described in YAML")
+
     app.command(name="vis", help="Run GUI app")(vis)
     
     # ========================================================================

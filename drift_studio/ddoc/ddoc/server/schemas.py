@@ -98,3 +98,14 @@ class HealthResponse(BaseModel):
     plugin_count: int
     auth_enabled: bool
     bind: str
+
+
+# ── /recipe (Round 17) ───────────────────────────────────────────────
+
+
+class RecipeBody(BaseModel):
+    """One of ``yaml`` (inline YAML text) or ``path`` (file path on the
+    server) is required."""
+    yaml: Optional[str] = Field(default=None, description="Inline YAML text.")
+    path: Optional[str] = Field(default=None, description="Server-side path to a recipe YAML file.")
+    dry_run: bool = Field(default=False, description="Parse + substitute argv but skip subprocess execution.")

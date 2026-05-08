@@ -131,4 +131,7 @@ ddoc = [
   "fonts/NanumGothicCoding-Regular.ttf",
   "config/config.json",
   "templates/*.html",
+  "server/static/*.html",
+  "server/static/*.js",
+  "server/static/*.css",
 ]
