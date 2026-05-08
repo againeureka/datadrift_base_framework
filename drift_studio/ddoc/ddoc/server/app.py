@@ -98,13 +98,18 @@ def create_app(*, bind_info: str = "127.0.0.1:8765") -> FastAPI:
     )
     app.state.bind_info = bind_info
 
+    # Round 19 — install request-level metrics middleware before
+    # routers so even health-check / static-asset GETs are counted.
+    from .metrics import install_middleware
+    install_middleware(app)
+
     # Register routers (lazy-imported so optional FastAPI/uvicorn deps
     # don't cripple core ddoc imports).
     from .routers import (
         analyze, commands as commands_router, examples,
         export as export_router, fetch as fetch_router,
         health, plugins, recipe as recipe_router,
-        report as report_router,
+        recipes_lib, report as report_router,
     )
 
     # Round 15 — mount the GUI before any router that could claim
@@ -131,6 +136,7 @@ def create_app(*, bind_info: str = "127.0.0.1:8765") -> FastAPI:
     app.include_router(export_router.router)
     app.include_router(fetch_router.router)
     app.include_router(recipe_router.router)
+    app.include_router(recipes_lib.router)
 
     @app.exception_handler(RunError)
     async def _run_error_handler(request: Request, exc: RunError):  # noqa: ARG001

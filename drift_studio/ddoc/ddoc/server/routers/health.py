@@ -53,6 +53,17 @@ def healthz(request: Request) -> Dict[str, Any]:
     }
 
 
+@router.get("/metrics", include_in_schema=False)
+def metrics():
+    """Prometheus text-format metrics. Round 19 — bypasses auth so
+    standard scrapers (Prometheus, OpenMetrics) work without keys.
+    Operators who want auth on this endpoint should put it behind a
+    reverse proxy with IP allowlist (see deploy.md §"보안 체크리스트")."""
+    from fastapi import Response
+    from ..metrics import REGISTRY
+    return Response(content=REGISTRY.render(), media_type="text/plain; version=0.0.4")
+
+
 @router.get("/version")
 def version() -> Dict[str, Any]:
     try:
