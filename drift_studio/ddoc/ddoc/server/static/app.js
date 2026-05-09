@@ -77,6 +77,8 @@
     activeTab: 'drift',
     forms: {},              // tab → {state object}
     apiKey: localStorage.getItem('ddoc_serve_api_key') || '',
+    writeToken: localStorage.getItem('ddoc_serve_write_token') || '',
+    adminToken: localStorage.getItem('ddoc_serve_admin_token') || '',
   };
 
   function libraryRecipeOptions() {
@@ -110,6 +112,8 @@
   function authHeaders(extra = {}) {
     const out = { ...extra };
     if (STATE.apiKey) out['X-API-Key'] = STATE.apiKey;
+    if (STATE.writeToken) out['X-Recipes-Write-Token'] = STATE.writeToken;
+    if (STATE.adminToken) out['X-Recipes-Admin-Token'] = STATE.adminToken;
     return out;
   }
 
@@ -127,14 +131,16 @@
 
   // ── Bootstrap ────────────────────────────────────────────────────
   async function bootstrap() {
-    const [health, detectors, examples] = await Promise.all([
+    const [health, detectors, examples, library] = await Promise.all([
       api('GET', '/healthz'),
       api('GET', '/plugins/detectors'),
       api('GET', '/examples/scenarios'),
+      api('GET', '/recipes'),
     ]);
     STATE.health = health.json || {};
     STATE.detectors = detectors.json || { count: 0, registry: [] };
     STATE.examples = examples.json || { modalities: [], scenarios: [] };
+    STATE.library = library.json || null;
 
     applyI18n();
     renderTopbar();
@@ -178,7 +184,15 @@
   // ── Topbar ───────────────────────────────────────────────────────
   function renderTopbar() {
     const h = STATE.health || {};
-    $('#meta').textContent = `· v${h.ddoc_version || '?'} · ${h.plugin_count ?? '?'} plugins · auth: ${h.auth_enabled ? 'ON' : 'OFF'}`;
+    const lib = STATE.library || {};
+    const tags = [
+      `v${h.ddoc_version || '?'}`,
+      `${h.plugin_count ?? '?'} plugins`,
+      `auth: ${h.auth_enabled ? 'ON' : 'OFF'}`,
+    ];
+    if (lib.write_enabled) tags.push('write: ON');
+    if (lib.git_enabled) tags.push('git: ON');
+    $('#meta').textContent = '· ' + tags.join(' · ');
 
     // Language toggle button (Round 16 — switches en ↔ ko).
     if (!$('#lang-toggle')) {
@@ -510,15 +524,57 @@
       $('.actions').appendChild(deleteBtn);
     }
     refreshSaveButtonVisibility();
+    refreshWriteTokenInput();
+  }
+
+  // Round 22 — surface a write-token input only when the server
+  // demands one (DDOC_RECIPES_WRITE_TOKEN env). Cached in localStorage
+  // so users don't retype on every save.
+  function refreshWriteTokenInput() {
+    const required = !!(STATE.library && STATE.library.write_token_required);
+    let row = $('#recipe-write-token-row');
+    if (!required) {
+      if (row) row.remove();
+      return;
+    }
+    if (row) return;
+    const input = el('input', {
+      type: 'password',
+      id: 'recipe-write-token-input',
+      placeholder: 'X-Recipes-Write-Token',
+      value: STATE.writeToken || '',
+      style: 'flex:1;padding:0.4em 0.6em;border:1px solid var(--border);border-radius:var(--radius);',
+    });
+    input.addEventListener('input', () => {
+      STATE.writeToken = input.value.trim();
+      if (STATE.writeToken) localStorage.setItem('ddoc_serve_write_token', STATE.writeToken);
+      else localStorage.removeItem('ddoc_serve_write_token');
+    });
+    row = el('div', {
+      id: 'recipe-write-token-row',
+      class: 'tab-only-recipe',
+      style: 'display:flex;gap:0.5em;align-items:center;margin-top:0.5em;',
+    },
+      el('label', { for: 'recipe-write-token-input', style: 'color:var(--muted);font-size:12.5px;' },
+        'write token'),
+      input);
+    const root = $('.builder[data-builder="recipe"]');
+    if (root) root.appendChild(row);
   }
 
   function refreshSaveButtonVisibility() {
     const ids = ['#recipe-save-btn', '#recipe-diff-btn',
-                 '#recipe-restore-btn', '#recipe-delete-btn'];
+                 '#recipe-restore-btn', '#recipe-delete-btn',
+                 '#recipe-write-token-row'];
     const show = STATE.activeTab === 'recipe';
     for (const id of ids) {
       const btn = $(id);
-      if (btn) btn.style.display = show ? '' : 'none';
+      if (!btn) continue;
+      if (id === '#recipe-write-token-row') {
+        btn.style.display = show ? 'flex' : 'none';
+      } else {
+        btn.style.display = show ? '' : 'none';
+      }
     }
   }
 
@@ -896,6 +952,15 @@
     viz.innerHTML = '';
     if (!envelope || typeof envelope !== 'object') { viz.hidden = true; return; }
 
+    // Round 22 — recipe diff envelope: render unified-diff with line
+    // colors (purely visual; raw text remains in #result-body).
+    if (typeof envelope.diff === 'string' &&
+        (typeof envelope.from !== 'undefined' || typeof envelope.to !== 'undefined')) {
+      viz.appendChild(diffCard(envelope));
+      viz.hidden = false;
+      return;
+    }
+
     // Multi-modal stack (drift): each modality gets its own card.
     if (envelope.modalities && typeof envelope.modalities === 'object') {
       const grid = el('div', { class: 'modality-grid' });
@@ -1202,6 +1267,136 @@
     if (env.http_status) meta.appendChild(el('span', {}, el('b', {}, 'http'), ` ${env.http_status}`));
     card.appendChild(meta);
     return card;
+  }
+
+  // Round 22 — unified-diff card. Lines starting with '+' / '-' /
+  // '@@' / 'diff/index' are colored.
+  // Round 23 — for adjacent (-, +) line pairs, also highlight changed
+  // *words* via an LCS-based token diff. No syntax highlighter
+  // dependency.
+  function diffCard(env) {
+    const card = el('div', { class: 'viz-card diff-card' });
+    const heading = `${env.name || 'recipe'} · ${env.from || 'HEAD'} → ${env.to || '∅'}`;
+    card.appendChild(el('h4', {}, heading));
+    if (env.identical) {
+      card.appendChild(el('div', { class: 'big normal' }, 'identical'));
+      return card;
+    }
+    if (!env.diff) {
+      card.appendChild(el('div', { class: 'meta' },
+        el('span', {}, env.note || 'no diff content')));
+      return card;
+    }
+
+    const pre = el('pre', { class: 'diff-pre' });
+    const lines = env.diff.split('\n');
+    // Walk lines, pairing adjacent '-' then '+' for word-level diff.
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      // File or hunk header — never word-diff.
+      if (line.startsWith('+++') || line.startsWith('---')) {
+        appendDiffLine(pre, line, 'diff-file');
+        i++; continue;
+      }
+      if (line.startsWith('@@')) {
+        appendDiffLine(pre, line, 'diff-hunk');
+        i++; continue;
+      }
+      // Pair (-foo, +bar) → word-diffed pair.
+      if (line.startsWith('-') &&
+          i + 1 < lines.length && lines[i + 1].startsWith('+')) {
+        const minusBody = line.slice(1);
+        const plusBody = lines[i + 1].slice(1);
+        const [delSpans, addSpans] = wordDiff(minusBody, plusBody);
+        appendDiffLineSpans(pre, '-', delSpans, 'diff-del');
+        appendDiffLineSpans(pre, '+', addSpans, 'diff-add');
+        i += 2; continue;
+      }
+      let cls = 'diff-ctx';
+      if (line.startsWith('+')) cls = 'diff-add';
+      else if (line.startsWith('-')) cls = 'diff-del';
+      appendDiffLine(pre, line, cls);
+      i++;
+    }
+    card.appendChild(pre);
+    return card;
+  }
+
+  function appendDiffLine(pre, text, cls) {
+    pre.appendChild(el('span', { class: cls }, text));
+    pre.appendChild(document.createTextNode('\n'));
+  }
+
+  function appendDiffLineSpans(pre, prefix, spans, cls) {
+    const lineSpan = el('span', { class: cls });
+    lineSpan.appendChild(document.createTextNode(prefix));
+    for (const s of spans) {
+      if (s.changed) {
+        lineSpan.appendChild(el('mark', { class: 'diff-word' }, s.text));
+      } else {
+        lineSpan.appendChild(document.createTextNode(s.text));
+      }
+    }
+    pre.appendChild(lineSpan);
+    pre.appendChild(document.createTextNode('\n'));
+  }
+
+  // Token-level diff between two strings via classic LCS dynamic
+  // programming. Tokens are word-or-whitespace runs so spacing is
+  // preserved. Returns [delSpans, addSpans] where each span is
+  // {text, changed}.
+  function wordDiff(a, b) {
+    const aTok = a.match(/\s+|\S+/g) || [];
+    const bTok = b.match(/\s+|\S+/g) || [];
+    const m = aTok.length, n = bTok.length;
+    // dp[i][j] = LCS length of aTok[0..i] vs bTok[0..j]
+    const dp = Array.from({ length: m + 1 }, () => new Int32Array(n + 1));
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (aTok[i - 1] === bTok[j - 1]) dp[i][j] = dp[i - 1][j - 1] + 1;
+        else dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+    // Backtrack — produce ops same/del/add per token.
+    const ops = [];
+    let i = m, j = n;
+    while (i > 0 && j > 0) {
+      if (aTok[i - 1] === bTok[j - 1]) {
+        ops.push({ kind: 'same', a: aTok[i - 1] }); i--; j--;
+      } else if (dp[i - 1][j] >= dp[i][j - 1]) {
+        ops.push({ kind: 'del', a: aTok[i - 1] }); i--;
+      } else {
+        ops.push({ kind: 'add', b: bTok[j - 1] }); j--;
+      }
+    }
+    while (i > 0) { ops.push({ kind: 'del', a: aTok[--i] }); }
+    while (j > 0) { ops.push({ kind: 'add', b: bTok[--j] }); }
+    ops.reverse();
+
+    const delSpans = [], addSpans = [];
+    let delBuf = '', delChanged = null;
+    let addBuf = '', addChanged = null;
+    const flush = (buf, changed, target) => {
+      if (buf) target.push({ text: buf, changed });
+    };
+    for (const op of ops) {
+      if (op.kind === 'same') {
+        if (delChanged === true) { flush(delBuf, true, delSpans); delBuf = ''; }
+        if (addChanged === true) { flush(addBuf, true, addSpans); addBuf = ''; }
+        delChanged = false; addChanged = false;
+        delBuf += op.a; addBuf += op.a;
+      } else if (op.kind === 'del') {
+        if (delChanged === false) { flush(delBuf, false, delSpans); delBuf = ''; }
+        delChanged = true; delBuf += op.a;
+      } else { // add
+        if (addChanged === false) { flush(addBuf, false, addSpans); addBuf = ''; }
+        addChanged = true; addBuf += op.b;
+      }
+    }
+    flush(delBuf, !!delChanged, delSpans);
+    flush(addBuf, !!addChanged, addSpans);
+    return [delSpans, addSpans];
   }
 
   function formatVal(v) {

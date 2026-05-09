@@ -13,6 +13,10 @@ Endpoints:
 * ``GET    /recipes/{name}/diff``           → unified diff between two refs (Round 21)
 * ``GET    /recipes/{name}/versions``       → snapshot history under .history/ (Round 20)
 * ``GET    /recipes/{name}/versions/{ts}``  → one historical YAML
+* ``GET    /git-log``                       → recent commits (when DDOC_RECIPES_GIT=1) (Round 23)
+* ``GET    /tokens``                        → list write tokens (admin-gated) (Round 24)
+* ``POST   /tokens``                        → mint a new write token (admin-gated)
+* ``DELETE /tokens/{tok_id}``               → revoke a write token (admin-gated)
 
 Write-mode is opt-in via ``DDOC_RECIPES_WRITE=1`` env so a casual
 ``ddoc serve`` deployment cannot have its recipes overwritten by
@@ -26,15 +30,21 @@ recoverable. The active recipe stays at ``<library>/<name>.yaml``;
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
+import shutil
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
 from ..auth import require_api_key
+from .. import token_store
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["recipes"], dependencies=[Depends(require_api_key)])
 
@@ -48,6 +58,98 @@ def _write_enabled() -> bool:
     return os.getenv("DDOC_RECIPES_WRITE", "").lower() in ("1", "true", "yes")
 
 
+def _write_token_required() -> Optional[str]:
+    """Return the configured write-token, or None if no token gating."""
+    tok = os.getenv("DDOC_RECIPES_WRITE_TOKEN", "")
+    return tok or None
+
+
+def _write_token_active() -> bool:
+    """True iff *some* write-token gate is configured — env single
+    secret (Round 22) and/or the token store has been initialized
+    (Round 24). Once the store exists, the gate stays on even if all
+    tokens are revoked, so revoking-then-anonymous writes is
+    impossible."""
+    if _write_token_required() is not None:
+        return True
+    base = _resolve_library_dir()
+    if base is None:
+        return False
+    return token_store.is_initialized(base.resolve())
+
+
+# ── Round 23 — git-backed audit trail ───────────────────────────────
+
+
+def _git_enabled() -> bool:
+    """Git audit trail is opt-in via DDOC_RECIPES_GIT=1.
+
+    When on, every successful write commits the library directory so a
+    full audit history (with diffs) is queryable via ``git log`` outside
+    the API. ``.history/`` archives stay as before — the two are
+    complementary.
+    """
+    return os.getenv("DDOC_RECIPES_GIT", "").lower() in ("1", "true", "yes")
+
+
+def _git_available() -> bool:
+    return shutil.which("git") is not None
+
+
+def _git_run(base: Path, *args: str) -> subprocess.CompletedProcess:
+    """Run a git subcommand inside ``base``; never raises so the API
+    request itself isn't sunk by a git failure."""
+    return subprocess.run(
+        ["git", "-C", str(base), *args],
+        capture_output=True, text=True, timeout=15, check=False,
+    )
+
+
+def _git_ensure_repo(base: Path) -> bool:
+    """Init a git repo at ``base`` if missing. Returns True when the
+    directory is now a working repo."""
+    if (base / ".git").exists():
+        return True
+    if not _git_available():
+        return False
+    init = _git_run(base, "init", "-q")
+    if init.returncode != 0:
+        _log.warning("git init failed in %s: %s", base, init.stderr)
+        return False
+    # Ensure a sane default identity for the commits we make. Don't
+    # clobber existing config.
+    cfg = _git_run(base, "config", "user.email")
+    if not cfg.stdout.strip():
+        _git_run(base, "config", "user.email", "ddoc-serve@localhost")
+        _git_run(base, "config", "user.name", "ddoc-serve")
+    return (base / ".git").exists()
+
+
+def _git_commit_after_write(base: Path, message: str) -> Optional[str]:
+    """Stage every change in the library and commit. Returns the new
+    commit SHA on success, ``None`` on no-op or failure."""
+    if not _git_enabled():
+        return None
+    if not _git_available():
+        return None
+    if not _git_ensure_repo(base):
+        return None
+    add = _git_run(base, "add", "-A")
+    if add.returncode != 0:
+        _log.warning("git add failed in %s: %s", base, add.stderr)
+        return None
+    # ``--allow-empty`` so ops that touched nothing on disk (e.g.
+    # an idempotent restore to identical content) still leave a
+    # marker. Some ops legitimately have nothing to commit.
+    commit = _git_run(base, "commit", "-q", "--allow-empty", "-m", message)
+    if commit.returncode != 0:
+        _log.warning("git commit failed in %s: %s", base, commit.stderr)
+        return None
+    rev = _git_run(base, "rev-parse", "HEAD")
+    sha = rev.stdout.strip() if rev.returncode == 0 else None
+    return sha or None
+
+
 def _check_write_enabled() -> None:
     if not _write_enabled():
         raise HTTPException(
@@ -56,6 +158,73 @@ def _check_write_enabled() -> None:
                 "status": "error",
                 "error_code": "library_read_only",
                 "message": "Recipe library is read-only. Set DDOC_RECIPES_WRITE=1 to enable save/versioning routes.",
+            },
+        )
+
+
+def _check_write_token(request: Request) -> None:
+    """Gate write endpoints. The check is *required* if either
+    ``DDOC_RECIPES_WRITE_TOKEN`` env is set or the library's token
+    store has any active tokens.
+
+    Validation: header must equal the env secret, or its hash must
+    match a non-revoked token in ``<library>/.tokens.json``. Either
+    suffices — deployments can mix the env single-secret (Round 22)
+    with multi-token rotation (Round 24).
+    """
+    env_expected = _write_token_required()
+    base = _resolve_library_dir()
+    store_initialized = base is not None and token_store.is_initialized(base.resolve())
+    if env_expected is None and not store_initialized:
+        return
+    provided = request.headers.get("x-recipes-write-token", "")
+    if env_expected is not None and provided == env_expected:
+        return
+    if base is not None and token_store.verify(base.resolve(), provided):
+        return
+    raise HTTPException(
+        status_code=401,
+        detail={
+            "status": "error",
+            "error_code": "invalid_write_token",
+            "message": "Missing or invalid X-Recipes-Write-Token header.",
+        },
+    )
+
+
+# ── Round 24 — admin gate (token CRUD endpoints) ────────────────────
+
+
+def _admin_token_required() -> Optional[str]:
+    tok = os.getenv("DDOC_RECIPES_ADMIN_TOKEN", "")
+    return tok or None
+
+
+def _check_admin_token(request: Request) -> None:
+    """Gate token-management endpoints. ``DDOC_RECIPES_ADMIN_TOKEN``
+    must be set; the request must carry a matching
+    ``X-Recipes-Admin-Token`` header. Without admin token configured
+    at all, the management endpoints are unreachable (closed-by-default
+    so a casual ``ddoc serve`` never accidentally exposes token CRUD).
+    """
+    expected = _admin_token_required()
+    if expected is None:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "status": "error",
+                "error_code": "admin_disabled",
+                "message": "Token management is disabled. Set DDOC_RECIPES_ADMIN_TOKEN to enable.",
+            },
+        )
+    provided = request.headers.get("x-recipes-admin-token", "")
+    if provided != expected:
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "status": "error",
+                "error_code": "invalid_admin_token",
+                "message": "Missing or invalid X-Recipes-Admin-Token header.",
             },
         )
 
@@ -150,6 +319,8 @@ def list_recipes() -> Dict[str, Any]:
         "library_dir": str(base),
         "count": len(recipes),
         "write_enabled": _write_enabled(),
+        "write_token_required": _write_token_active(),
+        "git_enabled": _git_enabled() and (base / ".git").exists(),
         "recipes": recipes,
     }
 
@@ -189,6 +360,8 @@ def get_recipe(name: str) -> Dict[str, Any]:
         "metadata": meta,
         "issues": issues,
         "write_enabled": _write_enabled(),
+        "write_token_required": _write_token_active(),
+        "git_enabled": _git_enabled() and (base / ".git").exists(),
     }
 
 
@@ -228,7 +401,11 @@ def _archive_existing(base: Path, name: str) -> Optional[str]:
 
 
 @router.put("/recipes/{name}")
-def save_recipe(name: str, payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+def save_recipe(
+    name: str,
+    request: Request,
+    payload: Dict[str, Any] = Body(...),
+) -> Dict[str, Any]:
     """Save (create or update) a recipe.
 
     Body: ``{yaml: "..."}``. The YAML is parsed + validated before
@@ -237,9 +414,11 @@ def save_recipe(name: str, payload: Dict[str, Any] = Body(...)) -> Dict[str, Any
     snapshotted under ``.history/<name>/<UTC ts>.yaml``.
 
     Requires ``DDOC_RECIPES_WRITE=1`` env. URL ``name`` must match
-    a conservative slug pattern.
+    a conservative slug pattern. If ``DDOC_RECIPES_WRITE_TOKEN`` is
+    set, the ``X-Recipes-Write-Token`` header must match.
     """
     _check_write_enabled()
+    _check_write_token(request)
     _check_safe_name(name)
 
     yaml_text = payload.get("yaml")
@@ -280,12 +459,17 @@ def save_recipe(name: str, payload: Dict[str, Any] = Body(...)) -> Dict[str, Any
     target = base / f"{name}.yaml"
     archive_path = _archive_existing(base, name)
     _atomic_write(target, yaml_text)
+    git_sha = _git_commit_after_write(
+        base,
+        f"save {name} ({'create' if archive_path is None else 'update'})",
+    )
     return {
         "status": "ok",
         "name": name,
         "path": str(target),
         "archived_to": archive_path,
         "step_count": len(recipe.steps),
+        "git_commit": git_sha,
     }
 
 
@@ -382,13 +566,14 @@ def _resolve_ref_yaml(base: Path, name: str, ref: str) -> str:
 
 
 @router.delete("/recipes/{name}")
-def delete_recipe(name: str) -> Dict[str, Any]:
+def delete_recipe(name: str, request: Request) -> Dict[str, Any]:
     """Delete a recipe. The current content is archived first so a
     subsequent ``POST /recipes/{name}/restore/{ts}`` can recover it.
 
     Requires ``DDOC_RECIPES_WRITE=1``.
     """
     _check_write_enabled()
+    _check_write_token(request)
     _check_safe_name(name)
     base = _resolve_library_dir()
     if base is None:
@@ -406,16 +591,18 @@ def delete_recipe(name: str) -> Dict[str, Any]:
         )
     archive_path = _archive_existing(base, name)
     active.unlink()
+    git_sha = _git_commit_after_write(base, f"delete {name}")
     return {
         "status": "ok",
         "name": name,
         "deleted_path": str(active),
         "archived_to": archive_path,
+        "git_commit": git_sha,
     }
 
 
 @router.post("/recipes/{name}/restore/{ts}")
-def restore_version(name: str, ts: str) -> Dict[str, Any]:
+def restore_version(name: str, ts: str, request: Request) -> Dict[str, Any]:
     """Replace the active recipe with the YAML from a historical
     snapshot. The current active content is archived first so the
     restore itself is reversible.
@@ -424,6 +611,7 @@ def restore_version(name: str, ts: str) -> Dict[str, Any]:
     ``.history/<name>/``.
     """
     _check_write_enabled()
+    _check_write_token(request)
     _check_safe_name(name)
     if not _SAFE_NAME_RE.match(ts):
         raise HTTPException(
@@ -450,12 +638,14 @@ def restore_version(name: str, ts: str) -> Dict[str, Any]:
     target = base / f"{name}.yaml"
     archive_path = _archive_existing(base, name)
     _atomic_write(target, yaml_text)
+    git_sha = _git_commit_after_write(base, f"restore {name}@{ts}")
     return {
         "status": "ok",
         "name": name,
         "restored_from": str(snapshot),
         "archived_to": archive_path,
         "path": str(target),
+        "git_commit": git_sha,
     }
 
 
@@ -525,3 +715,130 @@ def diff_recipe(
         "diff": "".join(diff_lines),
         "identical": not diff_lines,
     }
+
+
+# ── Round 23 — git log endpoint ─────────────────────────────────────
+
+
+@router.get("/git-log")
+def git_log(limit: int = Query(50, ge=1, le=500)) -> Dict[str, Any]:
+    """Recent commits in the library (when ``DDOC_RECIPES_GIT=1`` was
+    on at the time those commits were made). Empty list when git mode
+    isn't active or no commits exist yet.
+
+    Each entry: ``{commit, author, date, subject}``. Use ``git -C
+    <library_dir> show <commit>`` for the full diff (or call
+    ``GET /recipes/{name}/diff`` for ddoc-aware diffs).
+    """
+    base = _resolve_library_dir()
+    if base is None:
+        return {"status": "ok", "library_dir": None, "count": 0, "commits": []}
+    base = base.resolve()
+    if not (base / ".git").exists() or not _git_available():
+        return {
+            "status": "ok",
+            "library_dir": str(base),
+            "git_enabled": False,
+            "count": 0,
+            "commits": [],
+        }
+    fmt = "%H%x09%an%x09%aI%x09%s"  # tab-separated
+    res = _git_run(base, "log", f"-{limit}", f"--pretty=format:{fmt}")
+    commits: List[Dict[str, Any]] = []
+    if res.returncode == 0 and res.stdout:
+        for line in res.stdout.splitlines():
+            parts = line.split("\t", 3)
+            if len(parts) == 4:
+                commits.append({
+                    "commit": parts[0],
+                    "author": parts[1],
+                    "date": parts[2],
+                    "subject": parts[3],
+                })
+    return {
+        "status": "ok",
+        "library_dir": str(base),
+        "git_enabled": True,
+        "count": len(commits),
+        "commits": commits,
+    }
+
+
+# ── Round 24 — token CRUD ───────────────────────────────────────────
+
+
+_TOKEN_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$")
+_TOKEN_SCOPE_RE = re.compile(r"^(write|admin)$")
+_TOKEN_ID_RE = re.compile(r"^tok_[0-9a-f]{8}$")
+
+
+def _require_library() -> Path:
+    base = _resolve_library_dir()
+    if base is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"status": "error", "error_code": "library_not_configured"},
+        )
+    return base.resolve()
+
+
+@router.get("/tokens")
+def list_write_tokens(request: Request) -> Dict[str, Any]:
+    """List active + revoked write tokens (without secrets). Admin-gated.
+    """
+    _check_admin_token(request)
+    base = _require_library()
+    return {
+        "status": "ok",
+        "count": len(token_store.list_tokens(base)),
+        "tokens": token_store.list_tokens(base),
+    }
+
+
+@router.post("/tokens")
+def create_write_token(
+    request: Request,
+    payload: Dict[str, Any] = Body(...),
+) -> Dict[str, Any]:
+    """Mint a new write token. Body: ``{name, scope?}``. Returns the
+    plaintext secret **once** — store it client-side immediately;
+    the server keeps only the SHA-256 hash. Admin-gated.
+    """
+    _check_admin_token(request)
+    base = _require_library()
+    name = (payload.get("name") or "").strip()
+    if not _TOKEN_NAME_RE.match(name):
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "error", "error_code": "invalid_token_name",
+                    "message": "name must match [A-Za-z0-9][A-Za-z0-9 _.-]{0,63}"},
+        )
+    scope = (payload.get("scope") or "write").strip()
+    if not _TOKEN_SCOPE_RE.match(scope):
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "error", "error_code": "invalid_token_scope",
+                    "message": "scope must be 'write' or 'admin'"},
+        )
+    minted = token_store.create_token(base, name, scope)
+    return {"status": "ok", **minted}
+
+
+@router.delete("/tokens/{tok_id}")
+def revoke_write_token(tok_id: str, request: Request) -> Dict[str, Any]:
+    """Soft-revoke (set ``revoked_at``); the record stays for audit.
+    Admin-gated."""
+    _check_admin_token(request)
+    if not _TOKEN_ID_RE.match(tok_id):
+        raise HTTPException(
+            status_code=400,
+            detail={"status": "error", "error_code": "invalid_token_id"},
+        )
+    base = _require_library()
+    rec = token_store.revoke_token(base, tok_id)
+    if rec is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"status": "error", "error_code": "token_not_found", "id": tok_id},
+        )
+    return {"status": "ok", "token": rec}

@@ -371,6 +371,37 @@ button.recipe-save.recipe-delete:hover {
   flex-shrink: 0;
 }
 
+/* Round-22 recipe diff card ──────────────────────────────────────── */
+.diff-card .diff-pre {
+  background: #0f1115;
+  color: #d8e0eb;
+  padding: 0.7em 0.9em;
+  border-radius: var(--radius);
+  margin: 0.4em 0 0;
+  max-height: 28em;
+  overflow: auto;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+}
+.diff-pre span { display: inline; }
+.diff-pre .diff-add  { color: #7ad97a; background: rgba(58, 137, 58, 0.18); display: block; }
+.diff-pre .diff-del  { color: #ff8a85; background: rgba(196, 48, 43, 0.20); display: block; }
+.diff-pre .diff-hunk { color: #c598ff; display: block; }
+.diff-pre .diff-file { color: #9bb6ff; font-weight: 600; display: block; }
+.diff-pre .diff-ctx  { color: #c5cdda; display: block; }
+
+/* Round-23 word-level highlight inside +/- lines */
+.diff-pre mark.diff-word {
+  background: rgba(255, 213, 0, 0.30);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.diff-pre .diff-add mark.diff-word { background: rgba(122, 217, 122, 0.55); }
+.diff-pre .diff-del mark.diff-word { background: rgba(255, 138, 133, 0.55); }
+
 /* Round-19 timeseries SVG line chart ─────────────────────────────── */
 .ts-chart {
   margin-top: 0.8em;

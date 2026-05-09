@@ -314,10 +314,160 @@ controls: **Save to library** / **Compare** (HEAD vs latest) /
 **Restore latest** / **Delete**. Restore 와 Delete 는 confirm
 dialog 로 한번 더 묻고, Delete 는 빨간 outline 으로 시각 구분.
 
-## 후속 (Round 22+)
+## Write-token gating (Round 22)
 
-* recipe library 의 git-based history (commit per save)
-* 권한별 write (read-only public + write-token gated)
+write 모드는 단순한 boolean toggle 외에, optional secret 으로
+한층 게이트할 수 있음. 이 패턴은 *anonymous read + token-gated
+write* 시나리오 (사이트 운영자만 라이브러리 수정 가능, 읽기는 누구나)
+에 유용.
+
+```bash
+DDOC_RECIPES_DIR=/srv/ddoc/recipes \
+DDOC_RECIPES_WRITE=1 \
+DDOC_RECIPES_WRITE_TOKEN=$(openssl rand -hex 16) \
+ddoc serve
+
+# 토큰 없이 PUT → 401
+curl -s -X PUT http://localhost:8765/recipes/foo \
+  -H 'Content-Type: application/json' -d '{"yaml":"…"}'
+# → {"detail":{"error_code":"invalid_write_token", ...}}
+
+# 토큰 헤더 첨부 → 200
+curl -s -X PUT http://localhost:8765/recipes/foo \
+  -H 'X-Recipes-Write-Token: <secret>' \
+  -H 'Content-Type: application/json' -d '{"yaml":"…"}'
+```
+
+규칙:
+
+* 토큰 미설정 (`DDOC_RECIPES_WRITE_TOKEN` env 없음) → 기존과
+  동일하게 `DDOC_RECIPES_WRITE=1` 만 통과하면 write 가능.
+* 토큰 설정 → write 4 endpoint (`PUT`, `DELETE`,
+  `POST .../restore/{ts}`) 에 한해 `X-Recipes-Write-Token` 헤더 검증.
+  read 엔드포인트는 영향 없음 (`/recipes`, `/recipes/{name}`,
+  `/versions`, `/diff`).
+* `GET /recipes` 와 `GET /recipes/{name}` 응답에 새 boolean 필드
+  `write_token_required` 가 포함 → GUI 가 input 박스 노출 여부 판단.
+* 토큰 검증 실패 → `401 invalid_write_token` envelope.
+* `DDOC_API_KEY` (전역 헤더 인증) 와 *and* 관계 — 둘 다 설정되면
+  write 요청은 두 헤더 모두 통과해야 함.
+
+GUI 의 Recipe 탭에서는 서버가 토큰을 요구하면 actions row 아래에
+**write token** password-style 입력박스가 자동 노출되고, 입력값은
+`localStorage` (`ddoc_serve_write_token`) 에 캐시됨.
+
+## Diff UI rendering (Round 22)
+
+`GET /recipes/{name}/diff` 응답을 result panel 이 unified-diff 카드로
+색상 강조 렌더:
+
+* `+` 줄 → 녹색 배경
+* `-` 줄 → 빨간 배경
+* `@@ ... @@` hunk header → 보라색
+* `+++` / `---` file header → 파란색
+
+`identical: true` 인 경우 큰 글씨로 "identical" 표시.
+snapshot 0 개 → "no snapshots yet" 메시지. 라이브러리 의존성 없는
+순수 vanilla.
+
+## Git-backed audit trail (Round 23)
+
+`.history/` archive 위에 *full git history* 까지 옵션으로 켤 수 있음.
+켜지면 매 PUT/DELETE/restore 후에 라이브러리 디렉터리에서 자동
+`git add -A && git commit` 이 돌면서, 시간순 audit trail 이 보장됨.
+
+```bash
+DDOC_RECIPES_DIR=/srv/ddoc/recipes \
+DDOC_RECIPES_WRITE=1 \
+DDOC_RECIPES_GIT=1 \
+ddoc serve
+```
+
+규칙:
+
+* 첫 write 시 디렉터리에 `.git` 이 없으면 `git init` + sane default
+  identity (`ddoc-serve@localhost`) 자동 부여.
+* 응답 envelope 의 `git_commit` 필드에 새 SHA-1 이 노출 (실패/비활성
+  시 `null`).
+* `GET /git-log?limit=50` 로 최근 commit 목록 ({commit, author, date,
+  subject}) 조회 가능. 자세한 diff 는 OS shell 에서 `git -C
+  <library_dir> show <sha>` 로 직접.
+* git 호출 실패는 *best-effort* — API request 자체는 성공 (파일은
+  이미 disk 에 atomic write 됨, `.history/` archive 도 정상 유지). git
+  관련 로그만 warning.
+* `git_enabled: bool` 가 listing/get 응답에 포함됨 (실제로 `.git` 이
+  있고 env 가 켜져 있을 때 `true`).
+* `.history/` archive 와 git 은 *상호 보완* — git 이 꺼져 있어도
+  `.history/` 로 모든 versioning 동작 그대로.
+
+GUI topbar 에 `git: ON` 배지가 표시 (bootstrap 에서 `/recipes` 한 번
+fetch).
+
+## Diff UI word-level highlighting (Round 23)
+
+기존 line-level 색상 위에, 인접한 `-`/`+` 줄 쌍에 대해 토큰 단위
+LCS diff 가 추가로 실행되어 *바뀐 단어/공백 토큰만* `<mark>` 으로
+강조됨. 라이브러리 의존성 0 (vanilla LCS DP).
+
+* `+` 줄 안의 추가된 단어 → 진녹색 mark
+* `-` 줄 안의 제거된 단어 → 진빨강 mark
+* 컨텍스트 줄 / hunk header / file header 는 영향 없음
+
+## Write-token rotation API (Round 24)
+
+Round 22 의 단일 env-secret 위에 *multi-token store* 추가 — admin
+이 token 을 발급/취소(rotation)할 수 있고, 모든 secret 은 disk 에는
+SHA-256 해시로만 저장 (plaintext 는 발급 시 *한 번만* 응답).
+
+```bash
+DDOC_RECIPES_DIR=/srv/ddoc/recipes \
+DDOC_RECIPES_WRITE=1 \
+DDOC_RECIPES_ADMIN_TOKEN=$(openssl rand -hex 16) \
+ddoc serve
+
+# 발급 — secret 은 응답에 한 번만 노출
+curl -s -X POST http://localhost:8765/tokens \
+  -H "X-Recipes-Admin-Token: $ADMIN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"ci-runner"}' | jq
+# → {"status":"ok","id":"tok_abcd1234","name":"ci-runner",
+#    "scope":"write","secret":"<plaintext, save now>","created_at":"…"}
+
+# 토큰으로 write
+curl -s -X PUT http://localhost:8765/recipes/foo \
+  -H "X-Recipes-Write-Token: <plaintext>" \
+  -H 'Content-Type: application/json' -d '{"yaml":"…"}'
+
+# 목록 (해시 전용, secret 노출 안 됨)
+curl -s -H "X-Recipes-Admin-Token: $ADMIN" http://localhost:8765/tokens | jq
+
+# 취소 (soft-delete; 기록은 audit 용으로 보존)
+curl -s -X DELETE -H "X-Recipes-Admin-Token: $ADMIN" \
+  http://localhost:8765/tokens/tok_abcd1234 | jq
+```
+
+규칙:
+
+* **Admin closed-by-default** — `DDOC_RECIPES_ADMIN_TOKEN` 미설정 시
+  `/tokens` 엔드포인트는 `403 admin_disabled`. 즉 평소 ddoc serve
+  띄움이 실수로 token CRUD 를 노출하지 않음.
+* **Validator 우선순위** — write 요청은 *env single-secret OR 토큰
+  스토어 활성 hash* 둘 중 하나에 매칭되면 통과 (Round 22 와 backward-
+  compatible).
+* **Sticky gate** — 한 번이라도 `POST /tokens` 가 호출되어 `.tokens.json`
+  파일이 만들어지면, 모든 토큰을 취소해도 *anonymous write 로 돌아가지
+  않음*. 다시 쓰려면 새 토큰을 발급해야 함 (실수 fail-open 방지).
+* **No plaintext on disk** — 저장은 `{id, name, scope, secret_hash,
+  created_at, revoked_at}`. plaintext 는 발급 응답이 유일.
+* **GUI** — 별도 관리 패널 없음 (드물게 사용되는 admin 기능).
+  `STATE.adminToken` 이 localStorage 에 캐시되고 `authHeaders()` 가
+  `X-Recipes-Admin-Token` 자동 첨부 → 브라우저 콘솔에서
+  `await fetch('/tokens', ...)` 로도 admin 작업 가능.
+
+## 후속 (Round 25+)
+
 * `with` 안의 표현식 확장 (`${steps.x.json | length}` 같은 filter)
 * parallel + recipe library 의 multi-recipe orchestrator
-* Diff UI 의 syntax-highlighted 렌더링 (현재는 plain pre 표시)
+* `git show <sha>` 결과를 GUI 에서 직접 렌더 (현재는 OS shell)
+* per-token scope (현재는 'write' / 'admin' 단순 enum)
+* token expiry (TTL) — 현재는 manual revoke 만

@@ -1,7 +1,6 @@
 # general
 **/.DS_Store
 **/venv
-**/_specs
 **/.venv
 **/*.dvc
 **/*.dd
@@ -16,8 +15,8 @@
 **/dvc_storage
 **/server/sample_dataset/yolo
 **/server/ddoc
-
-
+**/CLAUDE.md
+**/_specs
 
 # DVC
 src/containers/dvc/.git
