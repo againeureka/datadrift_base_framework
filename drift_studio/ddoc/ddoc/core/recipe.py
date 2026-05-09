@@ -553,6 +553,7 @@ def execute_recipe(
                 ctx["steps"][sr.id] = {"output": sr.output, "json": sr.json}
                 out_steps.append(_stepresult_to_dict(sr))
             if fail_envelope is not None:
+                _record_recipe_metrics(out_steps, success=False)
                 return {
                     "status": "error",
                     "recipe": recipe.name,
@@ -573,6 +574,7 @@ def execute_recipe(
         if on_step:
             on_step(sr)
         if error_envelope is not None:
+            _record_recipe_metrics(out_steps, success=False)
             return {
                 "status": "error",
                 "recipe": recipe.name,
@@ -581,11 +583,33 @@ def execute_recipe(
                 "steps": out_steps,
             }
 
+    _record_recipe_metrics(out_steps, success=True)
     return {
         "status": "success",
         "recipe": recipe.name,
         "steps": out_steps,
     }
+
+
+def _record_recipe_metrics(out_steps, *, success: bool) -> None:
+    """Best-effort metrics emission — safe to call when ddoc.server
+    isn't imported (CLI-only invocations)."""
+    try:
+        from ddoc.server.metrics import record_recipe_run, record_recipe_step
+    except Exception:
+        return
+    try:
+        record_recipe_run(success=success)
+        for s in out_steps:
+            if s.get("skipped"):
+                reason = s.get("skipped_reason") or "unknown"
+                record_recipe_step(s.get("run", "?"), f"skipped_{reason}")
+            elif s.get("returncode", 0) == 0:
+                record_recipe_step(s.get("run", "?"), "ok")
+            else:
+                record_recipe_step(s.get("run", "?"), "error")
+    except Exception:
+        pass
 
 
 def _run_single_step(raw_step, ctx, dry_run, runner, workspace):

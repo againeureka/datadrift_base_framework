@@ -173,6 +173,25 @@ button.primary {
   font-weight: 600;
 }
 button.primary[disabled] { opacity: 0.5; cursor: not-allowed; }
+button.recipe-save {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  padding: 0.5em 1.2em;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  margin-left: 0.5em;
+}
+button.recipe-save:hover { background: var(--accent-soft); }
+button.recipe-save.recipe-delete {
+  color: var(--error);
+  border-color: var(--error);
+}
+button.recipe-save.recipe-delete:hover {
+  background: #fdecea;
+}
 .actions .hint { color: var(--muted); font-size: 12.5px; }
 
 /* CLI hint ───────────────────────────────────────────────────────── */
@@ -351,6 +370,21 @@ button.primary[disabled] { opacity: 0.5; cursor: not-allowed; }
   border-radius: 2px;
   flex-shrink: 0;
 }
+
+/* Round-19 timeseries SVG line chart ─────────────────────────────── */
+.ts-chart {
+  margin-top: 0.8em;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.6em;
+}
+.ts-chart h5 {
+  margin: 0 0 0.4em;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ts-svg { display: block; max-width: 100%; }
 
 /* Progress (drift stream) ───────────────────────────────────────── */
 .progress {

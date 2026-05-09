@@ -73,10 +73,16 @@
     health: null,
     detectors: null,        // /plugins/detectors response
     examples: null,         // /examples/scenarios response
+    library: null,          // /recipes response (lazy-loaded on Recipe tab)
     activeTab: 'drift',
     forms: {},              // tab → {state object}
     apiKey: localStorage.getItem('ddoc_serve_api_key') || '',
   };
+
+  function libraryRecipeOptions() {
+    const items = STATE.library?.recipes || [];
+    return ['', ...items.map(r => r.name)];
+  }
 
   // ── DOM helpers ──────────────────────────────────────────────────
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -211,10 +217,16 @@
 
   // ── Tab switching ────────────────────────────────────────────────
   $$('#tabs .tab').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       STATE.activeTab = btn.dataset.tab;
       $$('#tabs .tab').forEach(b => b.classList.toggle('active', b === btn));
       $$('.builder').forEach(b => b.classList.toggle('active', b.dataset.builder === STATE.activeTab));
+      // Lazy-load the library on first Recipe tab open.
+      if (STATE.activeTab === 'recipe' && STATE.library === null) {
+        const r = await api('GET', '/recipes');
+        STATE.library = r.json || { recipes: [] };
+        renderForms();   // re-render so dropdown picks up the new options
+      }
       renderActiveTab();
     });
   });
@@ -337,9 +349,13 @@
       title: 'Recipe · multi-step workflow',
       help: 'Paste a recipe YAML or specify a server-side path. ddoc executes the steps in order and shows per-step progress as SSE events.',
       fields: [
+        // Round 20 — load from library dropdown (populated lazily on
+        // tab activate via /recipes).
+        { name: 'library_pick', label: 'load from library', type: 'select', opts: () => libraryRecipeOptions(), default: '' },
         { name: 'mode', label: 'input mode', type: 'select', opts: ['inline', 'path'], default: 'inline' },
         { name: 'yaml', label: 'YAML', type: 'textarea', default: SAMPLE_RECIPE_YAML, help: 'Top-level: name, vars, steps[]. Each step needs id + run + with.' },
         { name: 'path', label: 'recipe path', type: 'text', help: 'Server-side path to a YAML file (use this instead of YAML when --inline isn\'t convenient).' },
+        { name: 'save_as', label: 'save as (name)', type: 'text', help: 'Round 20: save current YAML to library at /recipes/<name>. Requires DDOC_RECIPES_WRITE=1 server-side.' },
         { name: 'dry_run', label: 'dry-run', type: 'check', default: false, help: 'Resolve substitutions and print argv but skip subprocess execution.' },
         { name: 'use_streaming', label: 'Use streaming (SSE)', type: 'check', default: true, help: 'Show per-step progress live (uses /recipe/run/stream).' },
         { name: 'validate_only', label: 'validate only', type: 'check', default: false, help: 'Call /recipe/validate instead of running.' },
@@ -417,12 +433,185 @@
       }
       if (hasCheckboxes) root.appendChild(checkRow);
     }
+    // Round 20 — recipe tab needs extra wiring beyond the generic
+    // schema-driven form: load-from-library (dropdown change → fetch
+    // /recipes/<name> and prefill YAML) and Save button.
+    wireRecipeTab();
+  }
+
+  function wireRecipeTab() {
+    const root = $('.builder[data-builder="recipe"]');
+    if (!root) return;
+    const formState = STATE.forms.recipe || {};
+
+    const dropdown = $('#recipe-library_pick', root);
+    if (dropdown && !dropdown.dataset._wired) {
+      dropdown.dataset._wired = '1';
+      dropdown.addEventListener('change', async () => {
+        const pick = dropdown.value;
+        if (!pick) return;
+        const r = await api('GET', '/recipes/' + encodeURIComponent(pick));
+        if (r.ok && r.json && r.json.yaml) {
+          const yamlField = $('#recipe-yaml', root);
+          if (yamlField) {
+            yamlField.value = r.json.yaml;
+            formState.yaml = r.json.yaml;
+          }
+          formState.save_as = pick;
+          const saveAs = $('#recipe-save_as', root);
+          if (saveAs) saveAs.value = pick;
+          updateCli();
+          validate();
+        }
+      });
+    }
+
+    // Inject Save + Round 21 controls (Delete / Restore latest / Diff
+    // vs latest) into the actions row if not already present.
+    if (!$('#recipe-save-btn')) {
+      const saveBtn = el('button', {
+        id: 'recipe-save-btn',
+        type: 'button',
+        class: 'recipe-save',
+        onclick: () => saveRecipeFromForm(),
+        title: 'PUT /recipes/<save_as> (requires DDOC_RECIPES_WRITE=1)',
+      }, 'Save to library');
+      saveBtn.classList.add('tab-only-recipe');
+      $('.actions').appendChild(saveBtn);
+
+      const diffBtn = el('button', {
+        id: 'recipe-diff-btn',
+        type: 'button',
+        class: 'recipe-save',
+        onclick: () => diffRecipeFromForm(),
+        title: 'GET /recipes/<save_as>/diff — HEAD vs latest snapshot',
+      }, 'Compare');
+      diffBtn.classList.add('tab-only-recipe');
+      $('.actions').appendChild(diffBtn);
+
+      const restoreBtn = el('button', {
+        id: 'recipe-restore-btn',
+        type: 'button',
+        class: 'recipe-save',
+        onclick: () => restoreRecipeFromForm(),
+        title: 'POST /recipes/<save_as>/restore/<latest snapshot>',
+      }, 'Restore latest');
+      restoreBtn.classList.add('tab-only-recipe');
+      $('.actions').appendChild(restoreBtn);
+
+      const deleteBtn = el('button', {
+        id: 'recipe-delete-btn',
+        type: 'button',
+        class: 'recipe-save recipe-delete',
+        onclick: () => deleteRecipeFromForm(),
+        title: 'DELETE /recipes/<save_as> (auto-archives current first)',
+      }, 'Delete');
+      deleteBtn.classList.add('tab-only-recipe');
+      $('.actions').appendChild(deleteBtn);
+    }
+    refreshSaveButtonVisibility();
+  }
+
+  function refreshSaveButtonVisibility() {
+    const ids = ['#recipe-save-btn', '#recipe-diff-btn',
+                 '#recipe-restore-btn', '#recipe-delete-btn'];
+    const show = STATE.activeTab === 'recipe';
+    for (const id of ids) {
+      const btn = $(id);
+      if (btn) btn.style.display = show ? '' : 'none';
+    }
+  }
+
+  async function saveRecipeFromForm() {
+    const formState = STATE.forms.recipe || {};
+    const name = (formState.save_as || '').trim();
+    if (!name) {
+      alert('Set "save as (name)" before saving.');
+      return;
+    }
+    const yaml = formState.yaml || '';
+    if (!yaml.trim()) {
+      alert('YAML is empty.');
+      return;
+    }
+    const r = await api('PUT', '/recipes/' + encodeURIComponent(name), { yaml });
+    showResult({ status: 'pending', body: { status: 'submitting…' } });
+    renderResultBody(r);
+    // Refresh the library so the dropdown picks up new entries.
+    const lib = await api('GET', '/recipes');
+    STATE.library = lib.json || STATE.library;
+    renderForms();
+  }
+
+  // Round 21 — diff / restore / delete handlers.
+  function _recipeNameFromForm(action) {
+    const formState = STATE.forms.recipe || {};
+    const name = (formState.save_as || '').trim();
+    if (!name) {
+      alert('Set "save as (name)" before ' + action + '.');
+      return null;
+    }
+    return name;
+  }
+
+  async function diffRecipeFromForm() {
+    const name = _recipeNameFromForm('comparing');
+    if (!name) return;
+    showResult({ status: 'pending', body: { status: 'diffing…' } });
+    const r = await api('GET', '/recipes/' + encodeURIComponent(name) + '/diff');
+    renderResultBody(r);
+  }
+
+  async function restoreRecipeFromForm() {
+    const name = _recipeNameFromForm('restoring');
+    if (!name) return;
+    const versions = await api('GET',
+      '/recipes/' + encodeURIComponent(name) + '/versions');
+    const list = (versions.json && versions.json.versions) || [];
+    if (!list.length) {
+      alert('No archived versions for "' + name + '" yet.');
+      return;
+    }
+    const ts = list[0].timestamp;
+    if (!confirm('Restore "' + name + '" to snapshot ' + ts +
+                 '?\n(current active will be archived first)')) return;
+    showResult({ status: 'pending', body: { status: 'restoring…' } });
+    const r = await api('POST',
+      '/recipes/' + encodeURIComponent(name) +
+      '/restore/' + encodeURIComponent(ts));
+    renderResultBody(r);
+    // Refresh form YAML from the restored content.
+    if (r.ok) {
+      const fetched = await api('GET', '/recipes/' + encodeURIComponent(name));
+      if (fetched.ok && fetched.json && fetched.json.yaml) {
+        const yamlField = document.querySelector('#recipe-yaml');
+        const formState = STATE.forms.recipe || {};
+        if (yamlField) yamlField.value = fetched.json.yaml;
+        formState.yaml = fetched.json.yaml;
+      }
+    }
+  }
+
+  async function deleteRecipeFromForm() {
+    const name = _recipeNameFromForm('deleting');
+    if (!name) return;
+    if (!confirm('Delete "' + name + '" from the library?\n' +
+                 '(content is auto-archived under .history/ — recoverable via Restore)')) return;
+    showResult({ status: 'pending', body: { status: 'deleting…' } });
+    const r = await api('DELETE', '/recipes/' + encodeURIComponent(name));
+    renderResultBody(r);
+    if (r.ok) {
+      const lib = await api('GET', '/recipes');
+      STATE.library = lib.json || STATE.library;
+      renderForms();
+    }
   }
 
   function renderActiveTab() {
     updateCli();
     validate();
     hideResult();
+    refreshSaveButtonVisibility();
   }
 
   // ── Validation ───────────────────────────────────────────────────
@@ -805,7 +994,105 @@
       card.appendChild(embeddingEnsembleBlock(sub.embedding_drift_detailed));
     }
 
+    // Round 19 — modality-specific raw chart (timeseries first; other
+    // modalities follow once their raw-data plumbing lands).
+    if (name === 'timeseries' && sub.attribute_drifts) {
+      card.appendChild(timeseriesAttributeChart(sub.attribute_drifts));
+    }
+
     return card;
+  }
+
+  // Round-19 timeseries chart — pure SVG line plot of attribute drift
+  // values. No external libs. Each attribute (mean / variance / skew /
+  // kurt) becomes one point on the polyline; useful as a quick "where
+  // did the drift come from" visual cue.
+  function timeseriesAttributeChart(attribute_drifts) {
+    const root = el('div', { class: 'ts-chart' });
+    root.appendChild(el('h5', {}, 'attribute drift trace'));
+
+    const entries = Object.entries(attribute_drifts).filter(([_, v]) => Number.isFinite(v));
+    if (entries.length === 0) {
+      root.appendChild(el('div', { class: 'hint' }, 'no numeric attributes to plot'));
+      return root;
+    }
+
+    const W = 480, H = 120, padX = 40, padY = 12;
+    const innerW = W - padX * 2, innerH = H - padY * 2;
+    const values = entries.map(([_, v]) => Math.abs(v));
+    const maxV = Math.max(0.001, ...values);
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('width', '100%');
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    svg.classList.add('ts-svg');
+
+    // Axes — minimal, just the baseline.
+    const axis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    axis.setAttribute('x1', padX); axis.setAttribute('y1', H - padY);
+    axis.setAttribute('x2', W - padX); axis.setAttribute('y2', H - padY);
+    axis.setAttribute('stroke', '#d6dae0');
+    axis.setAttribute('stroke-width', '1');
+    svg.appendChild(axis);
+
+    // Gridlines at 25%, 50%, 75%.
+    [0.25, 0.5, 0.75].forEach(frac => {
+      const y = padY + innerH * (1 - frac);
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', padX); line.setAttribute('y1', y);
+      line.setAttribute('x2', W - padX); line.setAttribute('y2', y);
+      line.setAttribute('stroke', '#eef0f4');
+      line.setAttribute('stroke-width', '1');
+      svg.appendChild(line);
+    });
+
+    // Build polyline + circles + labels.
+    const points = entries.map(([_, v], i) => {
+      const x = padX + (entries.length === 1 ? innerW / 2 : (i / (entries.length - 1)) * innerW);
+      const y = padY + innerH * (1 - Math.abs(v) / maxV);
+      return [x, y];
+    });
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    poly.setAttribute('points', points.map(p => p.join(',')).join(' '));
+    poly.setAttribute('fill', 'none');
+    poly.setAttribute('stroke', '#2563eb');
+    poly.setAttribute('stroke-width', '2');
+    svg.appendChild(poly);
+
+    entries.forEach(([k, v], i) => {
+      const [x, y] = points[i];
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', x); circle.setAttribute('cy', y);
+      circle.setAttribute('r', 3.5);
+      circle.setAttribute('fill', '#2563eb');
+      const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+      title.textContent = `${k} = ${formatVal(v)}`;
+      circle.appendChild(title);
+      svg.appendChild(circle);
+
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', x);
+      label.setAttribute('y', H - 2);
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('font-size', '10');
+      label.setAttribute('fill', '#6a7382');
+      label.textContent = k.length > 9 ? k.slice(0, 9) + '…' : k;
+      svg.appendChild(label);
+    });
+
+    // y-axis max label
+    const yMax = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    yMax.setAttribute('x', padX - 4);
+    yMax.setAttribute('y', padY + 4);
+    yMax.setAttribute('text-anchor', 'end');
+    yMax.setAttribute('font-size', '10');
+    yMax.setAttribute('fill', '#6a7382');
+    yMax.textContent = formatVal(maxV);
+    svg.appendChild(yMax);
+
+    root.appendChild(svg);
+    return root;
   }
 
   // Render the per-component breakdown of an ensemble embedding-drift

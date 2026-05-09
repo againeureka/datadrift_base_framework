@@ -198,7 +198,126 @@ steps:
   envelope 이 결과의 `error` 필드로 bubble.
 * `dry_run` 도 parallel 그대로 처리 (substitution 만 해소된 argv 출력).
 
-## 후속 (Round 19+)
+## Library (Round 19) — `/recipes` 엔드포인트
 
-* recipe 라이브러리 (사이트 별 공유 + 버전 관리)
-* `with` 안에서 ${...} 외 다른 expression (지금은 substitution + 비교만)
+`ddoc serve` 가 디렉터리의 YAML 들을 카탈로그로 노출:
+
+```bash
+# 디폴트는 패키지에 동봉된 recipes/ — DDOC_RECIPES_DIR env 로 사이트별
+# 디렉터리 지정 가능
+DDOC_RECIPES_DIR=/srv/ddoc/recipes ddoc serve
+
+# 목록
+curl -s localhost:8765/recipes | jq
+# → {"library_dir":"/srv/ddoc/recipes","count":3,"recipes":[
+#     {"name":"timeseries_smoke","display_name":"timeseries-drift-smoke","step_count":4,...},
+#     ...
+#   ]}
+
+# 한 건 (YAML + validation issues)
+curl -s localhost:8765/recipes/timeseries_smoke | jq
+```
+
+URL slug 는 파일 stem (`timeseries_smoke.yaml` → `/recipes/timeseries_smoke`).
+recipe 의 `name:` 필드는 `display_name` 으로 별도 보존.
+
+## Library write + versioning (Round 20)
+
+라이브러리는 기본은 read-only. `DDOC_RECIPES_WRITE=1` 환경변수가
+설정된 경우만 write 모드 활성화 — 검증 통과 후 atomic 으로 저장하고,
+같은 이름이 이미 있으면 덮기 *직전* 의 내용을 자동 스냅샷.
+
+```bash
+DDOC_RECIPES_DIR=/srv/ddoc/recipes DDOC_RECIPES_WRITE=1 ddoc serve
+
+# 저장 (검증 통과 → 파일 작성, 기존 있으면 .history/<name>/<UTC ts>.yaml 로 archive)
+curl -s -X PUT http://localhost:8765/recipes/demo \
+  -H 'Content-Type: application/json' \
+  -d '{"yaml":"name: demo\nsteps:\n  - id: g\n    run: examples.generate\n    with: { modality: timeseries, out: /tmp/x, scenario: shifted }\n"}' | jq
+# → {"status":"ok","name":"demo","path":"/srv/.../demo.yaml","archived_to":null,...}
+
+# 두 번째 저장 — archived_to 가 채워짐
+curl -s -X PUT ... | jq '.archived_to'
+# → "/srv/.../.history/demo/20260508T234810Z.yaml"
+
+# 버전 목록
+curl -s http://localhost:8765/recipes/demo/versions | jq
+# → {"name":"demo","count":1,"versions":[{"timestamp":"20260508T234810Z",...}]}
+
+# 한 시점의 YAML
+curl -s http://localhost:8765/recipes/demo/versions/20260508T234810Z | jq -r .yaml
+```
+
+규칙:
+
+* write 모드가 꺼진 상태에서 PUT → `403 library_read_only`.
+* recipe 이름은 `^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$` regex. `..`, `/`,
+  공백 등 path-traversal 위험 문자는 거절.
+* validation 실패 (`Recipe.load` 또는 `recipe.validate()` 가 issues
+  반환) 시 *파일 미저장* + in-band `{status:"error", error_code:
+  "validation_failed", issues:[...]}`.
+* archive 디렉터리 (`.history/`) 는 listing API 에서 노출되지 않음 —
+  hidden prefix 로 스킵.
+* git 백엔드 versioning 은 별도 deploy 옵션 (현재 라운드는 plain
+  파일).
+
+## GUI Recipe library dropdown (Round 20)
+
+`ddoc serve` 의 Recipe 탭에 **Load from library** dropdown 추가:
+
+* page 첫 진입 시 `/recipes` 한 번 fetch → option list 채움.
+* 선택 시 `/recipes/<name>` 으로 YAML 가져와 textarea 에 prefill.
+* `library_read_only: false` 인 경우 (서버가 `DDOC_RECIPES_WRITE=1`
+  로 띄워졌을 때) `Save to library` 버튼이 actions row 옆에 노출 —
+  현재 textarea 내용을 PUT 으로 저장.
+* 저장 성공 시 dropdown 을 자동으로 reload.
+
+## CRUD 마무리: delete / restore / diff (Round 21)
+
+write 모드에서 라이브러리 풀-CRUD 를 노출. 모든 destructive 동작은
+삭제/덮기 *직전* 의 콘텐츠를 `.history/<name>/<UTC ts>.yaml` 로 자동
+archive — Round 20 의 versioning 위에서 reversibility 를 보장.
+
+```bash
+DDOC_RECIPES_DIR=/srv/ddoc/recipes DDOC_RECIPES_WRITE=1 ddoc serve
+
+# Delete — 활성 파일을 .history/ 로 옮기고 active 는 unlink
+curl -s -X DELETE http://localhost:8765/recipes/demo | jq
+# → {"status":"ok","name":"demo","deleted_path":"/srv/.../demo.yaml",
+#    "archived_to":"/srv/.../.history/demo/<ts>.yaml"}
+
+# Restore — 한 시점 snapshot 으로 active 복원 (현재 active 도 archive)
+TS=$(curl -s localhost:8765/recipes/demo/versions | jq -r '.versions[0].timestamp')
+curl -s -X POST http://localhost:8765/recipes/demo/restore/$TS | jq
+# → {"status":"ok","restored_from":"...","archived_to":"...","path":"..."}
+
+# Diff — 두 ref 의 unified-diff. 기본은 HEAD vs 가장 최근 snapshot.
+curl -s 'http://localhost:8765/recipes/demo/diff' | jq -r .diff
+curl -s 'http://localhost:8765/recipes/demo/diff?from=HEAD&to=20260509T013808Z' | jq -r .diff
+```
+
+규칙:
+
+* `DELETE` / `POST .../restore/{ts}` 둘 다 `DDOC_RECIPES_WRITE=1`
+  필요. 미설정 → `403 library_read_only`.
+* Restore 의 `ts` 는 `.history/<name>/` 에 실제 존재해야 함 →
+  `404 version_not_found`.
+* Diff 의 `from` / `to` 는 `HEAD` 또는 snapshot 의 timestamp.
+  ref 가 second-단위로 충돌하면 archive 가 `<ts>-1.yaml`,
+  `<ts>-2.yaml` 식으로 suffix 를 붙여 보존.
+* Diff 의 default `to` 는 가장 최근 snapshot. snapshot 이 하나도
+  없으면 `{diff:"", note:"no snapshots yet"}`.
+* Diff `from==to` (예: `HEAD vs HEAD`) → `{identical:true, diff:""}`.
+
+GUI Recipe 탭의 actions row 에 write 모드일 때만 노출되는 mini-
+controls: **Save to library** / **Compare** (HEAD vs latest) /
+**Restore latest** / **Delete**. Restore 와 Delete 는 confirm
+dialog 로 한번 더 묻고, Delete 는 빨간 outline 으로 시각 구분.
+
+## 후속 (Round 22+)
+
+* recipe library 의 git-based history (commit per save)
+* 권한별 write (read-only public + write-token gated)
+* `with` 안의 표현식 확장 (`${steps.x.json | length}` 같은 filter)
+* parallel + recipe library 의 multi-recipe orchestrator
+* Diff UI 의 syntax-highlighted 렌더링 (현재는 plain pre 표시)
