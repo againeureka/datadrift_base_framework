@@ -34,6 +34,7 @@ def root(request: Request) -> Dict[str, Any]:
     return {
         "status": "ok",
         "service": "ddoc serve",
+        "tagline": "data doctor",
         "version": _ddoc_version(),
         "plugin_count": _plugin_count(),
         "auth_enabled": bool(get_expected_key()),
@@ -47,6 +48,7 @@ def healthz(request: Request) -> Dict[str, Any]:
     return {
         "status": "healthy",
         "ddoc_version": _ddoc_version(),
+        "tagline": "data doctor",
         "plugin_count": _plugin_count(),
         "auth_enabled": bool(get_expected_key()),
         "bind": getattr(request.app.state, "bind_info", "?"),

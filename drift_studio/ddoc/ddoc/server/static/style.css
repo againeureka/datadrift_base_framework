@@ -52,6 +52,13 @@ code, pre {
   border-bottom: 1px solid var(--border);
 }
 .brand strong { font-size: 15px; }
+.brand .tagline {
+  margin-left: 0.4em;
+  color: var(--accent);
+  font-size: 12px;
+  font-style: italic;
+  font-weight: 500;
+}
 .brand #meta {
   margin-left: 0.6em;
   color: var(--muted);

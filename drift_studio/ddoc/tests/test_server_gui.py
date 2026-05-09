@@ -23,7 +23,7 @@ def test_index_html_served(client: TestClient):
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
     body = r.text
-    assert "<title>ddoc serve" in body
+    assert "<title>ddoc" in body and "data doctor" in body
     # Tabs present
     for tab in ("Analyze drift", "Analyze EDA", "Examples", "Report", "Export", "Fetch"):
         assert tab in body, f"missing tab label: {tab}"

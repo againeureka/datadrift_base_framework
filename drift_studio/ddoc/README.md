@@ -1,8 +1,11 @@
-# ddoc - Data Drift Detection & Analysis Framework
+# ddoc — the data doctor for drift detection
 
-> Git-like workflow for MLOps with snapshot-based version management
+> Diagnose data drift across modalities. CLI · REST · GUI in one wheel.
 
-**ddoc**은 데이터, 코드, 실험을 통합적으로 관리하는 MLOps 도구입니다. Git과 유사한 직관적인 워크플로우로 머신러닝 프로젝트의 완벽한 재현성을 보장합니다.
+**ddoc** (data doctor) 은 데이터의 분포 변화를 *진단* 하는 도구입니다.
+멀티모달 (vision / text / timeseries / audio) drift detection + EDA +
+report rendering 을 단일 CLI / REST facade / vanilla HTML GUI 로 묶어
+ML 모델의 건강 상태를 일관되게 점검합니다.
 
 ## ✨ 주요 기능
 

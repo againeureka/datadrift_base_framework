@@ -55,7 +55,7 @@ def test_root(client: TestClient):
     assert r.status_code == 200
     # Round 15 — static assets ship with the wheel, so / returns HTML.
     assert "text/html" in r.headers["content-type"]
-    assert "<title>ddoc serve" in r.text
+    assert "<title>ddoc" in r.text and "data doctor" in r.text
 
 
 def test_healthz(client: TestClient):
