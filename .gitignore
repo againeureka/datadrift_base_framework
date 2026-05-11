@@ -17,6 +17,7 @@
 **/server/ddoc
 **/CLAUDE.md
 **/_specs
+**/papers
 
 # DVC
 src/containers/dvc/.git

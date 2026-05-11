@@ -49,7 +49,32 @@ pip install ddoc[all]           # ⚠️ all 의 plugin file:// 경로는 개발
 | `ddoc vis` (Streamlit GUI) | ✓ | | | | ✓ |
 | `drift_studio` backend subprocess orchestrator | ✓ | | | | |
 
-### 5분 튜토리얼
+### 30 초 quick start (project scaffolding 불필요)
+
+```bash
+# 1. drift 가 있는 toy 데이터 한 쌍 생성
+ddoc examples generate categorical --out /tmp/d --scenario shifted
+
+# 2. drift 측정 (envelope JSON)
+ddoc analyze drift \
+    --data-path-ref /tmp/d/ref \
+    --data-path-cur /tmp/d/cur \
+    --json --quiet
+```
+
+→ `overall_score: 0.11` 같은 envelope 한 줄로 떨어집니다.
+
+5 modality 지원 (`timeseries / audio / text / vision / categorical`),
+2 scenario (`shifted / identical`). 자세한 [toy-data 튜토리얼](docs/tutorial/toy-data.md)
+이 *primary onboarding*. 본인 데이터로 옮길 때는 같은 dataset
+layout (modality 별 `ddoc.yaml` + 데이터 파일) 만 따르면 그대로
+`ddoc analyze drift --data-path-ref X --data-path-cur Y` 가능.
+
+`--detector` 옵션 골라야 할 때는 [detector cookbook](docs/tutorial/detectors.md)
+참고 — modality 별 strategy 선택과 drift severity 임계값 (alpr
+post-train gate 의 default 와 일치).
+
+### 다음 단계 — Project / Snapshot / Experiment 워크플로 (heavier path)
 
 ```bash
 # 1. 프로젝트 초기화

@@ -38,19 +38,20 @@ _EDA_ENVELOPE = {
     },
 }
 
-# NOTE on shape: ``attribute_drifts`` is a *flat* dict of
-# ``<name>: <float>`` per the built-in markdown renderer's
-# expectations (see ``ddoc/cli/commands/report.py:_render_markdown``).
-# Round 25's first real consumer (drift_studio/backend) discovered
-# this — Round 26 candidate is to relax this shape.
+# Originally Round 25 found that the markdown renderer crashed on
+# anything but a flat ``{name: float}`` dict (the natural list-of-dict
+# and nested-dict shapes both broke). Round 28 (Track C) added
+# ``_normalize_attribute_drifts`` so all three shapes are accepted —
+# we use the list-of-dict shape here to exercise the normalization path
+# end-to-end through the inline-envelope route.
 _DRIFT_ENVELOPE = {
     "modality": "vision",
     "status": "success",
     "overall_score": 0.18,
-    "attribute_drifts": {
-        "blur": 0.18,
-        "exposure": 0.07,
-    },
+    "attribute_drifts": [
+        {"attribute": "blur", "score": 0.18, "status": "warning"},
+        {"attribute": "exposure", "score": 0.07, "status": "ok"},
+    ],
 }
 
 

@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git check-ignore *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(sed -n '1,60p' tests/test_round28_attr_drifts_shape.py)",
+      "Bash(sed -n '1,40p' docs/tutorial/detectors.md)",
+      "Bash(python3 -c \"import numpy, sklearn; print\\('numpy', numpy.__version__, 'sklearn', sklearn.__version__\\)\")",
+      "Bash(python3 -c \"import matplotlib; print\\('matplotlib', matplotlib.__version__\\)\")",
+      "Bash(.venv/bin/python -c \"import numpy, sklearn, scipy; print\\('numpy', numpy.__version__, 'sklearn', sklearn.__version__, 'scipy', scipy.__version__\\)\")",
+      "Bash(.venv/bin/python -c \"from ddoc_plugin_categorical.categorical_impl import jensen_shannon; print\\('ddoc categorical ok', jensen_shannon\\({'a':1},{'a':1}\\)\\)\")",
+      "Bash(.venv/bin/python -c \"import matplotlib; print\\('mpl', matplotlib.__version__\\)\")",
+      "Bash(.venv/bin/python -m papers.sim.generate)",
+      "Bash(.venv/bin/python -m papers.sim.features)",
+      "Bash(.venv/bin/python -m papers.sim.run)",
+      "Bash(time .venv/bin/python -m papers.sim.sweep)",
+      "Bash(grep -vE \"^$\")",
+      "Bash(.venv/bin/python -m papers.sim.run --benign-shocks --out papers/sim/results/shocks)",
+      "Bash(.venv/bin/python -m papers.sim.veri)",
+      "Bash(.venv/bin/python -m papers.sim.run --categorical-source veri --out papers/sim/results/veri)"
+    ]
+  }
+}
