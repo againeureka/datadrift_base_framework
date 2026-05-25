@@ -43,6 +43,15 @@ class AnalyzeDriftRequest(BaseModel):
     # snapshot mode
     baseline: Optional[str] = None
     current: Optional[str] = None
+    # R-D4 (2026-05-19) — inline cfg mode. When set, the server
+    # materializes the cfg into temp `distributions[_series].json`
+    # files under a scratch dir and runs CLI path-mode on top. Mirrors
+    # what keti's DDocClient was doing client-side, but server-side so
+    # cross-container HTTP works without shared volumes. Recognized
+    # keys (delegated to whichever plugin claims `detector`):
+    #   baseline_categorical / current_categorical                (R26-A plugin)
+    #   baseline_categorical_series / current_categorical_series   (R33 plugin)
+    cfg: Optional[Dict[str, Any]] = None
     # common
     detector: str = "default"
     quiet: bool = True

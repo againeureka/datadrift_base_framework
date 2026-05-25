@@ -17,7 +17,16 @@
       "Bash(grep -vE \"^$\")",
       "Bash(.venv/bin/python -m papers.sim.run --benign-shocks --out papers/sim/results/shocks)",
       "Bash(.venv/bin/python -m papers.sim.veri)",
-      "Bash(.venv/bin/python -m papers.sim.run --categorical-source veri --out papers/sim/results/veri)"
+      "Bash(.venv/bin/python -m papers.sim.run --categorical-source veri --out papers/sim/results/veri)",
+      "Bash(time .venv/bin/python -m papers.sim.figures)",
+      "Bash(time bash papers/sim/run_all.sh)",
+      "Bash(time .venv/bin/python -c ' *)",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(echo \"exit $?\")",
+      "Bash(sed -n '/## Adv —/,/sweep_report.md/p' /tmp/sweep_out.txt && echo \"=== result files ===\" && ls -la papers/sim/results/sweep_adv*.png 2>/dev/null)"
+    ],
+    "additionalDirectories": [
+      "/private/tmp"
     ]
   }
 }

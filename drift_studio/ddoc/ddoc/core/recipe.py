@@ -114,6 +114,33 @@ _STEP_KINDS: Dict[str, Dict[str, Any]] = {
         },
         "json_flag": True,
     },
+    "train": {
+        # R21 (alpr framework consolidation) — model training as a
+        # recipe step. Dispatches to whatever plugin owns the named
+        # ``trainer`` via the ``retrain_run`` hookspec.
+        "argv": ["train"],
+        "options": {
+            "train_path": "--train-path",
+            "trainer": "--trainer",
+            "model_out": "--model-out",
+            "params": "--params-json",  # dict → JSON string
+        },
+        "json_flag": True,
+    },
+    "transform": {
+        # R49 (alpr PII/EDA plugin consolidation) — generic transform
+        # step. Dispatches to whatever plugin owns the named
+        # ``transform`` via the ``transform_apply`` hookspec
+        # (ddoc-plugin-pii-eda → ``pii_blur``, etc.). Mirrors ``train``.
+        "argv": ["transform"],
+        "options": {
+            "input_path": "--input-path",
+            "transform": "--transform",
+            "output_path": "--output-path",
+            "args": "--args-json",  # dict → JSON string
+        },
+        "json_flag": True,
+    },
 }
 
 
@@ -418,6 +445,10 @@ class Recipe:
     steps: List[Dict[str, Any]]
     workspace: Optional[str] = None
     source_path: Optional[Path] = None
+    # R22 — list of plugin entry-point names the recipe needs (e.g.
+    # `["ddoc_vision", "ddoc_alpr"]`). Empty list = no requirement
+    # (back-compat default).
+    required_plugins: List[str] = field(default_factory=list)
 
     @classmethod
     def load(cls, path: str | Path) -> "Recipe":
@@ -440,6 +471,15 @@ class Recipe:
         steps = data.get("steps") or []
         if not isinstance(steps, list) or not steps:
             raise RecipeError("recipe must have at least one step", code="bad_recipe")
+        # R22 — top-level ``required_plugins:`` field. Validation is
+        # done lazily (against the actual entry-points) inside
+        # ``check_plugin_requirements`` so loading stays cheap.
+        req = data.get("required_plugins") or []
+        if not isinstance(req, list) or not all(isinstance(x, str) for x in req):
+            raise RecipeError(
+                "`required_plugins` must be a list of strings",
+                code="bad_required_plugins",
+            )
         return cls(
             name=data.get("name"),
             description=data.get("description"),
@@ -447,7 +487,30 @@ class Recipe:
             steps=copy.deepcopy(steps),
             workspace=data.get("workspace"),
             source_path=p,
+            required_plugins=list(req),
         )
+
+    def check_plugin_requirements(
+        self, installed: Optional[List[str]] = None,
+    ) -> List[str]:
+        """Return the subset of ``self.required_plugins`` that aren't
+        currently installed. Empty list = all satisfied.
+
+        ``installed`` lets callers inject a known plugin list (useful
+        for testing). When None, scans setuptools entry-points in the
+        ``ddoc`` group via ``importlib.metadata``.
+        """
+        if not self.required_plugins:
+            return []
+        if installed is None:
+            try:
+                import importlib.metadata as _md
+                eps = _md.entry_points(group="ddoc")
+                installed = [ep.name for ep in eps]
+            except Exception:
+                installed = []
+        installed_set = set(installed)
+        return [p for p in self.required_plugins if p not in installed_set]
 
     def validate(self) -> List[str]:
         """Return a list of human-readable issues; empty list = OK."""
@@ -514,6 +577,24 @@ def execute_recipe(
             "recipe failed validation",
             code="validation_failed",
             details={"issues": issues},
+        )
+
+    # R22 — check required_plugins BEFORE any step runs so the
+    # operator gets a focused install-this-plugin error rather than a
+    # mid-pipeline failure with traceback.
+    missing = recipe.check_plugin_requirements()
+    if missing:
+        raise RecipeError(
+            f"recipe requires plugins not installed: {sorted(missing)}",
+            code="missing_required_plugins",
+            details={
+                "missing": sorted(missing),
+                "hint": (
+                    "Install with: "
+                    + " && ".join(f"pip install {p.replace('_', '-')}"
+                                    for p in sorted(missing))
+                ),
+            },
         )
 
     # Late-import the runner so unit tests that just want to validate
