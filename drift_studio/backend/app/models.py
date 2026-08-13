@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Float, DateTime, JSON
+from sqlalchemy import Column, String, Integer, Float, DateTime, JSON, Boolean
 from sqlalchemy.sql import func
 from .database import Base
 
@@ -155,3 +155,28 @@ class ModelPromotion(Base):
     decision_reason = Column(String, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     decided_at = Column(DateTime, nullable=True)
+
+
+# ── Drift Intervention Events (DriftDecisionEngine 보정, context_workplace/
+# drift_tool_analysis.md 3부·12부, Round 36) ────────────────────────────
+#
+# DriftDecisionEngine은 필드 에이전트가 자체 보고한 severity 문자열을
+# 검증 없이 그대로 신뢰한다 — ModelPromotion이 고친 gate_passed 블라인드 신뢰
+# 문제와 같은 모양이 파이프라인 반대쪽 끝(재학습 결과가 아니라 드리프트
+# 판정 자체)에도 있다. 이 테이블은 ddoc_plugin_reference_engine/
+# event_store.py의 intervention_log와 같은 개념을 (model_name,
+# field_agent_id) 스코프로 재구성한 것 — 그 플러그인의 로컬 YAML은 이
+# 백엔드 프로세스가 읽을 수 있는 게 아니라서 own 테이블이 필요했다.
+class DriftInterventionEvent(Base):
+    """사람이 등록한 '이미 알려진 의도적/일시적 변화' 구간."""
+    __tablename__ = "drift_intervention_events"
+
+    id = Column(String, primary_key=True)
+    model_name = Column(String, nullable=False, index=True)
+    field_agent_id = Column(String, nullable=True, index=True)  # None = 이 모델의 모든 에이전트
+    start_at = Column(DateTime, nullable=False)
+    end_at = Column(DateTime, nullable=True)  # None = 아직 진행 중
+    description = Column(String, nullable=True)
+    confirmed = Column(Boolean, default=True)
+    proposed_by = Column(String, default="human")
+    created_at = Column(DateTime, server_default=func.now())
