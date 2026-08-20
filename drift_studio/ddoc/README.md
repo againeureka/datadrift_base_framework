@@ -68,7 +68,8 @@ ddoc diff baseline_data/ todays_data/
 - **exit code = 판정** (`0`/`1`/`2`) → CI 에서 그대로 데이터 게이트로
 
 ```bash
-ddoc diff jan.csv aug.csv --json     # 스크립트/CI: JSON 한 객체
+ddoc diff jan.csv aug.csv --json                # 스크립트/CI: JSON 한 객체
+ddoc diff jan.csv aug.csv --report note.html    # 소견서: 판정+근거 분포+처방 1페이지 HTML
 ```
 
 toy 데이터로 바로 체험하려면:
