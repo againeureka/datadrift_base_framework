@@ -24,7 +24,7 @@ jobs:
           pip install -q -e drift_studio/ddoc
           pip install -q -e drift_studio/ddoc/plugins/ddoc-plugin-categorical
           pip install -q -e drift_studio/ddoc/plugins/ddoc-plugin-tabular
-          pip install -q pytest
+          pip install -q pytest httpx2  # starlette TestClient dependency
       - name: Core test set (diff / zoo / ingest / categorical / recipes)
         working-directory: drift_studio/ddoc
         run: |
