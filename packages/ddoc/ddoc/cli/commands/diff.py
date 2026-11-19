@@ -218,6 +218,22 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20) -> Dict
             if hi == lo:
                 attribute_drifts[col] = 0.0
                 continue
+            whole = bool((r % 1 == 0).all() and (c % 1 == 0).all())
+            if whole and hi - lo + 1 <= bins:
+                # Few distinct integers (counts, ratings, levels): one bar per
+                # value. Each integer would already sit in its own bin, so the
+                # score is the same as the histogram's; only the labels differ.
+                values = range(int(lo), int(hi) + 1)
+                rvc, cvc = r.value_counts(), c.value_counts()
+                rh = [int(rvc.get(v, 0)) for v in values]
+                ch = [int(cvc.get(v, 0)) for v in values]
+                attribute_drifts[col] = _js_divergence(dict(enumerate(rh)), dict(enumerate(ch)))
+                summaries[col]["discrete"] = True
+                distributions[col] = {
+                    "ref": {str(v): n for v, n, m in zip(values, rh, ch) if n or m},
+                    "cur": {str(v): m for v, n, m in zip(values, rh, ch) if n or m},
+                }
+                continue
             edges = np.linspace(lo, hi, bins + 1)
             rh, _ = np.histogram(r, bins=edges)
             ch, _ = np.histogram(c, bins=edges)

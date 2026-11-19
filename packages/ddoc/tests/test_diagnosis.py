@@ -226,3 +226,31 @@ def test_report_has_theme_switch_and_print_button_kept_out_of_print():
     # night colours apply on screen only, so paper and PDF stay white
     assert "@media screen and (prefers-color-scheme: dark)" in ko
     assert ".bar { display: none !important; }" in ko
+
+
+def test_few_distinct_integers_are_shown_per_value(tmp_path):
+    ref = _csv(tmp_path / "r.csv", "rating", [str(1 + i % 5) for i in range(200)])
+    cur = _csv(tmp_path / "c.csv", "rating", [str(3 + i % 3) for i in range(200)])
+    result = csv_diff([ref], [cur])
+    assert result["summaries"]["rating"]["discrete"] is True
+    assert list(result["distributions"]["rating"]["ref"]) == ["1", "2", "3", "4", "5"]
+    # same score as the shared-range histogram: each integer has its own bin
+    import numpy as np
+    from ddoc.cli.commands.diff import _js_divergence
+    edges = np.linspace(1, 5, 21)
+    rh, _ = np.histogram([1 + i % 5 for i in range(200)], bins=edges)
+    ch, _ = np.histogram([3 + i % 3 for i in range(200)], bins=edges)
+    assert result["attribute_drifts"]["rating"] == round(_js_divergence(
+        dict(enumerate(rh.tolist())), dict(enumerate(ch.tolist()))), 4)
+    payload = {"verdict": "DRIFT", "severity": "high", "overall_score": 0.4, "threshold": 0.15,
+               "attr_threshold": 0.25, "top_attributes": [["rating", 0.4]], "ref": "r", "cur": "c",
+               "modality": "tabular", "engine": "builtin", "detector": "csv", "raw": result, "hints": []}
+    page = build_consultation_html(payload, result["distributions"])
+    assert "data-tip='5\n" in page  # one hover target per value, labelled by the value
+
+
+def test_wide_integer_ranges_keep_the_histogram(tmp_path):
+    ref = _csv(tmp_path / "r.csv", "day", [str(i % 60) for i in range(240)])
+    cur = _csv(tmp_path / "c.csv", "day", [str(i % 60) for i in range(240)])
+    result = csv_diff([ref], [cur])
+    assert "discrete" not in result["summaries"]["day"]

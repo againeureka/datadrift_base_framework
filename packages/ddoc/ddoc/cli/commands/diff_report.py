@@ -378,6 +378,53 @@ def _dumbbell(dists: Dict[str, Dict[str, float]], lang: str, max_rows: int = 10)
     return "".join(out), table, hidden
 
 
+def _value_columns(dists: Dict[str, Dict[str, float]], lang: str) -> Tuple[str, List[List[str]]]:
+    """Paired columns per value, in value order: ref (gray) beside cur
+    (accent). For numeric columns with only a few distinct integers."""
+    ref_n, cur_n = _norm(dists.get("ref", {})), _norm(dists.get("cur", {}))
+    try:
+        values = sorted(dict.fromkeys([*dists.get("ref", {}), *dists.get("cur", {})]), key=float)
+    except ValueError:
+        return "", []
+    table = [[v, _pct(ref_n.get(v, 0.0)), _pct(cur_n.get(v, 0.0)),
+              t("fmt.pp", lang, value=(cur_n.get(v, 0.0) - ref_n.get(v, 0.0)) * 100)] for v in values]
+    if not values:
+        return "", table
+    W, left, right, top, plot_h, axis_h = 720, 48, 16, 18, 170, 26
+    H = top + plot_h + axis_h
+    base = top + plot_h
+    peak = max([*ref_n.values(), *cur_n.values(), 1e-9])
+    slot = (W - left - right) / len(values)
+    bw = max(4.0, min(28.0, slot * 0.34))
+    sy = lambda p: top + plot_h * (1 - p / peak)  # noqa: E731
+    out = [f"<svg viewBox='0 0 {W} {H}' role='img'>"]
+    for frac in (0.5, 1.0):
+        y = sy(peak * frac)
+        out.append(f"<line x1='{left}' y1='{y:.1f}' x2='{W - right}' y2='{y:.1f}' stroke='var(--grid)' stroke-width='1'/>")
+        out.append(f"<text x='{left - 8}' y='{y + 4:.1f}' text-anchor='end' class='tick-lbl'>{peak * frac * 100:.0f}%</text>")
+    out.append(f"<line x1='{left}' y1='{base}' x2='{W - right}' y2='{base}' stroke='var(--axis)' stroke-width='1'/>")
+    every = max(1, -(-len(values) // 12))  # at most ~12 axis labels
+    for i, v in enumerate(values):
+        cx = left + slot * (i + 0.5)
+        r, c = ref_n.get(v, 0.0), cur_n.get(v, 0.0)
+        for x0, share, color in ((cx - bw - 1, r, "var(--ref)"), (cx + 1, c, "var(--cur)")):
+            y = sy(share)
+            h = base - y
+            if h > 0:
+                rr = min(4.0, h, bw / 2)
+                out.append(f"<path d='M{x0:.1f},{base}V{y + rr:.1f}Q{x0:.1f},{y:.1f} {x0 + rr:.1f},{y:.1f}"
+                           f"H{x0 + bw - rr:.1f}Q{x0 + bw:.1f},{y:.1f} {x0 + bw:.1f},{y + rr:.1f}V{base}Z' "
+                           f"fill='{color}'/>")
+        if i % every == 0:
+            out.append(f"<text x='{cx:.1f}' y='{base + 18}' text-anchor='middle' class='tick-lbl'>{_e(v)}</text>")
+        delta = t("fmt.pp", lang, value=(c - r) * 100)
+        tip = f"{v}\n{_pct(r)} → {_pct(c)} ({delta})"
+        out.append(f"<rect class='hit' x='{cx - slot / 2:.1f}' y='{top}' width='{slot:.1f}' height='{plot_h}' "
+                   f"tabindex='0' data-tip='{_e(tip)}'><title>{_e(v)}: {_pct(r)} → {_pct(c)}</title></rect>")
+    out.append("</svg>")
+    return "".join(out), table
+
+
 _RANGE = re.compile(r"^\s*(-?[\d.eE+]+)\s*[–-]\s*(-?[\d.eE+]+)\s*$")
 
 
@@ -523,11 +570,16 @@ def _pod(name: str, score: float, attr: Dict[str, Any], dists: Optional[Dict[str
                 f"<tr><td>{_e(a)}</td><td class='num'>{_e(b)}</td><td class='num'>{_e(c)}</td></tr>"
                 for a, b, c in rows) + "</tbody></table>")
         else:
-            svg, table = (_histogram(dists, summary, lang) if kind == "numeric" else ("", []))
+            svg, table = "", []
+            if kind == "numeric" and summary.get("discrete"):
+                svg, table = _value_columns(dists, lang)
+                cols, nums = ["col.value", "col.ref", "col.cur", "col.change"], (1, 2, 3)
+            elif kind == "numeric":
+                svg, table = _histogram(dists, summary, lang)
+                cols, nums = ["col.range", "col.ref", "col.cur"], (1, 2)
             if svg:
                 body.append(_legend(lang) + svg)
-                body.append(_table_view(lang, [t("col.range", lang), t("col.ref", lang), t("col.cur", lang)],
-                                        table, (1, 2)))
+                body.append(_table_view(lang, [t(c, lang) for c in cols], table, nums))
             else:
                 svg, table, hidden = _dumbbell(dists, lang)
                 if svg:
