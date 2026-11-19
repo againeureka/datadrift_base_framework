@@ -38,10 +38,14 @@
 
 ## `ddoc analyze eda`
 
+`eda_run` 플러그인이 처리하지 않는 CSV 는 내장 프로파일러가 기술합니다 (규모, 기간,
+열별 유형·분포, 품질 소견).
+
 | 옵션 | 설명 |
 |---|---|
 | `--data-path` | 분석할 데이터 경로 (필수) |
 | `--invalidate-cache` | 분석 캐시 무시 |
+| `--sample-rows N` | 내장 CSV 프로필에 앞 N행 포함 (0–20, 기본 끔 — 원본 데이터) |
 | `--json` / `--ndjson-progress` / `--quiet` | 출력 형식 제어 |
 
 ## `ddoc report render`
@@ -50,7 +54,8 @@ drift / EDA 결과를 리포트로 렌더. drift 입력은 `ddoc diff --report` 
 됩니다. `ddoc diff --json` 출력은 그대로 쓰고, `ddoc analyze drift --json` envelope 은
 `ddoc diff` 와 같은 기준으로 판정을 먼저 계산합니다. Markdown 은 판정·판독·유형 카드·
 계통별 검사표·점검 항목(체크박스)을 담아 PR 코멘트나 이슈에 붙일 수 있습니다. PDF 는
-같은 HTML 을 인쇄한 것입니다. EDA envelope 은 기존 템플릿을 씁니다.
+같은 HTML 을 인쇄한 것입니다. EDA 입력은 같은 형식의 데이터 프로필 보고서가 됩니다
+(내장 CSV 프로필은 도면·품질 소견·열별 분포까지, 플러그인 EDA 는 요약을 같은 문서 안에).
 
 ```bash
 ddoc diff ref.csv cur.csv --json > d.json

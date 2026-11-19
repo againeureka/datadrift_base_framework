@@ -85,6 +85,9 @@ class TabularReportPlugin:
         # ddoc's built-in drift report handles them.
         if drift_result:
             return None
+        # ddoc's own CSV profile has its own report.
+        if isinstance(eda_result, dict) and eda_result.get("profiler") == "builtin:csv_profile":
+            return None
         envelope = eda_result if _looks_tabular(eda_result) else None
         if envelope is None:
             return None

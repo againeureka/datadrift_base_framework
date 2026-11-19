@@ -197,6 +197,7 @@ details.tv table { margin-top: 6px; }
 .card .sig li::before { content: "▸"; position: absolute; left: 0; color: var(--ink-2); }
 .card .mean { margin: 6px 0 10px; }
 .card .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.card .two.one { grid-template-columns: 1fr; }
 .card h4 { font-size: 13px; color: var(--ink-2); margin: 0 0 4px; font-weight: 600; }
 .card .two ul { margin: 0; padding-left: 18px; font-size: 14px; }
 .card .two ul.todo { list-style: none; padding-left: 0; }
@@ -508,7 +509,9 @@ def _value_columns(dists: Dict[str, Dict[str, float]], lang: str) -> Tuple[str, 
     for i, v in enumerate(values):
         cx = left + slot * (i + 0.5)
         r, c = ref_n.get(v, 0.0), cur_n.get(v, 0.0)
-        for x0, share, color in ((cx - bw - 1, r, "var(--ref)"), (cx + 1, c, "var(--cur)")):
+        pairs = (((cx - bw - 1, r, "var(--ref)"), (cx + 1, c, "var(--cur)")) if ref_n
+                 else ((cx - bw / 2, c, "var(--cur)"),))  # one dataset: one centred column
+        for x0, share, color in pairs:
             y = sy(share)
             h = base - y
             if h > 0:
@@ -519,7 +522,7 @@ def _value_columns(dists: Dict[str, Dict[str, float]], lang: str) -> Tuple[str, 
         if i % every == 0:
             out.append(f"<text x='{cx:.1f}' y='{base + 18}' text-anchor='middle' class='tick-lbl'>{_e(v)}</text>")
         delta = t("fmt.pp", lang, value=(c - r) * 100)
-        tip = f"{v}\n{_pct(r)} → {_pct(c)} ({delta})"
+        tip = f"{v}\n{_pct(r)} → {_pct(c)} ({delta})" if ref_n else f"{v}\n{_pct(c)}"
         out.append(f"<rect class='hit' x='{cx - slot / 2:.1f}' y='{top}' width='{slot:.1f}' height='{plot_h}' "
                    f"tabindex='0' data-tip='{_e(tip)}'><title>{_e(v)}: {_pct(r)} → {_pct(c)}</title></rect>")
     out.append("</svg>")
@@ -558,6 +561,8 @@ def _histogram(dists: Dict[str, Dict[str, float]], summary: Optional[Dict[str, A
         out.append(f"<text x='{left - 8}' y='{y + 4:.1f}' text-anchor='end' class='tick-lbl'>{peak * frac * 100:.0f}%</text>")
     out.append(f"<line x1='{left}' y1='{base}' x2='{W - right}' y2='{base}' stroke='var(--axis)' stroke-width='1'/>")
     for share, color in ((ref_n, "var(--ref)"), (cur_n, "var(--cur)")):
+        if not share:  # one dataset only
+            continue
         pts = [f"M{sx(lo):.1f},{base}"]
         for a, b, label in bins:
             y = sy(share.get(label, 0.0))
@@ -590,7 +595,8 @@ def _histogram(dists: Dict[str, Dict[str, float]], summary: Optional[Dict[str, A
         for side, v, _ in marks:
             out.append(_median_label(sx(v), top + 14, f"{name} {v:.4g}"))
     for a, b, label in bins:
-        tip = f"{_pct(ref_n.get(label, 0.0))} → {_pct(cur_n.get(label, 0.0))}\n{label}"
+        tip = (f"{_pct(ref_n.get(label, 0.0))} → {_pct(cur_n.get(label, 0.0))}\n{label}" if ref_n
+               else f"{_pct(cur_n.get(label, 0.0))}\n{label}")
         out.append(f"<rect class='hit' x='{sx(a):.1f}' y='{top}' width='{max(sx(b) - sx(a), 2):.1f}' "
                    f"height='{plot_h}' tabindex='0' data-tip='{_e(tip)}'><title>{_e(label)}</title></rect>")
     out.append("</svg>")
@@ -876,6 +882,8 @@ def _spark(dists: Optional[Dict[str, Any]], summary: Optional[Dict[str, Any]]) -
         peak = max([*ref_n.values(), *cur_n.values(), 1e-9])
         step = (W - 2 * pad) / len(ordered)
         for share, color in ((ref_n, "var(--ref)"), (cur_n, "var(--cur)")):
+            if not share:
+                continue
             d = []
             for i, (_, k) in enumerate(ordered):
                 y = H - pad - (H - 2 * pad) * share.get(k, 0.0) / peak
@@ -898,8 +906,10 @@ def _spark(dists: Optional[Dict[str, Any]], summary: Optional[Dict[str, Any]]) -
         bw = slot * 0.36
         for i, k in enumerate(labels):
             cx = pad + slot * (i + 0.5)
-            for x0, share, color in ((cx - bw - 0.5, ref_n.get(k, 0.0), "var(--ref)"),
-                                     (cx + 0.5, cur_n.get(k, 0.0), "var(--cur)")):
+            pairs = (((cx - bw - 0.5, ref_n.get(k, 0.0), "var(--ref)"),
+                      (cx + 0.5, cur_n.get(k, 0.0), "var(--cur)")) if ref_n
+                     else ((cx - bw / 2, cur_n.get(k, 0.0), "var(--cur)"),))
+            for x0, share, color in pairs:
                 h = (H - 2 * pad) * share / peak
                 if h > 0:
                     out.append(f"<rect x='{x0:.1f}' y='{H - pad - h:.1f}' width='{bw:.1f}' "

@@ -9,8 +9,10 @@ The CLI:
 3. Otherwise renders built-in. Drift input becomes the same diagnostic
    report as ``ddoc diff --report`` (a drift envelope is judged with
    the same thresholds first); Markdown carries the same diagnosis for
-   pull requests and tickets; PDF prints the HTML. EDA and multi-modal
-   envelopes use the Jinja templates in ``ddoc/templates/``.
+   pull requests and tickets; PDF prints the HTML. EDA input becomes a
+   data profile report in the same format (the built-in CSV profile in
+   full, an EDA plugin's summary inside the same document). Multi-modal
+   drift envelopes use the Jinja template in ``ddoc/templates/``.
 """
 from __future__ import annotations
 
@@ -103,7 +105,8 @@ def _classify_envelope(payload: Dict[str, Any]) -> tuple[Optional[Dict], Optiona
         # is a drift result. Templates will iterate.
         return payload, None
     is_eda_shaped = (
-        "files_analyzed" in payload
+        payload.get("profiler") == "builtin:csv_profile"
+        or "files_analyzed" in payload
         or "series_analyzed" in payload
         or "texts_analyzed" in payload
         or ("summary" in payload and "overall_score" not in payload)
@@ -192,6 +195,24 @@ def _builtin_render(
             return _written(out_path, "pdf")
         raise typer.BadParameter(f"built-in fallback supports html|pdf|md; got {fmt!r}")
 
+    if drift_result is None and eda_result is not None:
+        from .diff_report import for_paged_media
+        from .profile_report import build_profile_html, build_profile_markdown
+
+        if fmt == "md":
+            out_path.write_text(build_profile_markdown(eda_result, lang=lang, title=cfg.get("title")),
+                                encoding="utf-8")
+            return _written(out_path, "md")
+        html = build_profile_html(eda_result, lang=lang, issuer=cfg.get("issuer"), title=cfg.get("title"))
+        if fmt == "html":
+            out_path.write_text(html, encoding="utf-8")
+            return _written(out_path, "html")
+        if fmt == "pdf":
+            from weasyprint import HTML
+            HTML(string=for_paged_media(html)).write_pdf(str(out_path))
+            return _written(out_path, "pdf")
+        raise typer.BadParameter(f"built-in fallback supports html|pdf|md; got {fmt!r}")
+
     if fmt == "md":
         body = _render_markdown(drift_result, eda_result, cfg)
         out_path.write_text(body, encoding="utf-8")
@@ -228,28 +249,19 @@ def _builtin_render(
             return "warning"
         return "critical"
 
-    if drift_result is not None:
-        tpl = env.get_template("drift_report.html")
-        # Pre-normalize attribute_drifts so the
-        # template iterates a uniform shape regardless of how the
-        # producing detector serialized it.
-        attr_rows = _normalize_attribute_drifts(
-            drift_result.get("attribute_drifts")
-        )
-        html = tpl.render(
-            drift=drift_result,
-            attribute_drifts_rows=attr_rows,
-            title=cfg.get("title"),
-            status_class=_status_class(drift_result.get("overall_score")),
-            raw_json=json.dumps(drift_result, indent=2, ensure_ascii=False, default=str),
-        )
-    else:
-        tpl = env.get_template("eda_report.html")
-        html = tpl.render(
-            eda=eda_result or {},
-            title=cfg.get("title"),
-            raw_json=json.dumps(eda_result or {}, indent=2, ensure_ascii=False, default=str),
-        )
+    # Only multi-modal drift envelopes reach the template now.
+    drift_result = drift_result or {}
+    tpl = env.get_template("drift_report.html")
+    # Pre-normalize attribute_drifts so the template iterates a uniform
+    # shape regardless of how the producing detector serialized it.
+    attr_rows = _normalize_attribute_drifts(drift_result.get("attribute_drifts"))
+    html = tpl.render(
+        drift=drift_result,
+        attribute_drifts_rows=attr_rows,
+        title=cfg.get("title"),
+        status_class=_status_class(drift_result.get("overall_score")),
+        raw_json=json.dumps(drift_result, indent=2, ensure_ascii=False, default=str),
+    )
 
     if fmt == "html":
         out_path.write_text(html, encoding="utf-8")
@@ -297,12 +309,6 @@ def _render_markdown(drift, eda, cfg) -> str:
                     if extras else ""
                 )
                 lines.append(f"- `{name}`: {score_str}{extras_str}")
-    if eda is not None:
-        lines.append(f"- {t('report.modality', lang)}: `{eda.get('modality', 'unknown')}`")
-        if "summary" in eda:
-            lines += ["", f"## {t('report.summary', lang)}", ""]
-            for k, v in eda["summary"].items():
-                lines.append(f"- `{k}`: {v}")
     lines += ["", f"## {t('report.raw_envelope', lang)}", "", "```json"]
     lines.append(json.dumps(drift if drift is not None else eda, indent=2, ensure_ascii=False, default=str))
     lines += ["```", ""]

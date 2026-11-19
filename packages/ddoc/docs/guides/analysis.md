@@ -35,10 +35,24 @@ ddoc analyze eda --data-path data/cur --json --quiet
 |---|---|
 | `--data-path` | 분석할 데이터 경로 (필수) |
 | `--invalidate-cache` | 기존 분석 캐시를 무시하고 다시 분석 |
+| `--sample-rows N` | 내장 CSV 프로필에 앞 N행 포함 (기본 끔) |
 | `--json` / `--ndjson-progress` / `--quiet` | drift 와 동일 |
 
-EDA 는 `eda_run` hook 을 구현한 플러그인이 있어야 동작합니다.
-(예: categorical 플러그인은 drift 만 제공합니다.)
+이미지·텍스트·오디오·시계열은 `eda_run` hook 을 구현한 플러그인이 분석합니다. 플러그인이
+처리하지 않는 CSV 는 내장 프로파일러가 데이터 하나를 기술합니다.
+
+- 규모·기간(날짜·시간 열)·중복 행 비율, 열별 유형·결측률·고유값·분포
+- 품질 소견: 빈 열, 상수 열, 거의 상수인 열, 결측 많음(20% 이상), 식별자형 열, 먼 극단값
+  (사분위 ± 3 IQR 밖 1% 이상), 표기 변형(대소문자·공백만 다른 값), 텍스트로 저장된 숫자,
+  중복 행(1% 이상), 행 수 부족(30행 미만)
+
+```bash
+ddoc analyze eda --data-path aug.csv --json --quiet > eda.json
+ddoc report render -i eda.json -o profile.html --lang ko   # 데이터 프로필 보고서
+```
+
+보고서는 진단서와 같은 형식(머리글, 데이터 도면, 소견 카드, 화면 테마, 인쇄)이며, 극단값이
+있으면 분포 그림은 몸통 범위로 그리고 뺀 비중을 함께 적습니다.
 
 ## 결과를 리포트로
 

@@ -6,6 +6,10 @@ subprocess-invoke this instead of importing ddoc as a library.
 
 ``--json`` emits the merged plugin result to stdout as a single JSON
 object (no rich formatting).
+
+When no plugin handles the path and it is CSV, the built-in profiler
+(:mod:`ddoc.profile`) describes it instead — the same fallback ``ddoc
+diff`` has for comparing CSVs.
 """
 import sys
 
@@ -35,6 +39,10 @@ def analyze_eda_command(
     quiet: bool = typer.Option(
         False, "--quiet", "-q",
         help="Silence all plugin stdout/stderr during hook invocation. CLI's own NDJSON progress (if --ndjson-progress) and final --json envelope still emit.",
+    ),
+    sample_rows: int = typer.Option(
+        0, "--sample-rows", min=0, max=20,
+        help="Built-in CSV profile: include the first N rows (off by default: they are raw data).",
     ),
 ):
     """
@@ -78,9 +86,26 @@ def analyze_eda_command(
         rprint(f"[yellow]plugin {name} failed and was skipped: {err}[/yellow]", file=sys.stderr)
     emit_progress(0.9, "merge", "merging plugin results",
                   enabled=ndjson_progress)
+    if not [r for r in hook_results or [] if r is not None]:
+        builtin = _builtin_profile(Path(data_path), sample_rows=sample_rows)
+        if builtin is not None:
+            hook_results = [builtin]
     result = _finish_eda(hook_results, json_out=json_out)
     emit_progress(1.0, "complete", "done", enabled=ndjson_progress)
     return result
+
+
+def _builtin_profile(path: Path, *, sample_rows: int = 0):
+    """The built-in CSV profile, or None when the path is not CSV."""
+    from ..diff import sniff_modality
+    from ....profile import profile_csv
+
+    if not path.exists():
+        return None
+    kind, detail = sniff_modality(path)
+    if kind != "csv":
+        return None
+    return profile_csv(detail.get("files") or [str(path)], sample_rows=sample_rows)
 
 
 def _finish_eda(hook_results, *, json_out: bool, return_dict: bool = False):
