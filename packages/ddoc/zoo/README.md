@@ -15,6 +15,19 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 | [`creeping_degradation/`](creeping_degradation/) | 점진 열화 | **DRIFT** | 하루하루는 멀쩡해 보이는데 한 달 전과 비교하면 센서가 죽어가고 있다 |
 | [`rhythm_not_drift/`](rhythm_not_drift/) | 주기 리듬 (함정) | **OK** | 월요일과 화요일은 다르게 *보이지만* 드리프트가 아니다 — 탐지기는 아니라고 말할 줄도 알아야 한다 |
 
+진단서는 측정값을 미리 정리해 둔 드리프트 유형에 대어 보고(유형 판독), 케이스마다
+이야기에 맞는 유형이 나오는지도 회귀 테스트로 고정합니다.
+
+| case | 유형 판독 |
+|---|---|
+| `regime_shift` | 레짐 전환형 · 이동·확산형 · 구성비 이동형 |
+| `creeping_degradation` | 이동·확산형 |
+| `rhythm_not_drift` | 안정형 |
+
+`regime_shift` 진단서의 유형 판독 (`ddoc diff data/ref.csv data/cur.csv --lang ko --report note.html`):
+
+![regime_shift 유형 판독](../../../docs/imgs/regime-shift-reading-ko.png)
+
 세 번째 케이스가 핵심입니다: 모든 것을 DRIFT라 우기는 탐지기는 알람 피로만
 만듭니다. ddoc의 판정은 3값(OK / DRIFT / BLIND)이고, Zoo는 세 답이 모두
 나오는 것까지 검증합니다.

@@ -68,6 +68,38 @@ ddoc serve                                                # REST API + GUI on ht
 
 More in the [ddoc README](packages/ddoc/README.md) and its [docs](packages/ddoc/docs/).
 
+## The diagnostic report
+
+`ddoc diff ... --report note.html` writes one self-contained HTML file laid
+out like an inspection report: what was compared, a summary with the
+verdict, and a **pattern reading** — the measurements matched against
+written-up drift patterns (regime shift, unit change, new categories, a
+shift with a wider spread, ...), each with what it usually means, common
+causes and what to check first. It opens offline, switches between day
+and night, and prints to A4. Shown here for the
+[Drift Zoo regime-shift case](packages/ddoc/zoo/regime_shift/):
+
+![Diagnostic report: summary and pattern reading](docs/imgs/diagnostic-report.png)
+
+A **data diagram** draws each column as one part with a baseline-vs-current
+thumbnail and numbers the parts that need attention; each number leads
+to that column's findings. Further down come the inspection table
+(measured value, criterion and result per item), charts per attribute
+and the items to check.
+
+![Data diagram with numbered callouts](docs/imgs/data-diagram.png)
+
+The same report comes out of `ddoc report render` (HTML, PDF, or Markdown
+for pull requests) and the **Diagnose** tab of `ddoc serve`. For a single
+dataset, `ddoc analyze eda` profiles a CSV and renders a data profile
+report in the same format, with quality findings such as identifier-like
+columns, far outliers or spelling variants:
+
+![Data profile report](docs/imgs/profile-report.png)
+
+Reports are in English by default; `--lang ko` (or `DDOC_LANG=ko`) writes
+them in Korean.
+
 ## In-tree plugins
 
 `vision` (image EDA / embedding drift) · `text` · `timeseries` · `audio` ·
