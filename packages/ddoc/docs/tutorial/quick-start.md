@@ -39,7 +39,7 @@ ddoc diff jan.csv aug.csv
 
 ```bash
 ddoc diff /tmp/d/ref /tmp/d/cur --json               # 판정 JSON 한 객체
-ddoc diff /tmp/d/ref /tmp/d/cur --report note.html   # 판정 + 근거 + 처방 HTML 소견서
+ddoc diff /tmp/d/ref /tmp/d/cur --report note.html   # 판정 근거·주요 변화·점검 항목 HTML 소견서
 ```
 
 ## 5. 저수준 분석과 리포트

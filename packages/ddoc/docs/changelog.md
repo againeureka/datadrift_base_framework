@@ -10,6 +10,7 @@
 - ✨ `ddoc diff` 한 줄 판정 (OK / DRIFT / BLIND), `--report` HTML 소견서, Drift Zoo, GitHub Action
 - ✨ `ddoc serve` (REST + GUI), `recipe`, `report`, `export`, `fetch`, `examples` 명령
 - ✨ 한글 리포트 (`--lang ko` / `DDOC_LANG=ko`)
+- ✨ 소견서 진단: 판정 근거, 패턴 감지, 표본 수 경고, 패턴별 점검 항목 (`--json` 의 `diagnosis`)
 - 🗑️ `init` / `add` / `snapshot`, 스냅샷 모드, `exp` / `train`, `ingest`, `vis`, v1 legacy 명령 제거
 - 🗑️ yolo / vis / nlp / reference-engine / keti-temporal 플러그인, 관련 hookspec 과 extras 제거 (hookspec 2.0.0)
 - 🐛 플러그인 하나의 실패가 다른 플러그인 결과를 지우던 문제, 일반 설치에서 `examples generate` 가 실패하던 문제 수정

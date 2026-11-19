@@ -15,6 +15,7 @@ import html
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from ... import diagnosis as dx
 from ...i18n import DEFAULT_LANG, severity_label, t
 
 _VERDICT_STYLE = {
@@ -65,6 +66,18 @@ h2 { font-size: 14px; border-bottom: 1px solid #eceef1; padding-bottom: 5px;
           padding: 10px 12px; font-size: 13px; }
 .foot { color: #99a; font-size: 11px; margin-top: 24px; border-top: 1px solid #eceef1;
         padding-top: 8px; }
+.why li, .checks li { font-size: 13px; margin: 5px 0; line-height: 1.5; }
+.chg { font-size: 13px; margin: 8px 0; }
+.chg .nm { font-weight: 600; }
+.chg .sum { color: #444; margin-left: 6px; }
+.pat { display: inline-block; font-size: 11px; background: #fff4e5; color: #8a5300;
+       border: 1px solid #f1d9b5; border-radius: 10px; padding: 1px 8px; margin: 3px 4px 0 0; }
+.caution { background: #fdf6dd; border: 1px solid #eadfa8; border-radius: 6px;
+           padding: 8px 12px; font-size: 13px; margin-bottom: 14px; }
+.limits { font-size: 12px; color: #555; background: #f7f8fa; border-radius: 6px;
+          padding: 8px 12px; }
+.more { font-size: 11px; color: #888; margin-top: 4px; }
+.delta { color: #999; font-size: 11px; min-width: 64px; font-variant-numeric: tabular-nums; }
 """
 
 
@@ -91,33 +104,55 @@ def _attr_bar(name: str, score: float, threshold: float, attr_threshold: float) 
     )
 
 
-def _evidence_block(attr: str, dists: Dict[str, Dict[str, float]], lang: str) -> str:
-    ref_n, cur_n = _norm(dists.get("ref", {})), _norm(dists.get("cur", {}))
-    labels = list(dists.get("ref", {}).keys())
-    for k in dists.get("cur", {}):
-        if k not in labels:
-            labels.append(k)
+_EVIDENCE_ROWS = 10
+
+
+def _evidence_block(attr: str, dists: Dict[str, Dict[str, float]], lang: str,
+                    keep_order: bool = False) -> str:
+    """ref → cur rows for one attribute: rows with no mass on either side
+    are dropped; categorical rows are ordered by size of change and capped.
+    Summary statistics (mean / std / ...) are shown as values, not shares."""
+    ref_raw, cur_raw = dists.get("ref", {}), dists.get("cur", {})
+    if dx.is_stat_dict(ref_raw) or dx.is_stat_dict(cur_raw):
+        rows = [
+            f'<div class="row"><span class="lbl">{_e(k)}</span><span class="cell">'
+            f'<span class="pct">{dx._num(ref_raw.get(k))} → {dx._num(cur_raw.get(k))}</span>'
+            f'</span></div>'
+            for k in dict.fromkeys([*ref_raw, *cur_raw])
+        ]
+        return f'<div class="evi"><h3>{_e(attr)}</h3>' + "".join(rows) + "</div>"
+
+    ref_n, cur_n = _norm(ref_raw), _norm(cur_raw)
+    labels = [k for k in dict.fromkeys([*ref_raw, *cur_raw])
+              if max(ref_n.get(k, 0.0), cur_n.get(k, 0.0)) >= 0.0005]
     if not labels:
         return ""
+    hidden = 0
+    if not keep_order:
+        labels.sort(key=lambda k: abs(cur_n.get(k, 0.0) - ref_n.get(k, 0.0)), reverse=True)
+        if len(labels) > _EVIDENCE_ROWS:
+            hidden = len(labels) - _EVIDENCE_ROWS
+            labels = labels[:_EVIDENCE_ROWS]
     peak = max([*ref_n.values(), *cur_n.values(), 1e-9])
-    rows = []
-    for lbl in labels:
-        r, c = ref_n.get(lbl, 0.0), cur_n.get(lbl, 0.0)
-        rw, cw = r / peak * 100, c / peak * 100
-        rows.append(
-            f'<div class="row"><span class="lbl" title="{_e(lbl)}">{_e(lbl)}</span>'
-            f'<span class="cell"><span class="mini ref" style="width:{rw:.1f}%"></span>'
-            f'<span class="mini cur" style="width:{cw:.1f}%"></span>'
-            f'<span class="pct">{r*100:.1f}% → {c*100:.1f}%</span></span></div>'
-        )
-    return (
-        f'<div class="evi"><h3>{_e(attr)}</h3>'
+    legend = (
         f'<div class="legend">{_e(t("note.legend_ref", lang))}'
         f'<span class="sw" style="background:#9fb6d4"></span>ref &nbsp;·&nbsp; '
         f'{_e(t("note.legend_cur", lang))}'
         f'<span class="sw" style="background:#e0876f"></span>cur</div>'
-        + "".join(rows) + "</div>"
     )
+    rows = []
+    for lbl in labels:
+        r, c = ref_n.get(lbl, 0.0), cur_n.get(lbl, 0.0)
+        rows.append(
+            f'<div class="row"><span class="lbl" title="{_e(lbl)}">{_e(lbl)}</span>'
+            f'<span class="cell"><span class="mini ref" style="width:{r / peak * 100:.1f}%"></span>'
+            f'<span class="mini cur" style="width:{c / peak * 100:.1f}%"></span>'
+            f'<span class="pct">{r*100:.1f}% → {c*100:.1f}%</span>'
+            f'<span class="delta">{_e(t("fmt.pp", lang, value=(c - r) * 100))}</span></span></div>'
+        )
+    more = (f'<div class="more">{_e(t("note.more_rows", lang, count=hidden))}</div>'
+            if hidden else "")
+    return f'<div class="evi"><h3>{_e(attr)}</h3>' + legend + "".join(rows) + more + "</div>"
 
 
 def build_consultation_html(
@@ -128,7 +163,11 @@ def build_consultation_html(
     lang: str = DEFAULT_LANG,
 ) -> str:
     """Render the verdict payload (+ optional per-attribute ref/cur
-    distributions) as a standalone consultation-note HTML page."""
+    distributions) as a standalone consultation-note HTML page.
+
+    Sections: verdict, cautions, why this verdict, attribute scores, what
+    changed, evidence, what to check next, and what the note cannot tell.
+    """
     verdict = payload.get("verdict", "BLIND")
     color, bg, icon = _VERDICT_STYLE.get(verdict, _VERDICT_STYLE["BLIND"])
     severity = payload.get("severity", "unknown")
@@ -137,6 +176,12 @@ def build_consultation_html(
     attr_threshold = payload.get("attr_threshold") or 0.25
     top: List[Tuple[str, float]] = [tuple(t) for t in payload.get("top_attributes") or []]
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    raw = payload.get("raw") or {}
+    diagnosis = payload.get("diagnosis") or dx.build(
+        verdict=verdict, overall=score, top=top, threshold=threshold,
+        attr_threshold=attr_threshold, result=raw, evidence=distributions,
+        reason=payload.get("reason"),
+    )
 
     meta_rows = [
         (t("note.ref", lang), payload.get("ref")),
@@ -148,6 +193,9 @@ def build_consultation_html(
          t("note.thresholds_value", lang, threshold=threshold, attr_threshold=attr_threshold)),
         (t("label.severity", lang), severity_label(severity, lang)),
     ]
+    samples = diagnosis.get("samples")
+    if samples:
+        meta_rows.append((t("note.samples", lang), t("note.samples_value", lang, **samples)))
     meta_html = "".join(
         f'<tr><td class="k">{_e(k)}</td><td>{_e(v)}</td></tr>' for k, v in meta_rows
     )
@@ -164,26 +212,68 @@ def build_consultation_html(
         f"<table class='meta'>{meta_html}</table>",
     ]
 
+    warnings = diagnosis.get("warnings") or []
+    if warnings:
+        parts.append(
+            f"<div class='caution'><b>{_e(t('note.caution', lang))}</b> — "
+            + " ".join(_e(dx.warning_text(w, lang)) for w in warnings) + "</div>"
+        )
+
     if verdict == "BLIND":
         parts.append(f"<h2>{_e(t('note.reason', lang))}</h2>")
         parts.append(f"<div class='reason'>{_e(payload.get('reason') or '')}</div>")
-    elif top:
-        parts.append(f"<h2>{_e(t('note.findings', lang))}</h2>")
-        attrs = payload.get("raw", {}).get("attribute_drifts") or dict(top)
-        ordered = sorted(attrs.items(), key=lambda kv: kv[1], reverse=True)
-        parts += [_attr_bar(k, float(v), threshold, attr_threshold) for k, v in ordered]
+        hints = payload.get("hints") or []
+        if hints:
+            parts.append(f"<h2>{_e(t('note.checks', lang))}</h2><ul class='checks'>")
+            parts += [f"<li>{_e(h)}</li>" for h in hints]
+            parts.append("</ul>")
+    else:
+        parts.append(f"<h2>{_e(t('note.why', lang))}</h2><ul class='why'>")
+        parts += [f"<li>{_e(dx.rationale_text(r, lang))}</li>"
+                  for r in diagnosis.get("rationale") or []]
+        parts.append("</ul>")
+
+        scores = raw.get("attribute_drifts") or dict(top)
+        ordered = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+        if ordered:
+            parts.append(f"<h2>{_e(t('note.findings', lang))}</h2>")
+            parts += [_attr_bar(k, float(v), threshold, attr_threshold) for k, v in ordered]
+
+        described = [a for a in diagnosis.get("attributes") or []
+                     if dx.summary_text(a.get("summary"), lang) or a.get("patterns")]
+        if described:
+            parts.append(f"<h2>{_e(t('note.changes', lang))}</h2>")
+            for a in described:
+                line = dx.summary_text(a.get("summary"), lang)
+                # The summary line already states the largest share change
+                # and the mean, so those patterns are not repeated as badges.
+                badges = "".join(f"<span class='pat'>{_e(dx.pattern_text(p, lang))}</span>"
+                                 for p in a.get("patterns") or []
+                                 if p["code"] not in ("share_shift", "mean_shift"))
+                parts.append(
+                    f"<div class='chg'><span class='nm'>{_e(a['name'])}</span>"
+                    + (f"<span class='sum'>{_e(line)}</span>" if line else "")
+                    + (f"<div>{badges}</div>" if badges else "") + "</div>"
+                )
 
         dists = distributions or {}
-        evidenced = [k for k, _ in ordered if k in dists][:max_evidence]
-        if evidenced:
+        kinds = {a["name"]: (a.get("summary") or {}).get("kind")
+                 for a in diagnosis.get("attributes") or []}
+        blocks = [_evidence_block(k, dists[k], lang, keep_order=kinds.get(k) == "numeric")
+                  for k, _ in ordered if k in dists][:max_evidence]
+        blocks = [b for b in blocks if b]
+        if blocks:
             parts.append(f"<h2>{_e(t('note.evidence', lang))}</h2>")
-            parts += [_evidence_block(k, dists[k], lang) for k in evidenced]
+            parts += blocks
 
-    hints = payload.get("hints") or []
-    if hints:
-        parts.append(f"<h2>{_e(t('note.prescription', lang))}</h2><ul class='rx'>")
-        parts += [f"<li>{_e(h)}</li>" for h in hints]
-        parts.append("</ul>")
+        checks = dx.check_texts(diagnosis, lang)
+        if checks:
+            parts.append(f"<h2>{_e(t('note.checks', lang))}</h2><ul class='checks'>")
+            parts += [f"<li>{_e(c)}</li>" for c in checks]
+            parts.append("</ul>")
+
+        parts.append(f"<h2>{_e(t('note.limits', lang))}</h2>"
+                     f"<div class='limits'>{_e(t('note.limits_text', lang))}</div>")
 
     parts.append(f"<div class='foot'>{_e(t('note.footer', lang))}</div>")
     parts.append("</div></body></html>")

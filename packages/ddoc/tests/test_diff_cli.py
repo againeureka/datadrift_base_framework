@@ -183,7 +183,7 @@ def test_diff_report_csv_evidence(tmp_path):
     assert "DRIFT" in body
     assert "price" in body and "color" in body          # findings bars
     assert "Evidence" in body and "green" in body       # distribution shift
-    assert "Prescription" in body
+    assert "What to check next" in body                  # checks for the drifted columns
 
 
 def test_diff_report_categorical_evidence(tmp_path):

@@ -41,9 +41,10 @@ ddoc diff baseline_data/ todays_data/
 ```
 
 ```
-⚠ DRIFT — severity: high · score 0.27 (threshold 0.15)
-   가장 변한 속성: price 0.42 · color 0.18
-   ⤷ 처방: 'price' 축의 최근 샘플을 재계측/재라벨 후보로 검토
+⚠ DRIFT — 심각도: 높음 · 점수 0.2700 (기준 0.15)      # --lang ko
+   가장 변한 속성: price 0.420 · color 0.180
+   ⤷ 'price'의 값이 이동했습니다. 실제 환경 변화로 판단하기 전에 단위·스케일
+     변경, 센서 교체·재보정이 아닌지 먼저 확인하세요.
 ```
 
 - 입력 모달리티 자동 감지 — **생 CSV 는 플러그인 없이도** 내장 비교기로 동작
@@ -52,7 +53,7 @@ ddoc diff baseline_data/ todays_data/
 
 ```bash
 ddoc diff jan.csv aug.csv --json                # 스크립트/CI: JSON 한 객체
-ddoc diff jan.csv aug.csv --report note.html    # 소견서: 판정+근거 분포+처방 1페이지 HTML
+ddoc diff jan.csv aug.csv --report note.html    # 소견서: 판정 근거·주요 변화·점검 항목 1페이지 HTML
 ddoc diff jan.csv aug.csv --report note.html --lang ko   # 한글 소견서 (또는 DDOC_LANG=ko)
 ```
 

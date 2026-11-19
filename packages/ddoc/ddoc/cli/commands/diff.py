@@ -34,6 +34,7 @@ import typer
 from rich import print as rprint
 
 from .utils import call_hook_isolated, get_pmgr
+from ... import diagnosis as dx
 from ...i18n import resolve_lang, severity_label, t
 
 EXIT_OK = 0
@@ -125,6 +126,46 @@ def _js_divergence(p: Dict[Any, float], q: Dict[Any, float]) -> float:
     return max(0.0, min(1.0, 0.5 * kl(pn, m) + 0.5 * kl(qn, m)))
 
 
+def _rate(part: float, whole: float) -> float:
+    return round(float(part) / whole, 4) if whole else 0.0
+
+
+def _numeric_summary(r, c) -> Dict[str, Any]:
+    """Location, spread and range of two numeric series, plus the share
+    of current values that fall outside the baseline's [min, max]."""
+    def stats(x) -> Dict[str, Optional[float]]:
+        if x.empty:
+            return {"mean": None, "std": None, "median": None, "min": None, "max": None}
+        return {k: round(float(v), 6) for k, v in (
+            ("mean", x.mean()), ("std", x.std(ddof=0)), ("median", x.median()),
+            ("min", x.min()), ("max", x.max()))}
+    rs, cs = stats(r), stats(c)
+    out: Dict[str, Any] = {k: {"ref": rs[k], "cur": cs[k]} for k in rs}
+    if not r.empty and not c.empty:
+        outside = ((c < rs["min"]) | (c > rs["max"])).sum()
+        out["outside_ref_range"] = _rate(outside, len(c))
+    return out
+
+
+def _category_changes(ref_counts: Dict[Any, float], cur_counts: Dict[Any, float],
+                      min_share: float = 0.01, limit: int = 5) -> Dict[str, Any]:
+    """Values that appear only on one side with at least ``min_share``."""
+    rt, ct = sum(ref_counts.values()) or 1.0, sum(cur_counts.values()) or 1.0
+    new = sorted(((str(k), v / ct) for k, v in cur_counts.items()
+                  if ref_counts.get(k, 0) == 0 and v / ct >= min_share),
+                 key=lambda kv: kv[1], reverse=True)
+    gone = sorted(((str(k), v / rt) for k, v in ref_counts.items()
+                   if cur_counts.get(k, 0) == 0 and v / rt >= min_share),
+                  key=lambda kv: kv[1], reverse=True)
+    labels = list(dict.fromkeys([*ref_counts, *cur_counts]))
+    movers = sorted(((str(k), ref_counts.get(k, 0) / rt, cur_counts.get(k, 0) / ct) for k in labels),
+                    key=lambda m: abs(m[2] - m[1]), reverse=True)
+    return {"new_values": [[k, round(v, 4)] for k, v in new[:limit]],
+            "vanished_values": [[k, round(v, 4)] for k, v in gone[:limit]],
+            "top_mover": [movers[0][0], round(movers[0][1], 4), round(movers[0][2], 4)]
+                         if movers else None}
+
+
 def _load_csv_frame(files: List[str]):
     import pandas as pd
 
@@ -139,7 +180,10 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20) -> Dict
     non-numeric columns → value-count JS divergence.
     ``overall_score`` = mean over shared columns. The per-column
     ref/cur distributions ride along under ``distributions`` so the
-    consultation report can show *evidence*, not just scores.
+    consultation report can show *evidence*, not just scores, and
+    ``summaries`` carries per-column statistics (sample size, missing
+    rate, location / spread / range for numeric columns, new and vanished
+    values for categorical ones) for the diagnosis.
     """
     import numpy as np
     import pandas as pd
@@ -156,13 +200,20 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20) -> Dict
 
     attribute_drifts: Dict[str, float] = {}
     distributions: Dict[str, Dict[str, Dict[str, float]]] = {}
+    summaries: Dict[str, Dict[str, Any]] = {}
     for col in shared:
         r, c = ref[col].dropna(), cur[col].dropna()
+        base = {
+            "n": {"ref": int(len(ref)), "cur": int(len(cur))},
+            "missing": {"ref": _rate(len(ref) - len(r), len(ref)),
+                        "cur": _rate(len(cur) - len(c), len(cur))},
+        }
         if r.empty and c.empty:
             continue
         if pd.api.types.is_numeric_dtype(r) and pd.api.types.is_numeric_dtype(c):
             lo = float(min(r.min(), c.min()))
             hi = float(max(r.max(), c.max()))
+            summaries[col] = {"kind": "numeric", **base, **_numeric_summary(r, c)}
             if hi == lo:
                 attribute_drifts[col] = 0.0
                 continue
@@ -182,6 +233,8 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20) -> Dict
             rvc = r.astype(str).value_counts()
             cvc = c.astype(str).value_counts()
             attribute_drifts[col] = _js_divergence(rvc.to_dict(), cvc.to_dict())
+            summaries[col] = {"kind": "categorical", **base,
+                              **_category_changes(rvc.to_dict(), cvc.to_dict())}
             # Evidence: top categories by combined mass + an "(other)" bucket.
             top = list((rvc.add(cvc, fill_value=0)).sort_values(ascending=False).index[:8])
             def _bucket(vc) -> Dict[str, float]:
@@ -200,6 +253,7 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20) -> Dict
         "overall_score": round(overall, 4),
         "attribute_drifts": {k: round(v, 4) for k, v in attribute_drifts.items()},
         "distributions": distributions,
+        "summaries": summaries,
         "rows": {"ref": int(len(ref)), "cur": int(len(cur))},
         "columns_compared": shared,
     }
@@ -301,6 +355,8 @@ def _blind(reason: str, *, ref: str, cur: str, json_out: bool, lang: str,
         "modality": modality, "engine": None, "detector": None,
         "ref": ref, "cur": cur, "reason": reason, "hints": hints or [],
         "top_attributes": [], "threshold": None,
+        "diagnosis": dx.build(verdict="BLIND", overall=None, top=[], threshold=0.0,
+                              attr_threshold=0.0, reason=reason),
     }, json_out=json_out, lang=lang, report=report)
 
 
@@ -358,8 +414,8 @@ def diff_command(
     ),
     report: Optional[Path] = typer.Option(
         None, "--report",
-        help="Write a self-contained HTML consultation note (verdict + "
-             "evidence + prescription) to this path.",
+        help="Write a self-contained HTML consultation note (verdict, why, "
+             "what changed, evidence, what to check next) to this path.",
     ),
     lang: Optional[str] = typer.Option(
         None, "--lang",
@@ -427,7 +483,7 @@ def diff_command(
             _blind(t("reason.csv_failed", lang, error=e), ref=ref_s, cur=cur_s,
                    json_out=json_out, lang=lang, modality="tabular", report=report)
 
-    # 3) Still nothing → honest BLIND with a prescription.
+    # 3) Still nothing → honest BLIND with what to do about it.
     if result is None:
         hints = []
         if kind == "vision":
@@ -445,14 +501,19 @@ def diff_command(
     verdict, severity, top = compute_verdict(
         result, threshold=threshold, attr_threshold=attr_threshold,
     )
-    hints: List[str] = []
+    evidence = _collect_evidence(kind, ref, cur, result)
+    diagnosis = dx.build(
+        verdict=verdict, overall=float(result.get("overall_score") or 0.0), top=top,
+        threshold=threshold, attr_threshold=attr_threshold,
+        result=result, evidence=evidence,
+    )
+    hints: List[str] = [dx.warning_text(w, lang) for w in diagnosis["warnings"]
+                        if w["code"] == "small_sample"]
     if verdict == "DRIFT":
-        worst = top[0][0] if top else "?"
-        hints.append(t("hint.rx_worst", lang, attr=worst))
+        hints += dx.check_texts(diagnosis, lang)[:3]
         if report is None:
             hints.append(t("hint.report_suggest", lang))
 
-    evidence = _collect_evidence(kind, ref, cur, result)
     _finish({
         "verdict": verdict,
         "severity": severity,
@@ -465,5 +526,6 @@ def diff_command(
         "engine": engine,
         "ref": ref_s, "cur": cur_s,
         "hints": hints,
+        "diagnosis": diagnosis,
         "raw": result,
     }, json_out=json_out, lang=lang, report=report, distributions=evidence)
