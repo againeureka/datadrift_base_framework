@@ -231,7 +231,7 @@ def build_profile_html(envelope: Dict[str, Any], *, lang: str = DEFAULT_LANG,
         return f"<h2>{n}. {_e(t(key, lang))}</h2>"
 
     # 1. Subject.
-    parts.append(section("sec.subject"))
+    parts.append(section("profile.sec_subject"))
     parts.append(f"<p class='lead'>{_e(t('profile.lead', lang))}</p>")
     rows = [(t("subject.path", lang), envelope.get("data_path") or "—"),
             (t("subject.size", lang), t("subject.size_value", lang, rows=prof.get("rows", 0),
