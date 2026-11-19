@@ -210,3 +210,19 @@ def test_report_escapes_attribute_names(tmp_path):
     assert "<img src=x>" not in html_out
     assert "<script>alert(1)</script>" not in html_out
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html_out
+
+
+def test_report_has_theme_switch_and_print_button_kept_out_of_print():
+    payload = {
+        "verdict": "OK", "severity": "none", "overall_score": 0.01,
+        "threshold": 0.15, "attr_threshold": 0.25, "top_attributes": [["a", 0.01]],
+        "ref": "r", "cur": "c", "modality": "categorical", "engine": "plugin", "detector": "x",
+        "raw": {"attribute_drifts": {"a": 0.01}}, "hints": [],
+    }
+    ko = build_consultation_html(payload, lang="ko")
+    for word in ("주간", "야간", "자동", "인쇄 / PDF"):
+        assert word in ko
+    assert "data-set-theme='dark'" in ko and "window.print()" in ko
+    # night colours apply on screen only, so paper and PDF stay white
+    assert "@media screen and (prefers-color-scheme: dark)" in ko
+    assert ".bar { display: none !important; }" in ko

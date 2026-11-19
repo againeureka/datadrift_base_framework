@@ -38,7 +38,9 @@ _CSS = """
   --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
   --chip: #f0efec; --tip-bg: #0b0b0b; --tip-ink: #f0efec;
 }
-@media (prefers-color-scheme: dark) {
+/* Night theme: follows the OS unless the reader picks one; screen only,
+   so a printed or saved PDF always comes out on white paper. */
+@media screen and (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) .doc {
     color-scheme: dark;
     --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
@@ -47,12 +49,14 @@ _CSS = """
     --chip: #2c2c2a; --tip-bg: #f0efec; --tip-ink: #0b0b0b;
   }
 }
-:root[data-theme="dark"] .doc {
-  color-scheme: dark;
-  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
-  --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
-  --cur: #3987e5; --ref: #75746e; --track: #184f95; --link: #383835;
-  --chip: #2c2c2a; --tip-bg: #f0efec; --tip-ink: #0b0b0b;
+@media screen {
+  :root[data-theme="dark"] .doc {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
+    --cur: #3987e5; --ref: #75746e; --track: #184f95; --link: #383835;
+    --chip: #2c2c2a; --tip-bg: #f0efec; --tip-ink: #0b0b0b;
+  }
 }
 html, body { margin: 0; }
 body { background: var(--page); }
@@ -123,6 +127,18 @@ details.tv table { margin-top: 6px; }
 .limits { color: var(--ink-2); }
 .foot { margin-top: 32px; padding-top: 10px; border-top: 1px solid var(--grid);
         font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 16px; }
+.bar { max-width: 920px; margin: 0 auto 10px; display: flex; justify-content: flex-end;
+       align-items: center; gap: 10px; font-size: 13px; color: var(--ink-2); }
+.bar[hidden] { display: none; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.bar button { font: inherit; color: var(--ink); background: var(--surface); border: 0;
+              padding: 5px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.bar button[aria-pressed="true"] { background: var(--ink); color: var(--surface); }
+.bar .print { border: 1px solid var(--border); border-radius: 6px; }
+.bar button:hover { background: var(--chip); }
+.bar button[aria-pressed="true"]:hover { background: var(--ink); }
+.bar button:focus-visible { outline: 2px solid var(--cur); outline-offset: -2px; }
 #tip { position: fixed; pointer-events: none; z-index: 10; display: none; max-width: 320px;
        background: var(--tip-bg); color: var(--tip-ink); font-size: 13px; line-height: 1.45;
        padding: 6px 10px; border-radius: 6px; white-space: pre-line; }
@@ -134,14 +150,48 @@ details.tv table { margin-top: 6px; }
 }
 @page { size: A4; margin: 14mm; }
 @media print {
-  .doc { background: #ffffff; padding: 0; font-size: 13px; }
-  .sheet { border: none; padding: 0; max-width: none; }
+  .doc { background: #ffffff; padding: 0; font-size: 13px;
+         -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .bar { display: none !important; }
+  .sheet { border: none; padding: 0; max-width: none; background: #ffffff; }
+  .tile { padding: 10px 12px; }
+  .tile .val { font-size: 21px; white-space: nowrap; }
+  .tile .sub { font-size: 11px; }
   details.tv, #tip { display: none; }
   h2 { break-after: avoid; }
 }
 """
 
+# Runs in <head>: applies a saved theme before first paint.
+_THEME_BOOT = """
+try { var t = localStorage.getItem('ddoc-theme');
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+} catch (e) {}
+"""
+
 _SCRIPT = """
+(function () {
+  var root = document.documentElement, bar = document.querySelector('.bar');
+  if (bar) {
+    bar.hidden = false;
+    var btns = bar.querySelectorAll('[data-set-theme]');
+    function apply(mode) {
+      if (mode === 'light' || mode === 'dark') root.setAttribute('data-theme', mode);
+      else root.removeAttribute('data-theme');
+      btns.forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.getAttribute('data-set-theme') === mode));
+      });
+      try { if (mode === 'auto') localStorage.removeItem('ddoc-theme');
+            else localStorage.setItem('ddoc-theme', mode); } catch (e) {}
+    }
+    apply(root.getAttribute('data-theme') || 'auto');
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () { apply(b.getAttribute('data-set-theme')); });
+    });
+    var p = bar.querySelector('.print');
+    if (p) p.addEventListener('click', function () { window.print(); });
+  }
+})();
 (function () {
   var tip = document.getElementById('tip');
   if (!tip) return;
@@ -542,6 +592,19 @@ def _checks_table(items: List[Tuple[str, str]], lang: str) -> str:
 # ── Document ──────────────────────────────────────────────────────────
 
 
+def _toolbar(lang: str) -> str:
+    """Theme switch (auto / day / night) and a print button. Hidden until
+    the script runs, so a reader without JavaScript sees no dead controls;
+    never printed."""
+    modes = "".join(
+        f"<button type='button' data-set-theme='{m}' aria-pressed='false'>{_e(t(key, lang))}</button>"
+        for m, key in (("auto", "ui.theme_auto"), ("light", "ui.theme_light"), ("dark", "ui.theme_dark"))
+    )
+    return (f"<nav class='bar' hidden aria-label='{_e(t('ui.theme', lang))}'>"
+            f"<span>{_e(t('ui.theme', lang))}</span><span class='seg' role='group'>{modes}</span>"
+            f"<button type='button' class='print'>{_e(t('ui.print', lang))}</button></nav>")
+
+
 def build_consultation_html(
     payload: Dict[str, Any],
     distributions: Optional[Dict[str, Dict[str, Dict[str, float]]]] = None,
@@ -575,8 +638,9 @@ def build_consultation_html(
     parts = [
         f"<!doctype html><html lang='{_e(lang)}'><head><meta charset='utf-8'>"
         f"<meta name='viewport' content='width=device-width, initial-scale=1'>"
-        f"<title>{_e(t('doc.title', lang))} — {_e(verdict)}</title><style>{_CSS}</style></head>"
-        f"<body><div class='doc'><div class='sheet'>",
+        f"<title>{_e(t('doc.title', lang))} — {_e(verdict)}</title><style>{_CSS}</style>"
+        f"<script>{_THEME_BOOT}</script></head>"
+        f"<body><div class='doc'>{_toolbar(lang)}<div class='sheet'>",
         f"<header class='mast'><div><div class='issuer'>{_e(issuer or t('doc.issuer_default', lang))}</div>"
         f"<h1>{_e(t('doc.title', lang))}</h1></div>"
         f"<div class='docmeta'>{_e(t('doc.number', lang))} <b>{_e(_doc_number(payload, issued))}</b><br>"
