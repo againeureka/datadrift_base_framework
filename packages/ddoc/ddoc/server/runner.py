@@ -144,8 +144,12 @@ def run(
     timeout: Optional[float] = None,
     env_extra: Optional[Dict[str, str]] = None,
     require_json: bool = True,
+    ok_returncodes: tuple = (0,),
 ) -> RunResult:
-    """Synchronous ddoc CLI invocation."""
+    """Synchronous ddoc CLI invocation.
+
+    ``ok_returncodes`` lists exit codes that are answers rather than
+    failures — ``ddoc diff`` exits 0 / 1 / 2 for OK / DRIFT / BLIND."""
     timeout_eff = timeout if timeout is not None else DEFAULT_TIMEOUT_SEC
     if timeout_eff <= 0:
         timeout_eff = None
@@ -173,7 +177,7 @@ def run(
     elapsed = int((time.monotonic() - t0) * 1000)
     stderr_tail = _tail(proc.stderr or "")
 
-    if proc.returncode != 0:
+    if proc.returncode not in ok_returncodes:
         # ddoc CLI emits structured error envelopes on stdout for known
         # failures (--json mode). Try to extract the envelope so callers
         # can route by error_code.

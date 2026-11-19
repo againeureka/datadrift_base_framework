@@ -57,6 +57,21 @@ class AnalyzeDriftRequest(BaseModel):
 # ── /report ──────────────────────────────────────────────────────────
 
 
+class DiffRequest(BaseModel):
+    """One-line verdict between two datasets (``ddoc diff``), optionally
+    with the HTML diagnostic report inline."""
+    ref: str = Field(..., description="Baseline dataset path (directory or file) on the server.")
+    cur: str = Field(..., description="Current dataset path (directory or file) on the server.")
+    threshold: float = 0.15
+    attr_threshold: float = 0.25
+    detector: str = "default"
+    lang: Optional[str] = Field(None, description="en | ko (default: server $DDOC_LANG, else en).")
+    issuer: Optional[str] = None
+    sample_rows: int = Field(0, ge=0, le=20, description="First N raw rows per side in the report (0 = off).")
+    include_report: bool = Field(True, description="Return the HTML report as `report_html`.")
+    timeout_sec: float = 600.0
+
+
 class ReportRenderRequest(BaseModel):
     """Render a drift / EDA envelope to a report file.
 

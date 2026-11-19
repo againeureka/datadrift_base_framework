@@ -101,7 +101,7 @@ def create_app(*, bind_info: str = "127.0.0.1:8765") -> FastAPI:
     # Register routers (lazy-imported so optional FastAPI/uvicorn deps
     # don't cripple core ddoc imports).
     from .routers import (
-        analyze, commands as commands_router, examples,
+        analyze, commands as commands_router, diff as diff_router, examples,
         export as export_router, fetch as fetch_router,
         health, plugins, recipe as recipe_router,
         recipes_lib, report as report_router,
@@ -126,6 +126,7 @@ def create_app(*, bind_info: str = "127.0.0.1:8765") -> FastAPI:
     app.include_router(commands_router.router)
     app.include_router(plugins.router)
     app.include_router(examples.router)
+    app.include_router(diff_router.router)
     app.include_router(analyze.router)
     app.include_router(report_router.router)
     app.include_router(export_router.router)

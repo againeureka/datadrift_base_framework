@@ -7,7 +7,8 @@
 ### 🩺 판정 도구로 집중 — 하위 호환이 깨지는 릴리스
 
 **주요 변경사항:**
-- ✨ `ddoc diff` 한 줄 판정 (OK / DRIFT / BLIND), `--report` HTML 소견서, Drift Zoo, GitHub Action
+- ✨ `ddoc diff` 한 줄 판정 (OK / DRIFT / BLIND), `--report` HTML 진단서, Drift Zoo, GitHub Action
+- ✨ `report render` 가 drift 입력을 진단서(HTML·PDF·Markdown)로 렌더, `ddoc serve` 의 `POST /diff` 와 GUI 진단 탭
 - ✨ `ddoc serve` (REST + GUI), `recipe`, `report`, `export`, `fetch`, `examples` 명령
 - ✨ 한글 리포트 (`--lang ko` / `DDOC_LANG=ko`)
 - ✨ 검사 보고서 형식의 진단서: 발행처·문서 번호, 요약 대시보드, 속성별 그래프, 데이터 특징, 패턴별 점검 항목 (`--json` 의 `diagnosis`), 화면 테마(자동·주간·야간)와 인쇄 버튼, 검사 대상 섹션, 유형 판독(15가지 드리프트 유형 카드), 데이터 도면, 계통별 검사표, `--sample-rows`

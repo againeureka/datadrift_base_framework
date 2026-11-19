@@ -25,7 +25,7 @@ def test_index_html_served(client: TestClient):
     body = r.text
     assert "<title>ddoc" in body and "data doctor" in body
     # Tabs present
-    for tab in ("Analyze drift", "Analyze EDA", "Examples", "Report", "Export", "Fetch"):
+    for tab in ("Diagnose (diff)", "Analyze drift", "Analyze EDA", "Examples", "Report", "Export", "Fetch"):
         assert tab in body, f"missing tab label: {tab}"
 
 
@@ -56,3 +56,14 @@ def test_healthz_still_json(client: TestClient):
 def test_static_404_for_missing_asset(client: TestClient):
     r = client.get("/static/does-not-exist.txt")
     assert r.status_code == 404
+
+
+def test_diagnose_tab_is_first_and_embeds_the_report_sandboxed(client: TestClient):
+    """The front door (`ddoc diff`) opens first; its report is shown in a
+    sandboxed frame without same-origin access to the GUI."""
+    body = client.get("/").text
+    assert body.index('data-tab="diff"') < body.index('data-tab="drift"')
+    js = client.get("/static/app.js").text
+    assert "activeTab: 'diff'" in js and "path: '/diff'" in js
+    # no allow-same-origin: the report cannot reach into the GUI page
+    assert "sandbox: 'allow-scripts allow-modals allow-popups' }" in js

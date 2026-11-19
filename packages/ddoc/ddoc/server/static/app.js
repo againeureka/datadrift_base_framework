@@ -13,6 +13,12 @@
   // names) stay verbatim because they map 1-to-1 to ddoc CLI flags.
   const I18N = {
     en: {
+      'tab.diff':      'Diagnose (diff)',
+      'diff.open':     'Open in new tab',
+      'diff.save':     'Save HTML',
+      'diff.report':   'Diagnostic report',
+      'sev.none': 'no drift', 'sev.low': 'low', 'sev.medium': 'medium', 'sev.high': 'high', 'sev.unknown': 'cannot judge',
+      'diff.score':    'score',
       'tab.drift':     'Analyze drift',
       'tab.eda':       'Analyze EDA',
       'tab.examples':  'Examples',
@@ -34,6 +40,12 @@
       'cli.hint':      'The form on the left maps 1-to-1 to ddoc CLI options. Submit calls the equivalent REST endpoint; this panel shows what you would run in a terminal for the same effect.',
     },
     ko: {
+      'tab.diff':      '진단 (diff)',
+      'diff.open':     '새 탭에서 열기',
+      'diff.save':     'HTML 저장',
+      'diff.report':   '진단서',
+      'sev.none': '변화 없음', 'sev.low': '낮음', 'sev.medium': '보통', 'sev.high': '높음', 'sev.unknown': '판정 불가',
+      'diff.score':    '점수',
       'tab.drift':     '드리프트 분석',
       'tab.eda':       'EDA 분석',
       'tab.examples':  '예제 데이터',
@@ -74,7 +86,7 @@
     detectors: null,        // /plugins/detectors response
     examples: null,         // /examples/scenarios response
     library: null,          // /recipes response (lazy-loaded on Recipe tab)
-    activeTab: 'drift',
+    activeTab: 'diff',
     forms: {},              // tab → {state object}
     apiKey: localStorage.getItem('ddoc_serve_api_key') || '',
     writeToken: localStorage.getItem('ddoc_serve_write_token') || '',
@@ -151,7 +163,7 @@
   function applyI18n() {
     document.documentElement.lang = LANG;
     // Tab labels.
-    const tabKeys = { drift: 'tab.drift', eda: 'tab.eda', examples: 'tab.examples',
+    const tabKeys = { diff: 'tab.diff', drift: 'tab.drift', eda: 'tab.eda', examples: 'tab.examples',
                       report: 'tab.report', export: 'tab.export', fetch: 'tab.fetch' };
     $$('#tabs .tab').forEach(b => {
       const k = tabKeys[b.dataset.tab];
@@ -288,6 +300,21 @@
   ].join('\n');
 
   const SCHEMAS = {
+    diff: {
+      title: 'Diagnose · ddoc diff',
+      help: 'One-line verdict (OK / DRIFT / BLIND) between two datasets on the server, with the diagnostic report.',
+      fields: [
+        { name: 'ref', label: 'ref', type: 'text', required: true, help: 'Baseline dataset (directory or file)' },
+        { name: 'cur', label: 'cur', type: 'text', required: true, help: 'Current dataset (directory or file)' },
+        { name: 'threshold', label: 'threshold', type: 'text', default: '0.15', help: 'Overall-score threshold for DRIFT' },
+        { name: 'attr_threshold', label: 'attr-threshold', type: 'text', default: '0.25', help: 'Single-attribute threshold' },
+        { name: 'detector', label: 'detector', type: 'select', opts: () => detectorOptions(), default: 'default' },
+        { name: 'issuer', label: 'issuer', type: 'text', help: "Organization printed on the report (default: 'ddoc')" },
+        { name: 'sample_rows', label: 'sample-rows', type: 'text', default: '0', help: 'First N raw rows per side in the report (0 = off; raw data!)' },
+        { name: 'include_report', label: 'report', type: 'check', default: true, help: 'Return and show the HTML diagnostic report' },
+        { name: 'timeout_sec', label: 'timeout-sec', type: 'text', default: '600' },
+      ],
+    },
     drift: {
       title: 'Analyze drift',
       help: 'Compare two datasets — pass concrete directories.',
@@ -681,6 +708,14 @@
       }
     }
 
+    if (tab === 'diff') {
+      for (const k of ['threshold', 'attr_threshold']) {
+        const v = Number(state[k]);
+        if (state[k] !== undefined && state[k] !== '' && (!Number.isFinite(v) || v < 0)) errors.push(`${k} must be a non-negative number`);
+      }
+      const n = Number(state.sample_rows || 0);
+      if (!Number.isInteger(n) || n < 0 || n > 20) errors.push('sample-rows must be an integer 0–20');
+    }
     if (tab === 'drift') {
       const hasPaths = state.data_path_ref && state.data_path_cur;
       const hasSnaps = state.baseline && state.current;
@@ -738,7 +773,16 @@
     };
     const pushFlag = (flag, on) => { if (on) args.push(flag); };
 
-    if (tab === 'drift') {
+    if (tab === 'diff') {
+      args.push('diff', state.ref || '<ref>', state.cur || '<cur>');
+      if (state.threshold && state.threshold !== '0.15') pushOpt('--threshold', state.threshold);
+      if (state.attr_threshold && state.attr_threshold !== '0.25') pushOpt('--attr-threshold', state.attr_threshold);
+      if (state.detector && state.detector !== 'default') pushOpt('--detector', state.detector);
+      pushOpt('--lang', LANG);
+      pushOpt('--issuer', state.issuer);
+      if (Number(state.sample_rows) > 0) pushOpt('--sample-rows', state.sample_rows);
+      if (state.include_report) pushOpt('--report', 'note.html');
+    } else if (tab === 'drift') {
       args.push('analyze', 'drift');
       pushOpt('--data-path-ref', state.data_path_ref);
       pushOpt('--data-path-cur', state.data_path_cur);
@@ -819,6 +863,15 @@
       delete body.use_streaming;
       body.timeout_sec = Number(body.timeout_sec) || 600;
       return { path: useStream ? '/analyze/drift/stream' : '/analyze/drift', body, sse: useStream };
+    }
+    if (tab === 'diff') {
+      return { path: '/diff', body: {
+        ref: body.ref, cur: body.cur,
+        threshold: Number(body.threshold) || 0.15, attr_threshold: Number(body.attr_threshold) || 0.25,
+        detector: body.detector || 'default', lang: LANG, issuer: body.issuer || null,
+        sample_rows: Number(body.sample_rows) || 0, include_report: !!body.include_report,
+        timeout_sec: Number(body.timeout_sec) || 600,
+      }, sse: false };
     }
     if (tab === 'eda') {
       body.timeout_sec = Number(body.timeout_sec) || 600;
@@ -914,7 +967,10 @@
     const statusEl = $('#result-status');
     statusEl.textContent = `HTTP ${r.status} ${ok ? 'OK' : (r.json?.error_code || 'error')}`;
     statusEl.className = ok ? 'ok' : 'err';
-    $('#result-body').textContent = JSON.stringify(r.json ?? {}, null, 2);
+    const shown = (r.json && typeof r.json.report_html === 'string')
+      ? { ...r.json, report_html: `(${r.json.report_html.length.toLocaleString()} chars — shown below)` }
+      : (r.json ?? {});
+    $('#result-body').textContent = JSON.stringify(shown, null, 2);
     renderViz(r.json, ok);
 
     // Drift / EDA envelope: surface convenience actions.
@@ -941,6 +997,13 @@
     const viz = $('#result-viz');
     viz.innerHTML = '';
     if (!envelope || typeof envelope !== 'object') { viz.hidden = true; return; }
+
+    // ddoc diff payload: verdict card + the diagnostic report itself.
+    if (typeof envelope.verdict === 'string' && envelope.diagnosis) {
+      viz.appendChild(verdictCard(envelope));
+      viz.hidden = false;
+      return;
+    }
 
     // Recipe diff envelope: render unified-diff with line colors
     // (purely visual; raw text remains in #result-body).
@@ -989,6 +1052,45 @@
     }
 
     viz.hidden = true;
+  }
+
+  // Verdict card for `ddoc diff`: verdict, severity, score and hints
+  // (the first of which is the pattern reading), then the diagnostic
+  // report in a sandboxed frame — the same document the CLI writes, so
+  // the GUI never re-implements it.
+  function verdictCard(env) {
+    const card = el('div', { class: 'viz-card verdict-card' });
+    const v = env.verdict;
+    const cls = v === 'OK' ? 'normal' : v === 'DRIFT' ? (env.severity === 'high' ? 'critical' : 'warning') : 'blind';
+    const icon = v === 'OK' ? '✓' : v === 'DRIFT' ? '!' : '?';
+    const head = el('div', { class: 'verdict-head' });
+    head.appendChild(el('span', { class: `verdict-badge ${cls}` }, `${icon} ${v}`));
+    const meta = [t('sev.' + env.severity)];
+    if (typeof env.overall_score === 'number') meta.push(`${t('diff.score')} ${env.overall_score.toFixed(3)}`);
+    head.appendChild(el('span', { class: 'verdict-meta' }, meta.join(' · ')));
+    card.appendChild(head);
+    if (Array.isArray(env.hints) && env.hints.length) {
+      const ul = el('ul', { class: 'verdict-hints' });
+      env.hints.slice(0, 4).forEach(h => ul.appendChild(el('li', {}, h)));
+      card.appendChild(ul);
+    }
+    if (typeof env.report_html === 'string') {
+      const bar = el('div', { class: 'verdict-actions' });
+      const blobUrl = () => URL.createObjectURL(new Blob([env.report_html], { type: 'text/html' }));
+      bar.appendChild(el('button', { type: 'button', onclick: () => window.open(blobUrl(), '_blank') }, t('diff.open')));
+      bar.appendChild(el('button', { type: 'button', onclick: () => {
+        const a = document.createElement('a');
+        a.href = blobUrl(); a.download = `ddoc-diff-${v.toLowerCase()}.html`; a.click();
+      } }, t('diff.save')));
+      card.appendChild(bar);
+      // allow-scripts: tooltips, theme switch; allow-modals: its print
+      // button. No allow-same-origin: the report cannot touch this page.
+      const frame = el('iframe', { class: 'report-frame', title: t('diff.report'),
+                                   sandbox: 'allow-scripts allow-modals allow-popups' });
+      frame.srcdoc = env.report_html;
+      card.appendChild(frame);
+    }
+    return card;
   }
 
   function classifyScore(score) {

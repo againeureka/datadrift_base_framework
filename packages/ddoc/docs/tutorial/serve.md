@@ -88,6 +88,22 @@ curl -N -X POST http://localhost:8765/analyze/drift/stream \
 # data: {"modality":"timeseries","overall_score":0.282,...}
 ```
 
+### 진단 (`ddoc diff`)
+
+판정은 오류가 아니라 답이므로 OK / DRIFT / BLIND 모두 HTTP 200 이고, `exit_code`
+(0 / 1 / 2)가 함께 옵니다. `include_report` (기본 true) 이면 진단서 HTML 이
+`report_html` 로 함께 와서, 공유 파일시스템 없이 바로 보여줄 수 있습니다.
+
+```bash
+curl -s -X POST http://localhost:8765/diff \
+  -H 'Content-Type: application/json' \
+  -d '{"ref":"/data/jan.csv","cur":"/data/aug.csv","lang":"ko","issuer":"기관명"}' \
+  | jq '{verdict, exit_code, hints}'
+```
+
+`threshold`, `attr_threshold`, `detector`, `sample_rows`(0–20, 원본 행 미리보기),
+`timeout_sec` 도 받습니다.
+
 ### Report 렌더 + 외부 export
 
 ```bash
@@ -154,14 +170,15 @@ ddoc serve         # http://127.0.0.1:8765
 # 그대로 브라우저로 열기
 ```
 
-### 6 tabs (CLI 1-to-1)
+### 탭 (CLI 1-to-1)
 
 | Tab | 호출 endpoint | 비고 |
 |---|---|---|
+| 진단 (diff) | `POST /diff` | 첫 탭. 판정 카드(판정·심각도·점수·판독·점검 안내)와 진단서를 함께 표시. 진단서는 sandbox iframe 안에서 툴바·툴팁·인쇄가 그대로 동작하고, "새 탭에서 열기" / "HTML 저장" 제공 |
 | Analyze drift | `POST /analyze/drift` (또는 `…/stream`) | "Use streaming" 체크 시 SSE 진행 chip |
 | Analyze EDA | `POST /analyze/eda` | `data_path` 기반 |
 | Examples | `POST /examples/generate` | 4 modality × 2 scenario, 즉시 toy 생성 |
-| Report | `POST /report/render` | HTML / PDF / Markdown |
+| Report | `POST /report/render` | HTML / PDF / Markdown — drift 입력은 진단서로 |
 | Export | `POST /export/drift-report` | file / http / 플러그인 |
 | Fetch | `POST /fetch` | file:// 기본, plugin scheme 지원 |
 
