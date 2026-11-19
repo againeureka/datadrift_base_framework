@@ -179,11 +179,11 @@ def test_diff_report_csv_evidence(tmp_path):
     payload = json.loads(result.stdout.strip())
     assert payload["report_path"] == str(note)
     body = note.read_text(encoding="utf-8")
-    assert "Drift Consultation Note" in body
+    assert "Data Drift Diagnostic Report" in body
     assert "DRIFT" in body
     assert "price" in body and "color" in body          # findings bars
-    assert "Evidence" in body and "green" in body       # distribution shift
-    assert "What to check next" in body                  # checks for the drifted columns
+    assert "Findings by attribute" in body and "green" in body  # per-attribute panels
+    assert "Items to check" in body                       # checks for the drifted columns
 
 
 def test_diff_report_categorical_evidence(tmp_path):
@@ -198,7 +198,7 @@ def test_diff_report_categorical_evidence(tmp_path):
     body = note.read_text(encoding="utf-8")
     # Evidence pulled straight from the two distributions.json files.
     assert "color_distribution" in body
-    assert "Evidence" in body
+    assert "Findings by attribute" in body
 
 
 def test_diff_report_blind(tmp_path):

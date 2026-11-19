@@ -18,8 +18,9 @@
 | `--detector` | `default` | 플러그인에 넘길 검출기 (`ddoc plugin detectors`) |
 | `--json` | | 판정 JSON 한 객체를 stdout 에 |
 | `--verbose` | | 플러그인 진단 메시지 표시 |
-| `--report <path>` | | 판정 근거, 주요 변화, 근거 분포, 점검 항목을 담은 HTML 소견서 저장 |
-| `--lang` | `$DDOC_LANG`, 없으면 `en` | 소견서·안내 문구·터미널 출력 언어 (`en` · `ko`) |
+| `--report <path>` | | 검사 보고서 형식의 HTML 진단서 저장 (요약, 판정 근거, 속성별 결과·상세, 데이터 특징, 점검 항목) |
+| `--lang` | `$DDOC_LANG`, 없으면 `en` | 진단서·안내 문구·터미널 출력 언어 (`en` · `ko`) |
+| `--issuer` | `$DDOC_ISSUER`, 없으면 `ddoc` | 진단서 머리글에 들어갈 발행처 |
 
 ## `ddoc analyze drift`
 

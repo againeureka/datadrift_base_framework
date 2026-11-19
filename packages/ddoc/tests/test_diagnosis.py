@@ -162,9 +162,11 @@ def test_diff_json_carries_diagnosis_and_specific_hints(tmp_path):
 def test_note_sections_in_both_languages(tmp_path):
     ref = _csv(tmp_path / "r.csv", "price", [str(100 + (i % 10)) for i in range(100)])
     cur = _csv(tmp_path / "c.csv", "price", [str(180 + (i % 10)) for i in range(100)])
-    for lang, words in (("en", ["Why this verdict", "What changed", "What to check next",
-                                "What this note cannot tell you"]),
-                        ("ko", ["판정 근거", "주요 변화", "점검 항목", "이 소견서로 알 수 없는 것"])):
+    for lang, words in (("en", ["Basis for the verdict", "Results by attribute", "Findings by attribute",
+                                "Characteristics of the data", "Items to check",
+                                "Limitations and remarks"]),
+                        ("ko", ["판정 근거", "속성별 결과", "속성별 상세", "원본 데이터 특징",
+                                "점검 항목", "한계 및 비고"])):
         note = tmp_path / f"note_{lang}.html"
         res = runner.invoke(app, ["diff", ref, cur, "--report", str(note), "--lang", lang])
         assert res.exit_code == 1
@@ -180,4 +182,31 @@ def test_note_renders_without_a_precomputed_diagnosis():
         "ref": "r", "cur": "c", "modality": "categorical", "engine": "plugin", "detector": "x",
         "raw": {"attribute_drifts": {"a": 0.3}}, "hints": [],
     }, {"a": {"ref": {"x": 80, "y": 20}, "cur": {"x": 20, "y": 80}}})
-    assert "What to check next" in html_out
+    assert "Items to check" in html_out
+
+
+def test_report_header_issuer_and_document_number(tmp_path):
+    ref = _csv(tmp_path / "r.csv", "c", ["a"] * 40 + ["b"] * 10)
+    cur = _csv(tmp_path / "c.csv", "c", ["a"] * 10 + ["b"] * 40)
+    note = tmp_path / "n.html"
+    res = runner.invoke(app, ["diff", ref, cur, "--report", str(note), "--issuer", "Example Lab"])
+    assert res.exit_code == 1
+    body = note.read_text(encoding="utf-8")
+    assert "Example Lab" in body
+    import re as _re
+    assert _re.search(r"DD-\d{8}-[0-9A-F]{6}", body)
+    # charts come with a table view and hover tips; no unescaped data in tips
+    assert "Show as table" in body and "data-tip=" in body
+
+
+def test_report_escapes_attribute_names(tmp_path):
+    html_out = build_consultation_html({
+        "verdict": "DRIFT", "severity": "high", "overall_score": 0.3,
+        "threshold": 0.15, "attr_threshold": 0.25, "top_attributes": [["<img src=x>", 0.3]],
+        "ref": "r", "cur": "c", "modality": "categorical", "engine": "plugin", "detector": "x",
+        "raw": {"attribute_drifts": {"<img src=x>": 0.3}}, "hints": [],
+    }, {"<img src=x>": {"ref": {"<script>alert(1)</script>": 80, "y": 20},
+                        "cur": {"<script>alert(1)</script>": 20, "y": 80}}})
+    assert "<img src=x>" not in html_out
+    assert "<script>alert(1)</script>" not in html_out
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html_out

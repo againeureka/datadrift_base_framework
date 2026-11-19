@@ -26,6 +26,7 @@ fusion, snapshots); ``diff`` is the opinionated facade over it.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -318,7 +319,7 @@ def _print_human(payload: Dict[str, Any], lang: str) -> None:
 
 def _write_report(payload: Dict[str, Any], report: Optional[Path],
                   distributions: Optional[Dict[str, Any]] = None, *,
-                  lang: str) -> None:
+                  lang: str, issuer: Optional[str] = None) -> None:
     """Render the consultation note when ``--report`` was given.
     Best-effort: a report failure must not change the verdict/exit."""
     if report is None:
@@ -327,7 +328,8 @@ def _write_report(payload: Dict[str, Any], report: Optional[Path],
         from .diff_report import build_consultation_html
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(
-            build_consultation_html(payload, distributions, lang=lang), encoding="utf-8",
+            build_consultation_html(payload, distributions, lang=lang, issuer=issuer),
+            encoding="utf-8",
         )
         payload["report_path"] = str(report)
         payload.setdefault("hints", []).insert(0, t("hint.report_written", lang, path=report))
@@ -337,8 +339,9 @@ def _write_report(payload: Dict[str, Any], report: Optional[Path],
 
 def _finish(payload: Dict[str, Any], *, json_out: bool, lang: str,
             report: Optional[Path] = None,
-            distributions: Optional[Dict[str, Any]] = None) -> None:
-    _write_report(payload, report, distributions, lang=lang)
+            distributions: Optional[Dict[str, Any]] = None,
+            issuer: Optional[str] = None) -> None:
+    _write_report(payload, report, distributions, lang=lang, issuer=issuer)
     if json_out:
         _emit_json(payload)
     else:
@@ -349,7 +352,7 @@ def _finish(payload: Dict[str, Any], *, json_out: bool, lang: str,
 
 def _blind(reason: str, *, ref: str, cur: str, json_out: bool, lang: str,
            modality: Optional[str] = None, hints: Optional[List[str]] = None,
-           report: Optional[Path] = None) -> None:
+           report: Optional[Path] = None, issuer: Optional[str] = None) -> None:
     _finish({
         "verdict": "BLIND", "severity": "unknown", "overall_score": None,
         "modality": modality, "engine": None, "detector": None,
@@ -357,7 +360,7 @@ def _blind(reason: str, *, ref: str, cur: str, json_out: bool, lang: str,
         "top_attributes": [], "threshold": None,
         "diagnosis": dx.build(verdict="BLIND", overall=None, top=[], threshold=0.0,
                               attr_threshold=0.0, reason=reason),
-    }, json_out=json_out, lang=lang, report=report)
+    }, json_out=json_out, lang=lang, report=report, issuer=issuer)
 
 
 def _collect_evidence(kind: str, ref: Path, cur: Path,
@@ -422,6 +425,10 @@ def diff_command(
         help="Language for the report, hints and console text: en | ko "
              "(default: $DDOC_LANG, else en). JSON keys and verdicts stay English.",
     ),
+    issuer: Optional[str] = typer.Option(
+        None, "--issuer",
+        help="Organization printed as the report's issuer (default: $DDOC_ISSUER, else 'ddoc').",
+    ),
 ):
     """One-line drift verdict between REF and CUR.
 
@@ -433,11 +440,13 @@ def diff_command(
         ddoc diff camA_ref/ camA_now/ --attr-threshold 0.3
     """
     lang = resolve_lang(lang)
+    issuer = issuer or os.environ.get("DDOC_ISSUER") or None
     ref_s, cur_s = str(ref), str(cur)
     for label, p in (("ref", ref), ("cur", cur)):
         if not p.exists():
             _blind(t("reason.path_missing", lang, label=label, path=p),
-                   ref=ref_s, cur=cur_s, json_out=json_out, lang=lang, report=report)
+                   ref=ref_s, cur=cur_s, json_out=json_out, lang=lang, report=report,
+                   issuer=issuer)
 
     ref_kind, ref_detail = sniff_modality(ref)
     cur_kind, cur_detail = sniff_modality(cur)
@@ -481,7 +490,8 @@ def diff_command(
             engine = "builtin"
         except Exception as e:  # noqa: BLE001
             _blind(t("reason.csv_failed", lang, error=e), ref=ref_s, cur=cur_s,
-                   json_out=json_out, lang=lang, modality="tabular", report=report)
+                   json_out=json_out, lang=lang, modality="tabular", report=report,
+                   issuer=issuer)
 
     # 3) Still nothing → honest BLIND with what to do about it.
     if result is None:
@@ -495,7 +505,7 @@ def diff_command(
         _blind(
             t("reason.no_engine", lang, kind=kind),
             ref=ref_s, cur=cur_s, json_out=json_out, lang=lang, modality=kind,
-            hints=hints, report=report,
+            hints=hints, report=report, issuer=issuer,
         )
 
     verdict, severity, top = compute_verdict(
@@ -528,4 +538,4 @@ def diff_command(
         "hints": hints,
         "diagnosis": diagnosis,
         "raw": result,
-    }, json_out=json_out, lang=lang, report=report, distributions=evidence)
+    }, json_out=json_out, lang=lang, report=report, distributions=evidence, issuer=issuer)

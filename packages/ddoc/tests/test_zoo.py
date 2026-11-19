@@ -45,4 +45,4 @@ def test_zoo_regime_shift_report_evidence(tmp_path):
     runner.invoke(app, ["diff", str(ref), str(cur), "--json",
                         "--report", str(note)])
     body = note.read_text(encoding="utf-8")
-    assert "price" in body and "channel" in body and "Evidence" in body
+    assert "price" in body and "channel" in body and "Findings by attribute" in body

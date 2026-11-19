@@ -37,7 +37,7 @@ def test_resolve_lang(monkeypatch):
 
 
 def test_unknown_key_falls_back_to_english_catalog():
-    assert t("note.title", "xx") == MESSAGES["en"]["note.title"]
+    assert t("doc.title", "xx") == MESSAGES["en"]["doc.title"]
 
 
 def _write_csv_pair(tmp_path):
@@ -66,7 +66,7 @@ def test_diff_korean_report_and_console(tmp_path, monkeypatch):
     assert "심각도" in res.output
     body = note.read_text(encoding="utf-8")
     assert "<html lang='ko'>" in body
-    assert MESSAGES["ko"]["note.title"] in body
+    assert MESSAGES["ko"]["doc.title"] in body
 
 
 def test_diff_json_keeps_machine_values_english(tmp_path, monkeypatch):
