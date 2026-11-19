@@ -33,22 +33,13 @@ jobs:
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q libpango-1.0-0 libpangocairo-1.0-0 libcairo2 libgdk-pixbuf-2.0-0
-      - name: Install ddoc + light plugins
-        run: |
-          python -m pip install -q --upgrade pip
-          pip install -q -e packages/ddoc
-          pip install -q -e packages/plugins/ddoc-plugin-categorical
-          pip install -q -e packages/plugins/ddoc-plugin-tabular
-          pip install -q pytest httpx2  # starlette TestClient dependency
-      - name: Core test set (diff / zoo / categorical / recipes)
-        working-directory: packages/ddoc
-        run: |
-          pytest -q \
-            tests/test_diff_cli.py \
-            tests/test_zoo.py \
-            tests/test_plugin_categorical.py \
-            tests/test_examples_generate.py \
-            tests/test_recipe_catalog.py
+      # The same entry point contributors use, so run.sh cannot rot unnoticed.
+      - name: Set up ddoc + light plugins (./run.sh setup)
+        run: ./run.sh setup
+      - name: Core test set (./run.sh test)
+        run: ./run.sh test
+      - name: Demo (./run.sh demo)
+        run: ./run.sh demo
 
   # Dogfood: ddoc diff as a data gate in our own CI.
   # exit code carries the verdict — 0 OK / 1 DRIFT / 2 BLIND.

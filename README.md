@@ -17,6 +17,7 @@ packages/
 ├── ddoc/      # Core: the `ddoc` CLI, REST API and browser GUI (pluggy hookspecs + YAML recipes)
 └── plugins/   # Plugins, each an independent pip package (vision, text, timeseries, ...)
 examples/      # Runnable examples: Docker deployment, CI gate, application integration
+run.sh         # One entry point: setup, demo, serve, test, gate, docker
 ```
 
 Three ways to use it:
@@ -43,6 +44,16 @@ Three ways to use it:
   (file or HTTP) — no shared Python dependency in either direction.
 
 ## Quick start
+
+```bash
+./run.sh setup        # create ./.venv, install ddoc + categorical/tabular plugins
+./run.sh demo         # toy data → verdict → HTML report in outputs/demo/
+./run.sh serve        # REST API + GUI on http://127.0.0.1:8765
+./run.sh help         # test, gate, docker, and running any ddoc command
+```
+
+`./run.sh setup all` installs every plugin (the vision plugin pulls in
+torch). Without bash (e.g. Windows without WSL), the same steps by hand:
 
 ```bash
 pip install -e packages/ddoc                              # core CLI
