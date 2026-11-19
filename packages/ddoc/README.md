@@ -89,9 +89,9 @@ dataset layout (modality 별 `ddoc.yaml` + 데이터 파일) 만 따르면 그�
 
 | 명령 | 하는 일 |
 |---|---|
-| `ddoc diff <ref> <cur>` | 한 줄 판정 (exit 0/1/2), `--report` 로 HTML 소견서 |
+| `ddoc diff <ref> <cur>` | 한 줄 판정 (exit 0/1/2), `--report` 로 HTML 진단서 |
 | `ddoc analyze drift` / `eda` | 플러그인 기반 저수준 분석, `--json` envelope |
-| `ddoc report render` | drift / EDA envelope → HTML · PDF · Markdown |
+| `ddoc report render` | drift 결과 → 진단서 (HTML · PDF · Markdown), EDA envelope → 리포트 |
 | `ddoc export drift-report` | drift 결과를 file / HTTP 로 전송 |
 | `ddoc fetch <uri>` | file / s3 / gs / http 데이터를 로컬로 가져오기 |
 | `ddoc recipe run <file>` | 여러 단계를 YAML 로 묶어 실행 |

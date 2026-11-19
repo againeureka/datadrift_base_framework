@@ -89,5 +89,8 @@ def test_report_render_korean_html_and_markdown(tmp_path):
     for out in (html_out, md_out):
         res = runner.invoke(app, ["report", "render", "-i", str(envelope), "-o", str(out), "--lang", "ko"])
         assert res.exit_code == 0, res.output
-    assert MESSAGES["ko"]["report.drift_title"] in html_out.read_text(encoding="utf-8")
-    assert MESSAGES["ko"]["report.attribute_drifts"] in md_out.read_text(encoding="utf-8")
+    # a drift envelope renders as the same diagnostic report as `ddoc diff --report`
+    html_body, md_body = html_out.read_text(encoding="utf-8"), md_out.read_text(encoding="utf-8")
+    assert MESSAGES["ko"]["doc.title"] in html_body and MESSAGES["ko"]["sec.inspection"] in html_body
+    assert md_body.startswith("# " + MESSAGES["ko"]["doc.title"])
+    assert MESSAGES["ko"]["sec.inspection"] in md_body and "| price | 0.500 |" in md_body

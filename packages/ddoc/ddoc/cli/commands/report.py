@@ -1,20 +1,21 @@
 """``ddoc report render`` — render a drift / EDA result to a report file.
 
-First concrete user of the new ``report_render``
-hookspec. The CLI:
+The CLI:
 
-1. Reads the ``--input`` JSON (drift or EDA envelope).
-2. Tries the hookspec — if any plugin returns a non-None result, use that.
-3. Falls back to a built-in Jinja+weasyprint implementation for HTML
-   (and HTML→PDF) using the templates in ``ddoc/templates/``.
-
-Markdown output is also handled by the built-in fallback (no Jinja
-needed). The hookspec keeps the door open for richer plugins
-(e.g., ``ddoc-plugin-report-fancy`` with charts).
+1. Reads the ``--input`` JSON: a ``ddoc diff --json`` payload, a drift
+   envelope (``ddoc analyze drift --json``) or an EDA envelope.
+2. Tries the ``report_render`` hookspec — if any plugin returns a
+   non-None result, use that.
+3. Otherwise renders built-in. Drift input becomes the same diagnostic
+   report as ``ddoc diff --report`` (a drift envelope is judged with
+   the same thresholds first); Markdown carries the same diagnosis for
+   pull requests and tickets; PDF prints the HTML. EDA and multi-modal
+   envelopes use the Jinja templates in ``ddoc/templates/``.
 """
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -23,6 +24,7 @@ import typer
 from rich import print as rprint
 
 from .utils import get_pmgr
+from ... import diagnosis as dx
 from ...i18n import resolve_lang, t
 
 
@@ -111,6 +113,47 @@ def _classify_envelope(payload: Dict[str, Any]) -> tuple[Optional[Dict], Optiona
     return payload, None
 
 
+def _diagnostic_payload(payload: Dict[str, Any], *, threshold: float,
+                        attr_threshold: float) -> Optional[Dict[str, Any]]:
+    """A ``ddoc diff``-shaped payload for the diagnostic report, or None
+    when the input is not a single drift result.
+
+    A ``ddoc diff --json`` payload is used as is. A drift envelope gets a
+    verdict and diagnosis computed exactly as ``ddoc diff`` would."""
+    from .diff import compute_verdict
+
+    if "verdict" in payload and "diagnosis" in payload:
+        return payload
+    if "modalities" in payload:
+        return None
+    if "overall_score" not in payload and not payload.get("attribute_drifts"):
+        return None
+    result = dict(payload)
+    result["attribute_drifts"] = {name: score for name, score, _ in
+                                  _normalize_attribute_drifts(payload.get("attribute_drifts"))
+                                  if score is not None}
+    verdict, severity, top = compute_verdict(result, threshold=threshold, attr_threshold=attr_threshold)
+    evidence = result["distributions"] if isinstance(result.get("distributions"), dict) else {}
+    overall = float(result.get("overall_score") or 0.0)
+    return {
+        "verdict": verdict, "severity": severity, "overall_score": overall,
+        "threshold": threshold, "attr_threshold": attr_threshold, "top_attributes": top,
+        "modality": result.get("modality"), "detector": result.get("detector"),
+        "engine": result.get("engine") or "plugin",
+        "ref": payload.get("ref") or payload.get("data_path_ref") or payload.get("snapshot_ref") or "—",
+        "cur": payload.get("cur") or payload.get("data_path_cur") or payload.get("snapshot_cur") or "—",
+        "hints": [],
+        "diagnosis": dx.build(verdict=verdict, overall=overall, top=top, threshold=threshold,
+                              attr_threshold=attr_threshold, result=result, evidence=evidence),
+        "raw": result,
+    }
+
+
+def _written(out_path: Path, fmt: str) -> Dict[str, Any]:
+    return {"status": "success", "format": fmt, "output_path": str(out_path),
+            "size_bytes": out_path.stat().st_size, "renderer": "builtin"}
+
+
 def _builtin_render(
     drift_result: Optional[Dict[str, Any]],
     eda_result: Optional[Dict[str, Any]],
@@ -123,6 +166,31 @@ def _builtin_render(
     weasyprint, Markdown via inline string formatting."""
     out_path = Path(output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    lang = cfg.get("lang") or resolve_lang()
+
+    diag = None
+    if drift_result is not None:
+        diag = _diagnostic_payload(drift_result, threshold=cfg.get("threshold") or 0.15,
+                                   attr_threshold=cfg.get("attr_threshold") or 0.25)
+    if diag is not None:
+        from .diff_report import build_consultation_html, build_consultation_markdown, for_paged_media
+
+        if fmt == "md":
+            out_path.write_text(build_consultation_markdown(diag, lang=lang, title=cfg.get("title")),
+                                encoding="utf-8")
+            return _written(out_path, "md")
+        raw = diag.get("raw") or {}
+        html = build_consultation_html(
+            diag, raw.get("distributions") if isinstance(raw.get("distributions"), dict) else None,
+            lang=lang, issuer=cfg.get("issuer"), title=cfg.get("title"))
+        if fmt == "html":
+            out_path.write_text(html, encoding="utf-8")
+            return _written(out_path, "html")
+        if fmt == "pdf":
+            from weasyprint import HTML
+            HTML(string=for_paged_media(html)).write_pdf(str(out_path))
+            return _written(out_path, "pdf")
+        raise typer.BadParameter(f"built-in fallback supports html|pdf|md; got {fmt!r}")
 
     if fmt == "md":
         body = _render_markdown(drift_result, eda_result, cfg)
@@ -148,7 +216,6 @@ def _builtin_render(
         loader=FileSystemLoader(str(templates_dir)),
         autoescape=select_autoescape(["html", "xml"]),
     )
-    lang = cfg.get("lang") or resolve_lang()
     env.globals["lang"] = lang
     env.globals["_"] = lambda key, **kw: t(key, lang, **kw)
 
@@ -271,6 +338,18 @@ def render_report(
         None, "--lang",
         help="Report language: en | ko (default: $DDOC_LANG, else en).",
     ),
+    issuer: Optional[str] = typer.Option(
+        None, "--issuer",
+        help="Organization printed as the report's issuer (default: $DDOC_ISSUER, else 'ddoc').",
+    ),
+    threshold: float = typer.Option(
+        0.15, "--threshold",
+        help="Overall-score threshold used to judge a drift envelope (as in `ddoc diff`).",
+    ),
+    attr_threshold: float = typer.Option(
+        0.25, "--attr-threshold",
+        help="Single-attribute threshold used to judge a drift envelope (as in `ddoc diff`).",
+    ),
 ):
     """Render a drift / EDA envelope to an HTML, PDF, or Markdown report.
 
@@ -278,6 +357,7 @@ def render_report(
         ddoc report render --input drift.json --out report.html
         ddoc report render -i drift.json -o report.pdf --title "Q4 release drift"
         ddoc report render -i eda.json -o eda.md
+        ddoc diff ref.csv cur.csv --json > d.json; ddoc report render -i d.json -o d.md
     """
     fmt = (format or output.suffix.lstrip(".")).lower()
     if fmt not in ("html", "pdf", "md"):
@@ -294,7 +374,9 @@ def render_report(
         raise typer.Exit(code=2)
 
     drift_result, eda_result = _classify_envelope(payload)
-    cfg = {"title": title, "lang": resolve_lang(lang)}
+    cfg = {"title": title, "lang": resolve_lang(lang),
+           "issuer": issuer or os.environ.get("DDOC_ISSUER") or None,
+           "threshold": threshold, "attr_threshold": attr_threshold}
 
     # Try plugin hookimpls first; fall back to built-in if all return None.
     pm = get_pmgr().pm

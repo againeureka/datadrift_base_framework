@@ -115,7 +115,8 @@ def test_markdown_render_flat_dict_shape(client: TestClient):
     )
     assert r.status_code == 200, r.text
     body = r.text
-    assert "blur" in body and "0.1800" in body
+    # judged as `ddoc diff` would: 0.18 is over the 0.15 threshold
+    assert "DRIFT" in body and "| blur | 0.180 |" in body
 
 
 def test_markdown_render_list_of_dicts_shape(client: TestClient):
@@ -133,10 +134,9 @@ def test_markdown_render_list_of_dicts_shape(client: TestClient):
     )
     assert r.status_code == 200, r.text
     body = r.text
-    assert "blur" in body
-    assert "0.1800" in body
-    # extras now appear inline rather than crashing.
-    assert "status=warning" in body
+    # extras such as a detector's own status are tolerated (the report
+    # judges with its own thresholds); the score comes through.
+    assert "| blur | 0.180 |" in body and "| exposure |" not in body.split("| blur |")[0]
 
 
 def test_markdown_render_nested_dict_shape(client: TestClient):
@@ -152,8 +152,7 @@ def test_markdown_render_nested_dict_shape(client: TestClient):
     )
     assert r.status_code == 200, r.text
     body = r.text
-    assert "blur" in body and "0.1800" in body
-    assert "status=warning" in body
+    assert "| blur | 0.180 |" in body
 
 
 def test_html_render_list_of_dicts_shape(client: TestClient):
@@ -169,9 +168,7 @@ def test_html_render_list_of_dicts_shape(client: TestClient):
     )
     assert r.status_code == 200, r.text
     body = r.text
-    assert "<code>blur</code>" in body
-    assert "0.1800" in body
-    assert "status=warning" in body
+    assert "data-col='blur'" in body and "0.180" in body
 
 
 def test_html_render_nested_dict_shape(client: TestClient):
@@ -186,8 +183,7 @@ def test_html_render_nested_dict_shape(client: TestClient):
     )
     assert r.status_code == 200, r.text
     body = r.text
-    assert "<code>blur</code>" in body
-    assert "0.1800" in body
+    assert "data-col='blur'" in body and "0.180" in body
 
 
 def test_render_no_attribute_drifts_section_when_empty(client: TestClient):
@@ -217,5 +213,5 @@ def test_render_score_none_displayed_as_dash(client: TestClient):
     )
     assert r.status_code == 200, r.text
     body = r.text
-    assert "blur" in body
-    assert "—" in body  # em-dash placeholder
+    assert "Data Drift Diagnostic Report" in body
+    assert "| blur |" not in body  # no score → not listed as a scored attribute

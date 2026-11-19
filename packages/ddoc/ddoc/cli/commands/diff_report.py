@@ -84,14 +84,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 h2 { font-size: 19px; margin: 34px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--grid); }
 h3 { font-size: 16px; margin: 0; }
 .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tiles { break-inside: avoid; }
 .tile { border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; }
 .tile .lbl { font-size: 13px; color: var(--ink-2); }
 .tile .val { font-size: 28px; font-weight: 600; line-height: 1.2; margin-top: 4px; }
 .tile .sub { font-size: 13px; color: var(--ink-2); margin-top: 6px; }
 .status { display: inline-flex; align-items: center; gap: 8px; }
-.status .ico { width: 22px; height: 22px; border-radius: 50%; display: inline-flex;
-               align-items: center; justify-content: center; font-size: 13px; font-weight: 700;
-               color: #ffffff; }
+.status .ico { width: 22px; height: 22px; line-height: 22px; border-radius: 50%; display: inline-block;
+               text-align: center; font-size: 13px; font-weight: 700; color: #ffffff; flex: none; }
 .status .ico.warning { color: #0b0b0b; }
 .meter { position: relative; height: 8px; border-radius: 4px; background: var(--track); margin-top: 10px; }
 .meter .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
@@ -140,7 +140,7 @@ details.tv table { margin-top: 6px; }
 .sample td { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .counts { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; font-size: 14px; }
 .counts .status { border: 1px solid var(--border); border-radius: 14px; padding: 2px 12px 2px 4px; }
-.status .ico.sm { width: 18px; height: 18px; font-size: 11px; }
+.status .ico.sm { width: 18px; height: 18px; line-height: 18px; font-size: 11px; }
 .insp td.sys { font-weight: 600; background: var(--chip); border-bottom: 1px solid var(--surface); }
 .insp td.res { white-space: nowrap; }
 .insp td.mv { font-variant-numeric: tabular-nums; }
@@ -148,9 +148,9 @@ details.tv table { margin-top: 6px; }
 .insp td.crit { color: var(--ink-2); white-space: nowrap; }
 .note-s { font-size: 13px; color: var(--ink-2); margin-top: 8px; }
 .dg-lead { color: var(--ink-2); margin: 0 0 10px; font-size: 14px; }
-.dg { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+.dg { display: flex; flex-wrap: wrap;
       border: 2px solid var(--ink-2); border-radius: 6px; overflow: hidden; }
-.dg .part { position: relative; display: flex; flex-direction: column; min-width: 0;
+.dg .part { position: relative; display: flex; flex-direction: column; min-width: 0; flex: 1 1 96px;
             border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid);
             color: inherit; text-decoration: none; background: var(--surface); }
 .dg .part .bar-s { height: 4px; }
@@ -1096,6 +1096,7 @@ def build_consultation_html(
     max_evidence: int = 5,
     lang: str = DEFAULT_LANG,
     issuer: Optional[str] = None,
+    title: Optional[str] = None,
 ) -> str:
     """Render the verdict payload (+ optional per-attribute ref/cur
     distributions) as a standalone diagnostic report page."""
@@ -1117,16 +1118,17 @@ def build_consultation_html(
                      if isinstance(v, (int, float))), key=lambda kv: kv[1], reverse=True)
     version = _ddoc_version()
     token, icon = _status(verdict, severity)
+    doc_title = title or t("doc.title", lang)
 
     # Masthead + subject / method / result table.
     parts = [
         f"<!doctype html><html lang='{_e(lang)}'><head><meta charset='utf-8'>"
         f"<meta name='viewport' content='width=device-width, initial-scale=1'>"
-        f"<title>{_e(t('doc.title', lang))} — {_e(verdict)}</title><style>{_CSS}</style>"
+        f"<title>{_e(doc_title)} — {_e(verdict)}</title><style>{_CSS}</style>"
         f"<script>{_THEME_BOOT}</script></head>"
         f"<body><div class='doc'>{_toolbar(lang)}<div class='sheet'>",
         f"<header class='mast'><div><div class='issuer'>{_e(issuer or t('doc.issuer_default', lang))}</div>"
-        f"<h1>{_e(t('doc.title', lang))}</h1></div>"
+        f"<h1>{_e(doc_title)}</h1></div>"
         f"<div class='docmeta'>{_e(t('doc.number', lang))} <b>{_e(_doc_number(payload, issued))}</b><br>"
         f"{_e(t('doc.issued', lang))} <b>{issued:%Y-%m-%d %H:%M} UTC</b><br>"
         f"{_e(t('doc.tool', lang))} <b>ddoc {_e(version)}</b></div></header>",
@@ -1254,3 +1256,110 @@ def build_consultation_html(
                  f"<span>{_e(_doc_number(payload, issued))}</span></footer>")
     parts.append(f"</div></div><div id='tip' role='tooltip'></div><script>{_SCRIPT}</script></body></html>")
     return "".join(parts)
+
+
+# ── Markdown ──────────────────────────────────────────────────────────
+
+
+def _md(v: Any) -> str:
+    """Table-cell safe text (pipes and newlines would break the table)."""
+    return str(v).replace("|", "\\|").replace("\n", " ")
+
+
+def build_consultation_markdown(payload: Dict[str, Any], *, lang: str = DEFAULT_LANG,
+                                title: Optional[str] = None) -> str:
+    """The same diagnosis as Markdown — for pull-request comments, chat
+    and tickets: verdict, reading, pattern cards (signals and first
+    actions), the inspection table and the checks."""
+    verdict = payload.get("verdict", "BLIND")
+    severity = payload.get("severity", "unknown")
+    score = payload.get("overall_score")
+    threshold = payload.get("threshold") or 0.15
+    attr_threshold = payload.get("attr_threshold") or 0.25
+    raw = payload.get("raw") or {}
+    diagnosis = payload.get("diagnosis") or {}
+    profile = raw.get("profile") if isinstance(raw.get("profile"), dict) else None
+    token, icon = _status(verdict, severity)
+    lines = [f"# {title or t('doc.title', lang)}", "",
+             f"**{icon} {verdict}** · {t('label.severity', lang)} {severity_label(severity, lang)}"
+             + ("" if score is None else f" · {t('chart.score', lang)} {score:.3f}"), ""]
+    cards = diagnosis.get("archetypes") or []
+    titles = [ar.card_text(c, lang)["title"] for c in cards if c["match"] == "match"]
+    if titles:
+        lines += [f"{t('reading.headline', lang)} **{' · '.join(titles)}**", ""]
+    lines += [f"| | {t('chart.ref', lang)} | {t('chart.cur', lang)} |", "|---|---|---|",
+              f"| {t('subject.path', lang)} | `{_md(payload.get('ref'))}` | `{_md(payload.get('cur'))}` |"]
+    if profile:
+        ref_p, cur_p = profile.get("ref") or {}, profile.get("cur") or {}
+
+        def size(p: Dict[str, Any]) -> str:
+            return t("subject.size_value", lang, rows=p.get("rows", 0), cols=len(p.get("columns") or []))
+
+        def period(p: Dict[str, Any]) -> str:
+            return t("subject.period_value", lang, **p["period"]) if p.get("period") else "—"
+
+        lines.append(f"| {t('subject.size', lang)} | {_md(size(ref_p))} | {_md(size(cur_p))} |")
+        if ref_p.get("period") or cur_p.get("period"):
+            lines.append(f"| {t('subject.period', lang)} | {_md(period(ref_p))} | {_md(period(cur_p))} |")
+    lines += [f"| {t('info.criteria', lang)} | {t('tile.criteria_sub', lang, threshold=threshold, attr_threshold=attr_threshold)} | |", ""]
+
+    if verdict == "BLIND":
+        lines += [f"## {t('sec.reason', lang)}", "", payload.get("reason") or "", ""]
+        hints = payload.get("hints") or []
+        if hints:
+            lines += [f"## {t('sec.checks', lang)}", ""] + [f"- [ ] {h}" for h in hints] + [""]
+        return "\n".join(lines)
+
+    matched = [c for c in cards if c["match"] == "match"]
+    if matched:
+        lines += [f"## {t('sec.reading', lang)}", ""]
+        for c in matched:
+            x = ar.card_text(c, lang, profile=profile)
+            lines.append(f"### {x['title']}")
+            lines += [f"- {s}" for s in x["signals"]]
+            lines += ["", x["meaning"], "", f"**{t('reading.actions', lang)}**"]
+            lines += [f"- [ ] {a}" for a in x["actions"]]
+            lines += ["", f"> {t('reading.caveat', lang)}: {x['caveat']}", ""]
+    near = [c for c in cards if c["match"] == "near"]
+    if near:
+        lines += [f"**{t('reading.near_title', lang)}**", ""]
+        for c in near:
+            x = ar.card_text(c, lang, profile=profile)
+            lines.append(f"- {x['title']} — {' · '.join(x['signals'])}")
+        lines.append("")
+
+    rows = diagnosis.get("inspection") or []
+    if rows:
+        head = [t(f"insp.col.{c}", lang) for c in ("system", "item", "target", "measured", "criterion", "result")]
+        lines += [f"## {t('sec.inspection', lang)}", "", "| " + " | ".join(head) + " |",
+                  "|" + "---|" * len(head)]
+        for r in rows:
+            x = dx.inspection_text(r, lang)
+            mark = _INSP_STATUS[r["status"]][1]
+            lines.append("| " + " | ".join(_md(v) for v in (
+                x["system"], x["item"], x["target"], x["measured"], x["criterion"],
+                f"{mark} {x['result']}")) + " |")
+        lines.append("")
+
+    checks = dx.check_texts(diagnosis, lang)
+    lines += [f"## {t('sec.checks', lang)}", ""]
+    lines += [f"- [ ] {c}" for c in checks] if checks else [t("checks.none", lang)]
+    lines += ["", f"_{t('note.limits_text', lang)}_", ""]
+    return "\n".join(lines)
+
+
+# ── Paged output ──────────────────────────────────────────────────────
+
+_LIGHT = dict(re.findall(r"--([\w-]+):\s*([^;]+);", _CSS.split("}", 1)[0]))
+
+
+def for_paged_media(html_doc: str) -> str:
+    """The report with every ``var(--…)`` replaced by its day-theme value.
+
+    PDF engines such as WeasyPrint do not resolve custom properties in SVG
+    presentation attributes (``fill='var(--cur)'``) and would paint those
+    marks black; paper is always the day theme anyway. The transparent
+    hover targets over the charts go too: they only serve the pointer, and
+    styled through CSS classes they would print as black boxes."""
+    html_doc = re.sub(r"<rect class='hit'[^>]*>.*?</rect>", "", html_doc, flags=re.S)
+    return re.sub(r"var\(--([\w-]+)\)", lambda m: _LIGHT.get(m.group(1), m.group(0)).strip(), html_doc)

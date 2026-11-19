@@ -48,6 +48,9 @@ ddoc report render -i drift.json -o drift.html
 ddoc report render -i drift.json -o drift.md --format md
 ```
 
+drift envelope 은 `ddoc diff` 와 같은 기준(0.15 / 0.25)으로 판정된 뒤 같은 진단서로
+렌더됩니다. 기준은 `--threshold` / `--attr-threshold` 로 바꿀 수 있습니다.
+
 ## 다음 단계
 
 - [detector cookbook](../tutorial/detectors.md)

@@ -446,7 +446,7 @@ def _print_human(payload: Dict[str, Any], lang: str) -> None:
 def _write_report(payload: Dict[str, Any], report: Optional[Path],
                   distributions: Optional[Dict[str, Any]] = None, *,
                   lang: str, issuer: Optional[str] = None) -> None:
-    """Render the consultation note when ``--report`` was given.
+    """Render the diagnostic report when ``--report`` was given.
     Best-effort: a report failure must not change the verdict/exit."""
     if report is None:
         return
@@ -543,7 +543,7 @@ def diff_command(
     ),
     report: Optional[Path] = typer.Option(
         None, "--report",
-        help="Write a self-contained HTML consultation note (verdict, why, "
+        help="Write a self-contained HTML diagnostic report (verdict, why, "
              "what changed, evidence, what to check next) to this path.",
     ),
     lang: Optional[str] = typer.Option(

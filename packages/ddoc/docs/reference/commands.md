@@ -46,15 +46,27 @@
 
 ## `ddoc report render`
 
-drift / EDA envelope 를 리포트로 렌더.
+drift / EDA 결과를 리포트로 렌더. drift 입력은 `ddoc diff --report` 와 같은 진단서가
+됩니다. `ddoc diff --json` 출력은 그대로 쓰고, `ddoc analyze drift --json` envelope 은
+`ddoc diff` 와 같은 기준으로 판정을 먼저 계산합니다. Markdown 은 판정·판독·유형 카드·
+계통별 검사표·점검 항목(체크박스)을 담아 PR 코멘트나 이슈에 붙일 수 있습니다. PDF 는
+같은 HTML 을 인쇄한 것입니다. EDA envelope 은 기존 템플릿을 씁니다.
+
+```bash
+ddoc diff ref.csv cur.csv --json > d.json
+ddoc report render -i d.json -o d.md          # PR 코멘트용
+ddoc report render -i d.json -o d.pdf --issuer "기관명"
+```
 
 | 옵션 | 설명 |
 |---|---|
-| `-i`, `--input` | envelope JSON 경로 (필수) |
+| `-i`, `--input` | `ddoc diff --json` 출력, drift envelope 또는 EDA envelope JSON 경로 (필수) |
 | `-o`, `--out` | 출력 경로 (필수). 형식은 확장자로 추정 |
 | `-f`, `--format` | `html` · `pdf` · `md` |
 | `--title` | 리포트 제목 |
 | `--lang` | 리포트 언어 (`en` · `ko`, 기본값 `$DDOC_LANG`, 없으면 `en`) |
+| `--issuer` | 진단서 발행처 (기본값 `$DDOC_ISSUER`, 없으면 `ddoc`) |
+| `--threshold` / `--attr-threshold` | drift envelope 을 판정할 기준 (기본 0.15 / 0.25, `ddoc diff` 와 같음) |
 | `--json` | 결과 envelope 출력 |
 
 ## `ddoc export drift-report <input>`

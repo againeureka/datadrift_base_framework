@@ -329,7 +329,7 @@ def test_inspection_without_profile_still_reports_scores():
     assert ("distribution", "overall", "pass") in items
     assert not any(s == "schema" for s, _, _ in items)
     rest = next(r for r in d["inspection"] if r["item"] == "attr_score")
-    assert dx.inspection_text(rest, "en")["target"] == "all 2"
+    assert dx.inspection_text(rest, "en")["target"] == "all (2)"
 
 
 # ── data diagram ──────────────────────────────────────────────────────
