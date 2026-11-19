@@ -10,9 +10,10 @@
 - ✨ `ddoc diff` 한 줄 판정 (OK / DRIFT / BLIND), `--report` HTML 소견서, Drift Zoo, GitHub Action
 - ✨ `ddoc serve` (REST + GUI), `recipe`, `report`, `export`, `fetch`, `examples` 명령
 - ✨ 한글 리포트 (`--lang ko` / `DDOC_LANG=ko`)
-- ✨ 검사 보고서 형식의 진단서: 발행처·문서 번호, 요약 대시보드, 속성별 그래프, 데이터 특징, 패턴별 점검 항목 (`--json` 의 `diagnosis`), 화면 테마(자동·주간·야간)와 인쇄 버튼
+- ✨ 검사 보고서 형식의 진단서: 발행처·문서 번호, 요약 대시보드, 속성별 그래프, 데이터 특징, 패턴별 점검 항목 (`--json` 의 `diagnosis`), 화면 테마(자동·주간·야간)와 인쇄 버튼, 검사 대상 섹션과 계통별 검사표, `--sample-rows`
 - 🗑️ `init` / `add` / `snapshot`, 스냅샷 모드, `exp` / `train`, `ingest`, `vis`, v1 legacy 명령 제거
 - 🗑️ yolo / vis / nlp / reference-engine / keti-temporal 플러그인, 관련 hookspec 과 extras 제거 (hookspec 2.0.0)
+- 🐛 CSV 의 날짜·시간 텍스트 열을 비교하던 문제 — 이제 기간 표시에만 사용
 - 🐛 플러그인 하나의 실패가 다른 플러그인 결과를 지우던 문제, 일반 설치에서 `examples generate` 가 실패하던 문제 수정
 - 🔄 코어와 플러그인을 `packages/ddoc/`, `packages/plugins/` 로 이동
 

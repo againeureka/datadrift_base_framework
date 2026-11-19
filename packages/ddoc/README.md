@@ -55,6 +55,7 @@ ddoc diff baseline_data/ todays_data/
 ddoc diff jan.csv aug.csv --json                # 스크립트/CI: JSON 한 객체
 ddoc diff jan.csv aug.csv --report note.html    # 진단서: 요약·판정 근거·속성별 그래프·점검 항목 HTML
 ddoc diff jan.csv aug.csv --report note.html --lang ko --issuer "기관명"   # 한글 진단서
+ddoc diff jan.csv aug.csv --report note.html --sample-rows 3             # 양쪽 앞 3행 포함 (원본 데이터 주의)
 ```
 
 고전 드리프트 패턴 갤러리(레짐 전환·점진 열화·주기 함정)는

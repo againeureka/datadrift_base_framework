@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -174,7 +175,86 @@ def _load_csv_frame(files: List[str]):
     return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
 
 
-def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20) -> Dict[str, Any]:
+_TIME_NAME = re.compile(r"(date|time|timestamp|datetime|^ts$|_at$|_dt$|일자|날짜|일시|시각)", re.I)
+SAMPLE_ROWS_MAX = 20
+_SAMPLE_COLS_MAX = 12
+_SAMPLE_CELL_MAX = 40
+
+
+def _as_datetime(series):
+    """The column parsed as date/time when it clearly is one, else None.
+    Only text columns with a time-like name are tried (numbers such as an
+    integer ``timestamp`` index stay numeric)."""
+    import warnings
+
+    import pandas as pd
+
+    if pd.api.types.is_datetime64_any_dtype(series):
+        return series
+    if pd.api.types.is_numeric_dtype(series) or not _TIME_NAME.search(str(series.name)):
+        return None
+    values = series.dropna()
+    if values.empty:
+        return None
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        parsed = pd.to_datetime(values, errors="coerce")
+    return parsed if parsed.notna().mean() >= 0.9 else None
+
+
+def _period(parsed) -> Optional[Dict[str, str]]:
+    parsed = parsed.dropna()
+    if parsed.empty:
+        return None
+    lo, hi = parsed.min(), parsed.max()
+    dated = all(x.hour == 0 and x.minute == 0 and x.second == 0 for x in (lo, hi))
+    fmt = "%Y-%m-%d" if dated else "%Y-%m-%d %H:%M"
+    return {"start": lo.strftime(fmt), "end": hi.strftime(fmt)}
+
+
+def _column_type(series) -> str:
+    import pandas as pd
+
+    if series.dropna().empty:
+        return "empty"
+    return "numeric" if pd.api.types.is_numeric_dtype(series) else "categorical"
+
+
+def _sample(frame, n: int) -> Dict[str, Any]:
+    """First ``n`` rows as short strings (opt-in: raw data leaves the file)."""
+    cols = list(frame.columns)
+    shown = cols[:_SAMPLE_COLS_MAX]
+
+    def cell(v: Any) -> str:
+        if v is None or (isinstance(v, float) and v != v):
+            return ""
+        text = str(v)
+        return text if len(text) <= _SAMPLE_CELL_MAX else text[:_SAMPLE_CELL_MAX - 1] + "…"
+
+    return {"columns": [str(c) for c in shown], "hidden_columns": len(cols) - len(shown),
+            "rows": [[cell(v) for v in row] for row in frame[shown].head(n).itertuples(index=False)]}
+
+
+def _profile(frame, files: List[str], time_cols: Dict[str, Any], sample_rows: int) -> Dict[str, Any]:
+    out: Dict[str, Any] = {
+        "files": len(files),
+        "rows": int(len(frame)),
+        "columns": [{"name": str(c), "type": "datetime" if c in time_cols else _column_type(frame[c])}
+                    for c in frame.columns],
+        "period": None,
+    }
+    for col, parsed in time_cols.items():
+        period = _period(parsed)
+        if period:
+            out["period"] = {"column": str(col), **period}
+            break
+    if sample_rows > 0:
+        out["sample"] = _sample(frame, min(sample_rows, SAMPLE_ROWS_MAX))
+    return out
+
+
+def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
+             sample_rows: int = 0) -> Dict[str, Any]:
     """Column-wise drift between two CSV datasets.
 
     Numeric columns → shared-range histogram JS divergence;
@@ -185,16 +265,35 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20) -> Dict
     ``summaries`` carries per-column statistics (sample size, missing
     rate, location / spread / range for numeric columns, new and vanished
     values for categorical ones) for the diagnosis.
+
+    ``profile`` describes what was compared: rows, columns and their
+    types, the period covered (from a date/time column), which columns
+    exist on one side only, and — when ``sample_rows`` > 0 — the first
+    rows of each side. Date/time columns give the period and are not
+    compared: two periods always differ in their timestamps.
     """
     import numpy as np
     import pandas as pd
 
     ref, cur = _load_csv_frame(ref_files), _load_csv_frame(cur_files)
-    shared = [c for c in ref.columns if c in cur.columns]
+    ref_time = {c: p for c in ref.columns if (p := _as_datetime(ref[c])) is not None}
+    cur_time = {c: p for c in cur.columns if (p := _as_datetime(cur[c])) is not None}
+    time_cols = [c for c in ref.columns if c in ref_time and c in cur_time]
+    shared = [c for c in ref.columns if c in cur.columns and c not in time_cols]
     if not shared:
         raise ValueError(
             f"no shared columns between ref {list(ref.columns)} and cur {list(cur.columns)}"
         )
+    profile = {
+        "ref": _profile(ref, ref_files, ref_time, sample_rows),
+        "cur": _profile(cur, cur_files, cur_time, sample_rows),
+        "columns": {
+            "compared": [str(c) for c in shared],
+            "time": [str(c) for c in time_cols],
+            "only_ref": [str(c) for c in ref.columns if c not in cur.columns],
+            "only_cur": [str(c) for c in cur.columns if c not in ref.columns],
+        },
+    }
 
     def _fmt_edge(x: float) -> str:
         return f"{x:.4g}"
@@ -273,6 +372,7 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20) -> Dict
         "summaries": summaries,
         "rows": {"ref": int(len(ref)), "cur": int(len(cur))},
         "columns_compared": shared,
+        "profile": profile,
     }
 
 
@@ -445,6 +545,11 @@ def diff_command(
         None, "--issuer",
         help="Organization printed as the report's issuer (default: $DDOC_ISSUER, else 'ddoc').",
     ),
+    sample_rows: int = typer.Option(
+        0, "--sample-rows", min=0, max=20,
+        help="Include the first N rows of each CSV side in the report and JSON "
+             "(off by default: the rows are raw data).",
+    ),
 ):
     """One-line drift verdict between REF and CUR.
 
@@ -502,7 +607,7 @@ def diff_command(
     if result is None and kind == "csv":
         try:
             result = csv_diff(ref_detail.get("files") or [ref_s],
-                              cur_detail.get("files") or [cur_s])
+                              cur_detail.get("files") or [cur_s], sample_rows=sample_rows)
             engine = "builtin"
         except Exception as e:  # noqa: BLE001
             _blind(t("reason.csv_failed", lang, error=e), ref=ref_s, cur=cur_s,

@@ -185,6 +185,18 @@ def build(
     if verdict == "DRIFT" and not checks and ordered:
         checks.append({"code": "inspect", "attr": ordered[0][0]})
 
+    # A column the current data no longer has is worth checking whatever
+    # the verdict: the comparison could not see it at all.
+    profile = result.get("profile") if isinstance(result.get("profile"), dict) else None
+    dropped = ((profile or {}).get("columns") or {}).get("only_ref") or []
+    if verdict != "BLIND" and dropped:
+        checks.insert(0, {"code": "column_dropped", "columns": list(dropped)})
+
+    inspection = [] if verdict == "BLIND" else _inspection(
+        summaries={k: v for k, v in summaries.items() if isinstance(v, dict)},
+        ordered=ordered, overall=overall, threshold=threshold, attr_threshold=attr_threshold,
+        smallest=smallest, uniform=samples is not None, profile=profile)
+
     return {
         "rationale": _rationale(verdict, overall, ordered[:1] if verdict == "OK" else ordered,
                                 threshold, attr_threshold, reason),
@@ -192,7 +204,128 @@ def build(
         "attributes": attributes,
         "warnings": warnings,
         "checks": checks,
+        "inspection": inspection,
     }
+
+
+# ── Inspection table ──────────────────────────────────────────────────
+#
+# Like a vehicle inspection sheet: items grouped by system, each with a
+# measured value, the criterion and a result. The verdict rules are not
+# changed by this table; it lays out what was measured against what.
+# "fail" marks what produced a DRIFT verdict (the scores); "caution"
+# marks a pattern over its threshold; "pass" rows summarise the rest.
+
+SYSTEMS = ("schema", "sample", "distribution", "completeness", "numeric", "category")
+_ROWS_PER_ITEM = 8
+
+
+def _measures(summary: Dict[str, Any]) -> Dict[str, Optional[float]]:
+    """The number each inspection item looks at, for one attribute."""
+    out: Dict[str, Optional[float]] = {}
+    missing = summary.get("missing") or {}
+    if missing:
+        out["missing_change"] = round((missing.get("cur") or 0.0) - (missing.get("ref") or 0.0), 4)
+    if summary.get("kind") == "numeric":
+        out["out_of_range"] = summary.get("outside_ref_range")
+        mean, std = summary.get("mean") or {}, summary.get("std") or {}
+        if mean.get("ref") is not None and mean.get("cur") is not None:
+            moved, ref_std = abs(mean["cur"] - mean["ref"]), std.get("ref") or 0.0
+            out["mean_shift"] = round(moved / ref_std, 3) if ref_std else (0.0 if not moved else None)
+        if std.get("ref") and std.get("cur") is not None:
+            out["spread_change"] = round(std["cur"] / std["ref"], 3)
+    elif summary.get("kind") == "categorical":
+        out["new_values"] = round(sum(v[1] for v in summary.get("new_values") or []), 4)
+        out["vanished_values"] = round(sum(v[1] for v in summary.get("vanished_values") or []), 4)
+        mover = summary.get("top_mover")
+        if mover:
+            out["share_shift"] = round(abs(mover[2] - mover[1]), 4)
+    return out
+
+
+def _spread_distance(ratio: Optional[float]) -> float:
+    """How far a std ratio is from 1, either way (×2 and ×0.5 are equal)."""
+    if not ratio:
+        return 0.0
+    return ratio if ratio >= 1 else 1 / ratio
+
+
+def _pattern_rows(system: str, item: str, summaries: Dict[str, Any],
+                  flagged: Dict[str, Dict[str, Any]], skip: set) -> List[Dict[str, Any]]:
+    """Caution rows for attributes whose pattern fired, then one pass row
+    with the largest value among the others."""
+    measured = {name: m[item] for name, sm in summaries.items() if item in (m := _measures(sm))}
+    if not measured:
+        return []
+    rows: List[Dict[str, Any]] = []
+    hits = [name for name in measured if item in flagged.get(name, {})]
+    skip = skip - set(hits)
+    for name in hits[:_ROWS_PER_ITEM]:
+        rows.append({"system": system, "item": item, "attr": name, "status": "caution",
+                     "value": measured[name], "detail": flagged[name][item]})
+    if len(hits) > _ROWS_PER_ITEM:
+        rows.append({"system": system, "item": item, "more": len(hits) - _ROWS_PER_ITEM,
+                     "status": "caution"})
+    rest = {k: v for k, v in measured.items() if k not in hits and k not in skip and v is not None}
+    if rest:
+        key = (lambda kv: _spread_distance(kv[1])) if item == "spread_change" else (lambda kv: abs(kv[1]))
+        name, value = max(rest.items(), key=key)
+        rows.append({"system": system, "item": item, "count": len(rest), "attr": name,
+                     "value": value, "status": "pass", "all": not hits and not skip & set(measured)})
+    return rows
+
+
+def _inspection(*, summaries: Dict[str, Any], ordered: List[Tuple[str, float]],
+                overall: Optional[float], threshold: float, attr_threshold: float,
+                smallest: Optional[Dict[str, int]], uniform: bool,
+                profile: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+
+    cols = (profile or {}).get("columns")
+    if cols:
+        one_sided = len(cols.get("only_ref") or []) + len(cols.get("only_cur") or [])
+        rows.append({"system": "schema", "item": "columns",
+                     "status": "caution" if one_sided else "pass",
+                     "value": {"compared": len(cols.get("compared") or []),
+                               "only_ref": cols.get("only_ref") or [],
+                               "only_cur": cols.get("only_cur") or []}})
+
+    if smallest:
+        rows.append({"system": "sample", "item": "sample_size", "smallest": not uniform,
+                     "status": "pass" if min(smallest["ref"], smallest["cur"]) >= SMALL_SAMPLE else "caution",
+                     "value": {"ref": smallest["ref"], "cur": smallest["cur"]}})
+
+    if overall is not None and ordered:
+        rows.append({"system": "distribution", "item": "overall", "value": round(overall, 4),
+                     "threshold": threshold,
+                     "status": "fail" if overall >= threshold else "pass"})
+        over = [(k, v) for k, v in ordered if v >= threshold]
+        for name, score in over[:_ROWS_PER_ITEM]:
+            rows.append({"system": "distribution", "item": "attr_score", "attr": name,
+                         "value": round(score, 4), "threshold": threshold,
+                         "attr_threshold": attr_threshold,
+                         "status": "fail" if score >= attr_threshold else "caution"})
+        if len(over) > _ROWS_PER_ITEM:
+            rows.append({"system": "distribution", "item": "attr_score",
+                         "more": len(over) - _ROWS_PER_ITEM, "status": "caution"})
+        rest = [(k, v) for k, v in ordered if v < threshold]
+        if rest:
+            rows.append({"system": "distribution", "item": "attr_score", "count": len(rest),
+                         "attr": rest[0][0], "value": round(rest[0][1], 4), "status": "pass",
+                         "threshold": threshold, "attr_threshold": attr_threshold, "all": not over})
+
+    flagged = {name: {p["code"]: p for p in _patterns(sm)} for name, sm in summaries.items()}
+    rows += _pattern_rows("completeness", "missing_change", summaries, flagged, set())
+    numeric = {k: v for k, v in summaries.items() if v.get("kind") == "numeric"}
+    for item in ("out_of_range", "mean_shift", "spread_change"):
+        rows += _pattern_rows("numeric", item, numeric, flagged, set())
+    category = {k: v for k, v in summaries.items() if v.get("kind") == "categorical"}
+    told = {k for k in category if {"new_values", "vanished_values"} & set(flagged.get(k, {}))}
+    for item in ("new_values", "vanished_values", "share_shift"):
+        # a mix change explained by values appearing / vanishing is not
+        # also reported as a clean pass on the mix
+        rows += _pattern_rows("category", item, category, flagged, told if item == "share_shift" else set())
+    return rows
 
 
 # ── Rendering ─────────────────────────────────────────────────────────
@@ -270,6 +403,8 @@ def check_text(check: Dict[str, Any], lang: str) -> str:
         return t("check.value_shift", lang, attr=attr)
     if code == "spread_change":
         return t("check.spread_change", lang, attr=attr)
+    if code == "column_dropped":
+        return t("check.column_dropped", lang, columns=", ".join(check.get("columns") or []))
     if code == "missing_change":
         return t("check.missing_change", lang, attr=attr,
                  ref=_pct(check["ref"]), cur=_pct(check["cur"]))
@@ -289,3 +424,86 @@ def check_texts(diagnosis: Dict[str, Any], lang: str) -> List[str]:
 
 def warning_text(warning: Dict[str, Any], lang: str) -> str:
     return t(f"warning.{warning['code']}", lang, **{k: v for k, v in warning.items() if k != "code"})
+
+
+_CRITERIA = {  # item → (message key, format values)
+    "sample_size": ("insp.c.at_least", {"value": SMALL_SAMPLE}),
+    "missing_change": ("insp.c.below", {"value": f"{MISSING_CHANGE * 100:.0f}%p"}),
+    "out_of_range": ("insp.c.below", {"value": f"{OUT_OF_RANGE * 100:.0f}%"}),
+    "mean_shift": ("insp.c.below", {"value": f"{MEAN_SHIFT_STD:g}σ"}),
+    "spread_change": ("insp.c.spread", {"lo": f"{1 / SPREAD_RATIO:.2f}", "hi": f"{SPREAD_RATIO:g}"}),
+    "new_values": ("insp.c.no_value", {"value": f"{NEW_VALUE_SHARE * 100:.0f}%"}),
+    "vanished_values": ("insp.c.no_value", {"value": f"{NEW_VALUE_SHARE * 100:.0f}%"}),
+    "share_shift": ("insp.c.below", {"value": f"{SHARE_SHIFT * 100:.0f}%p"}),
+}
+
+
+def _measured(row: Dict[str, Any], lang: str) -> str:
+    item, v, detail = row["item"], row.get("value"), row.get("detail") or {}
+    if row.get("more"):
+        return "—"
+    if item == "columns":
+        parts = [t("insp.m.columns", lang, count=v["compared"])]
+        if v["only_cur"]:
+            parts.append(t("insp.m.only_cur", lang, columns=", ".join(v["only_cur"])))
+        if v["only_ref"]:
+            parts.append(t("insp.m.only_ref", lang, columns=", ".join(v["only_ref"])))
+        return " · ".join(parts)
+    if item == "sample_size":
+        return f"{v['ref']:,} / {v['cur']:,}"
+    if item in ("overall", "attr_score"):
+        text = f"{v:.3f}"
+    elif item == "missing_change":
+        text = t("fmt.pp", lang, value=v * 100)
+    elif item == "out_of_range":
+        text = _pct(v)
+    elif item == "mean_shift":
+        text = "—" if v is None else f"{v:.2f}σ"
+        if detail:
+            text += f" ({_num(detail.get('ref'))} → {_num(detail.get('cur'))})"
+    elif item == "spread_change":
+        text = f"×{v:.2f}"
+    elif item in ("new_values", "vanished_values"):
+        return _values(detail["values"]) if detail else t("insp.m.none", lang)
+    elif item == "share_shift":
+        if detail:
+            return (f"{detail['label']} {_pct(detail['ref'])} → {_pct(detail['cur'])} "
+                    f"({t('fmt.pp', lang, value=(detail['cur'] - detail['ref']) * 100)})")
+        text = t("fmt.pp", lang, value=v * 100).lstrip("+")
+    else:
+        text = str(v)
+    if row["status"] == "pass" and row.get("count", 0) > 1 and v:
+        return t("insp.m.max", lang, value=text, attr=row["attr"])
+    return text
+
+
+def _criterion(row: Dict[str, Any], lang: str) -> str:
+    item = row["item"]
+    if item == "columns":
+        return t("insp.c.columns", lang)
+    if item == "overall":
+        return t("insp.c.below", lang, value=f"{row['threshold']:g}")
+    if item == "attr_score":
+        return t("insp.c.score", lang, value=f"{row['threshold']:g}", fail=f"{row['attr_threshold']:g}")
+    key, values = _CRITERIA[item]
+    return t(key, lang, **values)
+
+
+def inspection_text(row: Dict[str, Any], lang: str) -> Dict[str, str]:
+    """One inspection row as display strings."""
+    if row.get("more"):
+        target = t("insp.more", lang, count=row["more"])
+    elif row.get("count") is not None:
+        target = t("insp.all" if row.get("all") else "insp.rest", lang, count=row["count"])
+    elif row.get("smallest"):
+        target = t("insp.smallest", lang)
+    else:
+        target = row.get("attr") or "—"
+    return {
+        "system": t(f"insp.sys.{row['system']}", lang),
+        "item": t(f"insp.item.{row['item']}", lang),
+        "target": target,
+        "measured": _measured(row, lang),
+        "criterion": _criterion(row, lang),
+        "result": t(f"insp.status.{row['status']}", lang),
+    }

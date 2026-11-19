@@ -254,3 +254,79 @@ def test_wide_integer_ranges_keep_the_histogram(tmp_path):
     cur = _csv(tmp_path / "c.csv", "day", [str(i % 60) for i in range(240)])
     result = csv_diff([ref], [cur])
     assert "discrete" not in result["summaries"]["day"]
+
+
+# ── what was compared / inspection table ──────────────────────────────
+
+
+def _orders(path, month, extra=False, missing_every=0):
+    head = "order_date,price,channel" + (",coupon" if extra else "")
+    rows = []
+    for i in range(120):
+        ch = "" if missing_every and i % missing_every == 0 else ("store" if i % 3 else "online")
+        rows.append(f"2026-{month:02d}-{1 + i % 28:02d},{100 + i % 7 + (40 if month > 6 else 0)},{ch}"
+                    + (",Y" if extra else ""))
+    return _csv(path, head, rows)
+
+
+def test_profile_names_period_and_one_sided_columns(tmp_path):
+    ref = _orders(tmp_path / "r.csv", 1)
+    cur = _orders(tmp_path / "c.csv", 7, extra=True)
+    result = csv_diff([ref], [cur])
+    prof = result["profile"]
+    assert prof["ref"]["period"] == {"column": "order_date", "start": "2026-01-01", "end": "2026-01-28"}
+    assert prof["cur"]["period"]["start"] == "2026-07-01"
+    assert prof["columns"] == {"compared": ["price", "channel"], "time": ["order_date"],
+                               "only_ref": [], "only_cur": ["coupon"]}
+    # two periods always differ in their timestamps: not scored
+    assert "order_date" not in result["attribute_drifts"]
+    assert "sample" not in prof["ref"]  # raw rows only on request
+
+
+def test_integer_timestamp_index_stays_numeric(tmp_path):
+    ref = _csv(tmp_path / "r.csv", "timestamp,x", [f"{i},{i % 5}" for i in range(50)])
+    cur = _csv(tmp_path / "c.csv", "timestamp,x", [f"{i},{i % 5}" for i in range(50)])
+    result = csv_diff([ref], [cur])
+    assert "timestamp" in result["attribute_drifts"] and result["profile"]["columns"]["time"] == []
+
+
+def test_sample_rows_are_opt_in(tmp_path):
+    ref = _orders(tmp_path / "r.csv", 1)
+    cur = _orders(tmp_path / "c.csv", 7)
+    off = tmp_path / "off.html"
+    on = tmp_path / "on.html"
+    runner.invoke(app, ["diff", ref, cur, "--report", str(off), "--lang", "ko"])
+    res = runner.invoke(app, ["diff", ref, cur, "--report", str(on), "--lang", "ko",
+                              "--sample-rows", "2", "--json"])
+    payload = json.loads(res.output.strip().splitlines()[-1])
+    assert len(payload["raw"]["profile"]["cur"]["sample"]["rows"]) == 2
+    assert "원본 데이터입니다" not in off.read_text(encoding="utf-8")
+    body = on.read_text(encoding="utf-8")
+    assert "원본 데이터입니다" in body and "현재 (cur) 앞 2행" in body
+    assert "검사 대상" in body and "2026-07-01 ~ 2026-07-28 (order_date 열)" in body
+
+
+def test_inspection_rows_and_dropped_column_check(tmp_path):
+    ref = _orders(tmp_path / "r.csv", 1, extra=True)
+    cur = _orders(tmp_path / "c.csv", 7, missing_every=4)
+    res = runner.invoke(app, ["diff", ref, cur, "--json"])
+    d = json.loads(res.output.strip().splitlines()[-1])["diagnosis"]
+    rows = {(r["system"], r["item"], r.get("attr"), r["status"]) for r in d["inspection"]}
+    assert ("schema", "columns", None, "caution") in rows
+    assert ("distribution", "attr_score", "price", "fail") in rows
+    assert ("completeness", "missing_change", "channel", "caution") in rows
+    assert ("numeric", "out_of_range", "price", "caution") in rows
+    assert d["checks"][0] == {"code": "column_dropped", "columns": ["coupon"]}
+    text = dx.inspection_text(next(r for r in d["inspection"] if r["item"] == "missing_change"), "ko")
+    assert text["criterion"] == "5%p 미만" and text["result"] == "주의"
+
+
+def test_inspection_without_profile_still_reports_scores():
+    d = dx.build(verdict="OK", overall=0.02, top=[("a", 0.05), ("b", 0.01)],
+                 threshold=0.15, attr_threshold=0.25,
+                 evidence={"a": {"ref": {"x": 50, "y": 50}, "cur": {"x": 45, "y": 55}}})
+    items = [(r["system"], r["item"], r["status"]) for r in d["inspection"]]
+    assert ("distribution", "overall", "pass") in items
+    assert not any(s == "schema" for s, _, _ in items)
+    rest = next(r for r in d["inspection"] if r["item"] == "attr_score")
+    assert dx.inspection_text(rest, "en")["target"] == "all 2"

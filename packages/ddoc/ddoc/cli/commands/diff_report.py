@@ -123,6 +123,29 @@ svg .hit:hover, svg .hit:focus { fill: var(--ink); fill-opacity: .04; }
 details.tv { margin-top: 8px; font-size: 14px; }
 details.tv summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
 details.tv table { margin-top: 6px; }
+.lead { color: var(--ink-2); margin: 0 0 10px; }
+.subj th.side { width: auto; }
+.subj td, .subj th { word-break: break-word; }
+.subj .chip small { color: var(--ink-2); margin-left: 4px; }
+.subj .chip.one { background: transparent; border: 1px dashed var(--axis); }
+.match { list-style: none; padding: 0; margin: 10px 0 0; font-size: 14px; }
+.match li { margin: 4px 0; }
+.match .mk { display: inline-block; width: 18px; font-weight: 700; color: var(--ink-2); }
+.sample { margin-top: 14px; }
+.sample h3 { font-size: 14px; margin: 10px 0 4px; color: var(--ink-2); }
+.sample .wrap { overflow-x: auto; }
+.sample table { font-size: 13px; width: auto; min-width: 50%; }
+.sample td, .sample th { padding: 6px 14px 6px 10px; }
+.sample td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.counts { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; font-size: 14px; }
+.counts .status { border: 1px solid var(--border); border-radius: 14px; padding: 2px 12px 2px 4px; }
+.status .ico.sm { width: 18px; height: 18px; font-size: 11px; }
+.insp td.sys { font-weight: 600; background: var(--chip); border-bottom: 1px solid var(--surface); }
+.insp td.res { white-space: nowrap; }
+.insp td.mv { font-variant-numeric: tabular-nums; }
+.insp tr.hot td:not(.sys) { font-weight: 600; }
+.insp td.crit { color: var(--ink-2); white-space: nowrap; }
+.note-s { font-size: 13px; color: var(--ink-2); margin-top: 8px; }
 .checks td.done { width: 56px; text-align: center; color: var(--muted); }
 .limits { color: var(--ink-2); }
 .foot { margin-top: 32px; padding-top: 10px; border-top: 1px solid var(--grid);
@@ -631,6 +654,113 @@ def _features_table(attributes: List[Dict[str, Any]], lang: str) -> str:
     return f"<table class='features'><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table>"
 
 
+_INSP_STATUS = {"pass": ("good", "✓"), "caution": ("warning", "!"), "fail": ("critical", "✕")}
+
+
+def _ico(token: str, icon: str, small: bool = False) -> str:
+    return (f"<span class='ico{' sm' if small else ''} {token}' "
+            f"style='background:var(--{token})'>{icon}</span>")
+
+
+def _subject(payload: Dict[str, Any], profile: Optional[Dict[str, Any]],
+             samples: Optional[Dict[str, int]], scores: List[Tuple[str, float]], lang: str) -> str:
+    """What was compared: both sides side by side, the column match and,
+    when asked for, the first rows of each side."""
+    head = (f"<p class='lead'>{_e(t('subject.lead', lang))}</p><table class='info subj'><thead><tr><th></th>"
+            f"<th class='side'>{_e(t('chart.ref', lang))}</th><th class='side'>{_e(t('chart.cur', lang))}</th>"
+            f"</tr></thead><tbody>")
+    rows: List[Tuple[str, str, Optional[str]]] = [(t("subject.path", lang), _e(payload.get("ref")), _e(payload.get("cur")))]
+    out_after = ""
+    if profile:
+        ref_p, cur_p, cols = profile.get("ref") or {}, profile.get("cur") or {}, profile.get("columns") or {}
+
+        def size(p: Dict[str, Any]) -> str:
+            text = t("subject.size_value", lang, rows=p.get("rows", 0), cols=len(p.get("columns") or []))
+            if (p.get("files") or 1) > 1:
+                text += t("subject.files", lang, files=p["files"])
+            return _e(text)
+
+        def period(p: Dict[str, Any]) -> str:
+            per = p.get("period")
+            return _e(t("subject.period_value", lang, **per)) if per else "—"
+
+        one_sided = set(cols.get("only_ref") or []) | set(cols.get("only_cur") or [])
+
+        def chips(p: Dict[str, Any], limit: int = 16) -> str:
+            items = p.get("columns") or []
+            html_ = "".join(
+                f"<span class='chip{' one' if c['name'] in one_sided else ''}'>{_e(c['name'])}"
+                f"<small>{_e(t('kind.' + c['type'], lang))}</small></span>" for c in items[:limit])
+            if len(items) > limit:
+                html_ += f"<span class='chip'>{_e(t('subject.more_cols', lang, count=len(items) - limit))}</span>"
+            return html_
+
+        rows.append((t("subject.size", lang), size(ref_p), size(cur_p)))
+        if ref_p.get("period") or cur_p.get("period"):
+            rows.append((t("subject.period", lang), period(ref_p), period(cur_p)))
+        rows.append((t("subject.columns", lang), chips(ref_p), chips(cur_p)))
+
+        match = [("✓", t("subject.compared", lang, count=len(cols.get("compared") or [])))]
+        for key, mark in (("only_ref", "−"), ("only_cur", "+"), ("time", "·")):
+            if cols.get(key):
+                match.append((mark, t(f"subject.{key}", lang, columns=", ".join(cols[key]))))
+        out_after += (f"<ul class='match' aria-label='{_e(t('subject.match', lang))}'>" + "".join(
+            f"<li><span class='mk'>{_e(m)}</span>{_e(x)}</li>" for m, x in match) + "</ul>")
+
+        shown = [(side, p["sample"]) for side, p in (("ref", ref_p), ("cur", cur_p)) if p.get("sample")]
+        if shown:
+            out_after += f"<div class='sample'><div class='caution'>{_e(t('subject.sample_note', lang))}</div>"
+            for side, smp in shown:
+                cols_h = "".join(f"<th>{_e(c)}</th>" for c in smp["columns"])
+                if smp.get("hidden_columns"):
+                    cols_h += f"<th>{_e(t('subject.more_cols', lang, count=smp['hidden_columns']))}</th>"
+                body = "".join("<tr>" + "".join(f"<td>{_e(v)}</td>" for v in r) +
+                               ("<td>…</td>" if smp.get("hidden_columns") else "") + "</tr>"
+                               for r in smp["rows"])
+                out_after += (f"<h3>{_e(t('subject.sample_title', lang, count=len(smp['rows']), side=t('chart.' + side, lang)))}</h3>"
+                              f"<div class='wrap'><table><thead><tr>{cols_h}</tr></thead>"
+                              f"<tbody>{body}</tbody></table></div>")
+            out_after += "</div>"
+    else:
+        if samples:
+            rows.append((t("subject.samples", lang), _int(samples.get("ref")), _int(samples.get("cur"))))
+        if scores:
+            names = ", ".join(k for k, _ in scores[:20]) + (" …" if len(scores) > 20 else "")
+            rows.append((t("subject.attributes", lang), _e(names), None))
+    body = "".join(f"<tr><th>{_e(k)}</th><td>{a}</td><td>{b}</td></tr>" if b is not None
+                   else f"<tr><th>{_e(k)}</th><td colspan='2'>{a}</td></tr>" for k, a, b in rows)
+    return head + body + "</tbody></table>" + out_after
+
+
+def _inspection_table(rows: List[Dict[str, Any]], lang: str) -> str:
+    if not rows:
+        return ""
+    counts = {k: sum(1 for r in rows if r["status"] == k) for k in ("fail", "caution", "pass")}
+    badges = "".join(
+        f"<span class='status'>{_ico(*_INSP_STATUS[k], small=True)}{_e(t('insp.status.' + k, lang))} "
+        f"<b>{counts[k]}</b></span>" for k in ("fail", "caution", "pass"))
+    head = "".join(f"<th>{_e(t('insp.col.' + c, lang))}</th>"
+                   for c in ("system", "item", "target", "measured", "criterion", "result"))
+    span: Dict[str, int] = {}
+    for r in rows:
+        span[r["system"]] = span.get(r["system"], 0) + 1
+    body, seen = [], set()
+    for r in rows:
+        x = dx.inspection_text(r, lang)
+        token, icon = _INSP_STATUS[r["status"]]
+        sys_cell = ""
+        if r["system"] not in seen:
+            seen.add(r["system"])
+            sys_cell = f"<td class='sys' rowspan='{span[r['system']]}'>{_e(x['system'])}</td>"
+        body.append(
+            f"<tr class='{'hot' if r['status'] != 'pass' else ''}'>{sys_cell}<td>{_e(x['item'])}</td>"
+            f"<td>{_e(x['target'])}</td><td class='mv'>{_e(x['measured'])}</td>"
+            f"<td class='crit'>{_e(x['criterion'])}</td>"
+            f"<td class='res'><span class='status'>{_ico(token, icon, small=True)}{_e(x['result'])}</span></td></tr>")
+    return (f"<div class='counts'>{badges}</div><table class='insp'><thead><tr>{head}</tr></thead>"
+            f"<tbody>{''.join(body)}</tbody></table><p class='note-s'>{_e(t('insp.note', lang))}</p>")
+
+
 def _checks_table(items: List[Tuple[str, str]], lang: str) -> str:
     head = (f"<tr><th class='num'>{_e(t('col.no', lang))}</th><th>{_e(t('col.attribute', lang))}</th>"
             f"<th>{_e(t('col.item', lang))}</th><th>{_e(t('col.done', lang))}</th></tr>")
@@ -700,7 +830,6 @@ def build_consultation_html(
         f"{_e(t('doc.tool', lang))} <b>ddoc {_e(version)}</b></div></header>",
     ]
     info = [
-        (t("info.subject", lang), f"ref: {payload.get('ref')}\ncur: {payload.get('cur')}"),
         (t("info.modality", lang), payload.get("modality") or "—"),
         (t("info.method", lang), f"{payload.get('engine')} / {payload.get('detector')}"),
         (t("info.criteria", lang), t("tile.criteria_sub", lang, threshold=threshold,
@@ -720,7 +849,12 @@ def build_consultation_html(
         n += 1
         return f"<h2>{n}. {_e(t(key, lang))}</h2>"
 
-    # 1. Summary.
+    # 1. What was compared.
+    profile = raw.get("profile") if isinstance(raw.get("profile"), dict) else None
+    parts.append(section("sec.subject"))
+    parts.append(_subject(payload, profile, diagnosis.get("samples"), scores, lang))
+
+    # 2. Summary.
     parts.append(section("sec.summary"))
     parts.append(_tiles(verdict, severity, score, threshold, attr_threshold, scores,
                         diagnosis.get("samples"), lang))
@@ -740,6 +874,12 @@ def build_consultation_html(
         parts.append(section("sec.why"))
         parts.append("<ul class='why'>" + "".join(
             f"<li>{_e(dx.rationale_text(r, lang))}</li>" for r in diagnosis.get("rationale") or []) + "</ul>")
+
+        # Inspection by system.
+        table = _inspection_table(diagnosis.get("inspection") or [], lang)
+        if table:
+            parts.append(section("sec.inspection"))
+            parts.append(table)
 
         # 3. Results by attribute.
         if scores:
