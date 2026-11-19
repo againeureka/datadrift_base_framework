@@ -202,6 +202,13 @@ def build(
         ordered=ordered, overall=overall, threshold=threshold, attr_threshold=attr_threshold,
         smallest=smallest, uniform=samples is not None, profile=profile)
 
+    from . import archetypes  # imports this module's thresholds
+
+    reading = archetypes.read(
+        verdict=verdict, scores=ordered, threshold=threshold,
+        summaries={k: v for k, v in summaries.items() if isinstance(v, dict)},
+        evidence=evidence, profile=profile, smallest=smallest)
+
     return {
         "rationale": _rationale(verdict, overall, ordered[:1] if verdict == "OK" else ordered,
                                 threshold, attr_threshold, reason),
@@ -210,6 +217,7 @@ def build(
         "warnings": warnings,
         "checks": checks,
         "inspection": inspection,
+        "archetypes": reading,
     }
 
 

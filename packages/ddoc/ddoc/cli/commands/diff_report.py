@@ -24,6 +24,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from ... import archetypes as ar
 from ... import diagnosis as dx
 from ...i18n import DEFAULT_LANG, severity_label, t
 
@@ -180,6 +181,34 @@ details.tv table { margin-top: 6px; }
 .callouts .fd { color: var(--ink-2); font-size: 14px; }
 .pod { scroll-margin-top: 16px; }
 .pod:target { outline: 3px solid var(--cur); outline-offset: 2px; }
+.headline { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
+.headline .k { color: var(--ink-2); font-weight: 400; margin-right: 6px; }
+.cards { display: grid; gap: 12px; }
+.card { border: 1px solid var(--border); border-left: 4px solid var(--ink); border-radius: 6px;
+        padding: 14px 18px; break-inside: avoid; }
+.card header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.card h3 { font-size: 17px; }
+.card .badge { font-size: 12px; font-weight: 600; border: 1px solid var(--ink); border-radius: 10px;
+               padding: 0 8px; }
+.card .tg { font-size: 13px; color: var(--ink-2); }
+.card .tg a { color: inherit; }
+.card .sig { margin: 8px 0; padding: 0; list-style: none; font-variant-numeric: tabular-nums; }
+.card .sig li { margin: 2px 0; padding-left: 14px; position: relative; }
+.card .sig li::before { content: "▸"; position: absolute; left: 0; color: var(--ink-2); }
+.card .mean { margin: 6px 0 10px; }
+.card .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.card h4 { font-size: 13px; color: var(--ink-2); margin: 0 0 4px; font-weight: 600; }
+.card .two ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.card .two ul.todo { list-style: none; padding-left: 0; }
+.card .two ul.todo li::before { content: "☐ "; color: var(--ink-2); }
+.card .cav { margin: 10px 0 0; font-size: 14px; color: var(--ink-2); }
+.near { margin-top: 12px; font-size: 14px; }
+.near h3 { font-size: 14px; color: var(--ink-2); margin: 0 0 4px; }
+.near ul { margin: 0; padding-left: 18px; }
+.near .badge { font-size: 12px; border: 1px dashed var(--ink-2); border-radius: 10px; padding: 0 6px;
+               margin: 0 6px; color: var(--ink-2); }
+h3.sub { font-size: 16px; margin: 22px 0 10px; }
+@media (max-width: 720px) { .card .two { grid-template-columns: 1fr; } }
 .checks td.done { width: 56px; text-align: center; color: var(--muted); }
 .limits { color: var(--ink-2); }
 .foot { margin-top: 32px; padding-top: 10px; border-top: 1px solid var(--grid);
@@ -985,6 +1014,55 @@ def _diagram(scores: List[Tuple[str, float]], diagnosis: Dict[str, Any],
     return "".join(out)
 
 
+# ── Pattern reading ───────────────────────────────────────────────────
+
+
+def _targets(card: Dict[str, Any], linked: set) -> List[str]:
+    names = card.get("attrs") or (card.get("signal") or {}).get("attrs") or []
+    return [f"<a href='#{anchor_id(n)}'>{_e(n)}</a>" if n in linked else _e(n) for n in names]
+
+
+def _reading(cards: List[Dict[str, Any]], profile: Optional[Dict[str, Any]],
+             linked: set, lang: str) -> str:
+    """Archetype cards: written-up patterns the measurements match."""
+    matched = [c for c in cards if c["match"] == "match"]
+    near = [c for c in cards if c["match"] == "near"]
+    out = [f"<p class='dg-lead'>{_e(t('reading.lead', lang))}</p><div class='cards'>"]
+    for c in matched:
+        x = ar.card_text(c, lang, profile=profile)
+        targets = _targets(c, linked)
+        tg = (f"<span class='tg'>{_e(t('reading.targets', lang))}: {', '.join(targets)}</span>"
+              if targets else "")
+        out.append(
+            f"<article class='card'><header><h3>{_e(x['title'])}</h3>"
+            f"<span class='badge'>{_e(t('reading.match', lang))}</span>{tg}</header>"
+            f"<ul class='sig' aria-label='{_e(t('reading.signal', lang))}'>"
+            + "".join(f"<li>{_e(line)}</li>" for line in x["signals"]) + "</ul>"
+            f"<p class='mean'>{_e(x['meaning'])}</p><div class='two'>"
+            f"<div><h4>{_e(t('reading.causes', lang))}</h4><ul>"
+            + "".join(f"<li>{_e(v)}</li>" for v in x["causes"]) + "</ul></div>"
+            f"<div><h4>{_e(t('reading.actions', lang))}</h4><ul class='todo'>"
+            + "".join(f"<li>{_e(v)}</li>" for v in x["actions"]) + "</ul></div></div>"
+            f"<p class='cav'><b>{_e(t('reading.caveat', lang))}</b> — {_e(x['caveat'])}</p></article>")
+    out.append("</div>")
+    if near:
+        items = []
+        for c in near:
+            x = ar.card_text(c, lang, profile=profile)
+            items.append(f"<li><b>{_e(x['title'])}</b><span class='badge'>{_e(t('reading.near', lang))}</span>"
+                         f"{_e(' · '.join(x['signals']))}</li>")
+        out.append(f"<div class='near'><h3>{_e(t('reading.near_title', lang))}</h3><ul>{''.join(items)}</ul></div>")
+    return "".join(out)
+
+
+def _headline(cards: List[Dict[str, Any]], lang: str) -> str:
+    titles = [ar.card_text(c, lang)["title"] for c in cards if c["match"] == "match"]
+    if not titles:
+        return ""
+    return (f"<p class='headline'><span class='k'>{_e(t('reading.headline', lang))}</span>"
+            f"{_e(' · '.join(titles))}</p>")
+
+
 def _checks_table(items: List[Tuple[str, str]], lang: str) -> str:
     head = (f"<tr><th class='num'>{_e(t('col.no', lang))}</th><th>{_e(t('col.attribute', lang))}</th>"
             f"<th>{_e(t('col.item', lang))}</th><th>{_e(t('col.done', lang))}</th></tr>")
@@ -1080,6 +1158,8 @@ def build_consultation_html(
 
     # 2. Summary.
     parts.append(section("sec.summary"))
+    cards = diagnosis.get("archetypes") or []
+    parts.append(_headline(cards, lang))
     parts.append(_tiles(verdict, severity, score, threshold, attr_threshold, scores,
                         diagnosis.get("samples"), lang))
     for w in diagnosis.get("warnings") or []:
@@ -1107,6 +1187,11 @@ def build_consultation_html(
         # Data diagram.
         diagram = _diagram(scores, diagnosis, dists, summaries, profile, threshold, attr_threshold,
                            {k for k, _ in pods}, lang)
+        linked = {k for k, _ in pods}
+        # Pattern reading.
+        if cards:
+            parts.append(section("sec.reading"))
+            parts.append(_reading(cards, profile, linked, lang))
         if diagram:
             parts.append(section("sec.diagram"))
             parts.append(diagram)
@@ -1124,10 +1209,10 @@ def build_consultation_html(
         parts.append("<ul class='why'>" + "".join(
             f"<li>{_e(dx.rationale_text(r, lang))}</li>" for r in diagnosis.get("rationale") or []) + "</ul>")
 
-        # Inspection by system.
+        # Inspection by system, under the same heading.
         table = _inspection_table(diagnosis.get("inspection") or [], lang)
         if table:
-            parts.append(section("sec.inspection"))
+            parts.append(f"<h3 class='sub'>{_e(t('sec.inspection', lang))}</h3>")
             parts.append(table)
 
         # 3. Results by attribute.

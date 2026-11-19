@@ -46,3 +46,18 @@ def test_zoo_regime_shift_report_evidence(tmp_path):
                         "--report", str(note)])
     body = note.read_text(encoding="utf-8")
     assert "price" in body and "channel" in body and "Findings by attribute" in body
+
+
+@pytest.mark.parametrize("case,expected", [
+    # the whole world moved: price shifts and spreads, the channel mix flips
+    ("regime_shift", {"regime_shift", "shift_and_spread", "mix_shift"}),
+    # a sensor drifting up and getting noisier
+    ("creeping_degradation", {"shift_and_spread"}),
+    # a daily rhythm is not drift
+    ("rhythm_not_drift", {"stable"}),
+])
+def test_zoo_case_reads_as_its_story(tmp_path, case, expected):
+    ref, cur = _make(case, tmp_path)
+    result = runner.invoke(app, ["diff", str(ref), str(cur), "--json"])
+    cards = json.loads(result.stdout.strip())["diagnosis"]["archetypes"]
+    assert {c["code"] for c in cards if c["match"] == "match"} == expected

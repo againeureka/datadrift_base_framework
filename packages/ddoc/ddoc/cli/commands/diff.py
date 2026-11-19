@@ -36,6 +36,7 @@ import typer
 from rich import print as rprint
 
 from .utils import call_hook_isolated, get_pmgr
+from ... import archetypes
 from ... import diagnosis as dx
 from ...i18n import resolve_lang, severity_label, t
 
@@ -137,9 +138,11 @@ def _numeric_summary(r, c) -> Dict[str, Any]:
     of current values that fall outside the baseline's [min, max]."""
     def stats(x) -> Dict[str, Optional[float]]:
         if x.empty:
-            return {"mean": None, "std": None, "median": None, "min": None, "max": None}
+            return {"mean": None, "std": None, "median": None, "q1": None, "q3": None,
+                    "min": None, "max": None}
         return {k: round(float(v), 6) for k, v in (
             ("mean", x.mean()), ("std", x.std(ddof=0)), ("median", x.median()),
+            ("q1", x.quantile(0.25)), ("q3", x.quantile(0.75)),
             ("min", x.min()), ("max", x.max()))}
     rs, cs = stats(r), stats(c)
     out: Dict[str, Any] = {k: {"ref": rs[k], "cur": cs[k]} for k in rs}
@@ -162,7 +165,14 @@ def _category_changes(ref_counts: Dict[Any, float], cur_counts: Dict[Any, float]
     labels = list(dict.fromkeys([*ref_counts, *cur_counts]))
     movers = sorted(((str(k), ref_counts.get(k, 0) / rt, cur_counts.get(k, 0) / ct) for k in labels),
                     key=lambda m: abs(m[2] - m[1]), reverse=True)
+    # A "new" value that matches a baseline value once case, spaces and
+    # separators are ignored is more likely a spelling variant than news.
+    def norm(x: Any) -> str:
+        return re.sub(r"[\s_\-]+", "", str(x)).casefold()
+    known = {norm(k): str(k) for k in ref_counts}
+    variants = [[k, known[norm(k)]] for k, _ in new if norm(k) in known][:limit]
     return {"new_values": [[k, round(v, 4)] for k, v in new[:limit]],
+            "variants": variants,
             "vanished_values": [[k, round(v, 4)] for k, v in gone[:limit]],
             "top_mover": [movers[0][0], round(movers[0][1], 4), round(movers[0][2], 4)]
                          if movers else None}
@@ -640,6 +650,13 @@ def diff_command(
     )
     hints: List[str] = [dx.warning_text(w, lang) for w in diagnosis["warnings"]
                         if w["code"] == "small_sample"]
+    try:  # the reading line is a convenience; it must never cost the verdict
+        titles = [archetypes.card_text(c, lang)["title"] for c in diagnosis["archetypes"]
+                  if c["match"] == "match" and c["code"] != "stable"]
+    except Exception:  # noqa: BLE001
+        titles = []
+    if titles:
+        hints.append(t("reading.headline", lang) + " " + " · ".join(titles))
     if verdict == "DRIFT":
         hints += dx.check_texts(diagnosis, lang)[:3]
         if report is None:
