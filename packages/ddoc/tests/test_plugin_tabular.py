@@ -142,6 +142,21 @@ def test_plugin_returns_none_for_drift(tmp_path: Path):
     assert res is None
 
 
+def test_plugin_returns_none_for_tabular_drift(tmp_path: Path):
+    """A drift result on tabular data (e.g. `ddoc diff` on CSV) must go
+    to the drift report, not be drawn in the EDA layout."""
+    plugin = TabularReportPlugin()
+    out = tmp_path / "r.html"
+    res = plugin.report_render(
+        drift_result={"modality": "tabular", "overall_score": 0.3,
+                      "attribute_drifts": {"price": 0.5}, "rows": {"ref": 10, "cur": 10}},
+        eda_result=None,
+        format="html", output_path=str(out), cfg={},
+    )
+    assert res is None
+    assert not out.exists()
+
+
 def test_plugin_returns_none_for_unsupported_format(tmp_path: Path):
     """We don't render markdown — let ddoc's built-in handle it."""
     plugin = TabularReportPlugin()

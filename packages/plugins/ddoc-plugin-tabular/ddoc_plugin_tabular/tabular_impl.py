@@ -80,12 +80,12 @@ class TabularReportPlugin:
         output_path: str,
         cfg: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
-        # Drift envelopes never render through this plugin.
-        if drift_result and not _looks_tabular(drift_result):
+        # Drift envelopes never render through this plugin — not even
+        # tabular ones: the EDA layout has no place for drift scores, so
+        # ddoc's built-in drift report handles them.
+        if drift_result:
             return None
-        envelope = eda_result if _looks_tabular(eda_result) else (
-            drift_result if _looks_tabular(drift_result) else None
-        )
+        envelope = eda_result if _looks_tabular(eda_result) else None
         if envelope is None:
             return None
 
