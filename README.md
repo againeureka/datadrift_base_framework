@@ -53,7 +53,8 @@ Three ways to use it:
 ```
 
 `./run.sh setup all` installs every plugin (the vision plugin pulls in
-torch). Without bash (e.g. Windows without WSL), the same steps by hand:
+torch). Reports and hints are in English by default; set `DDOC_LANG=ko`
+(or pass `--lang ko`) for Korean, e.g. `DDOC_LANG=ko ./run.sh demo`. Without bash (e.g. Windows without WSL), the same steps by hand:
 
 ```bash
 pip install -e packages/ddoc                              # core CLI

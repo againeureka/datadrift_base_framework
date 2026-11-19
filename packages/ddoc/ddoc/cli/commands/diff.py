@@ -34,6 +34,7 @@ import typer
 from rich import print as rprint
 
 from .utils import call_hook_isolated, get_pmgr
+from ...i18n import resolve_lang, severity_label, t
 
 EXIT_OK = 0
 EXIT_DRIFT = 1
@@ -239,28 +240,31 @@ def _emit_json(payload: Dict[str, Any]) -> None:
     sys.stdout.write(json.dumps(payload, ensure_ascii=False, default=str) + "\n")
 
 
-def _print_human(payload: Dict[str, Any]) -> None:
+def _print_human(payload: Dict[str, Any], lang: str) -> None:
     verdict = payload["verdict"]
     icon = {"OK": "[green]✅ OK[/green]",
             "DRIFT": "[red]⚠ DRIFT[/red]",
             "BLIND": "[yellow]◌ BLIND[/yellow]"}[verdict]
-    head = f"{icon} — severity: {payload['severity']}"
+    head = (f"{icon} — {t('label.severity', lang)}: "
+            f"{severity_label(payload['severity'], lang)}")
     if payload.get("overall_score") is not None:
-        head += f" · score {payload['overall_score']:.4f} (threshold {payload['threshold']})"
+        head += " · " + t("console.score", lang, score=payload["overall_score"],
+                          threshold=payload["threshold"])
     rprint(head)
     if payload.get("top_attributes"):
         tops = " · ".join(f"{k} {v:.3f}" for k, v in payload["top_attributes"][:3])
-        rprint(f"   가장 변한 속성: {tops}")
-    rprint(f"   modality: {payload.get('modality') or '?'} · engine: {payload.get('engine')}"
-           f" · ref: {payload['ref']} · cur: {payload['cur']}")
+        rprint("   " + t("console.top_attrs", lang, tops=tops))
+    rprint("   " + t("console.meta", lang, modality=payload.get("modality") or "?",
+                      engine=payload.get("engine"), ref=payload["ref"], cur=payload["cur"]))
     if verdict == "BLIND":
-        rprint(f"   [yellow]사유:[/yellow] {payload.get('reason')}")
+        rprint(f"   [yellow]{t('console.reason', lang)}:[/yellow] {payload.get('reason')}")
     for hint in payload.get("hints", []):
         rprint(f"   ⤷ {hint}")
 
 
 def _write_report(payload: Dict[str, Any], report: Optional[Path],
-                  distributions: Optional[Dict[str, Any]] = None) -> None:
+                  distributions: Optional[Dict[str, Any]] = None, *,
+                  lang: str) -> None:
     """Render the consultation note when ``--report`` was given.
     Best-effort: a report failure must not change the verdict/exit."""
     if report is None:
@@ -269,27 +273,27 @@ def _write_report(payload: Dict[str, Any], report: Optional[Path],
         from .diff_report import build_consultation_html
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(
-            build_consultation_html(payload, distributions), encoding="utf-8",
+            build_consultation_html(payload, distributions, lang=lang), encoding="utf-8",
         )
         payload["report_path"] = str(report)
-        payload.setdefault("hints", []).insert(0, f"소견서: {report}")
+        payload.setdefault("hints", []).insert(0, t("hint.report_written", lang, path=report))
     except Exception as e:  # noqa: BLE001
         payload["report_error"] = str(e)
 
 
-def _finish(payload: Dict[str, Any], *, json_out: bool,
+def _finish(payload: Dict[str, Any], *, json_out: bool, lang: str,
             report: Optional[Path] = None,
             distributions: Optional[Dict[str, Any]] = None) -> None:
-    _write_report(payload, report, distributions)
+    _write_report(payload, report, distributions, lang=lang)
     if json_out:
         _emit_json(payload)
     else:
-        _print_human(payload)
+        _print_human(payload, lang)
     code = {"OK": EXIT_OK, "DRIFT": EXIT_DRIFT, "BLIND": EXIT_BLIND}[payload["verdict"]]
     raise typer.Exit(code=code)
 
 
-def _blind(reason: str, *, ref: str, cur: str, json_out: bool,
+def _blind(reason: str, *, ref: str, cur: str, json_out: bool, lang: str,
            modality: Optional[str] = None, hints: Optional[List[str]] = None,
            report: Optional[Path] = None) -> None:
     _finish({
@@ -297,7 +301,7 @@ def _blind(reason: str, *, ref: str, cur: str, json_out: bool,
         "modality": modality, "engine": None, "detector": None,
         "ref": ref, "cur": cur, "reason": reason, "hints": hints or [],
         "top_attributes": [], "threshold": None,
-    }, json_out=json_out, report=report)
+    }, json_out=json_out, lang=lang, report=report)
 
 
 def _collect_evidence(kind: str, ref: Path, cur: Path,
@@ -357,6 +361,11 @@ def diff_command(
         help="Write a self-contained HTML consultation note (verdict + "
              "evidence + prescription) to this path.",
     ),
+    lang: Optional[str] = typer.Option(
+        None, "--lang",
+        help="Language for the report, hints and console text: en | ko "
+             "(default: $DDOC_LANG, else en). JSON keys and verdicts stay English.",
+    ),
 ):
     """One-line drift verdict between REF and CUR.
 
@@ -367,11 +376,12 @@ def diff_command(
         ddoc diff jan.csv aug.csv --json
         ddoc diff camA_ref/ camA_now/ --attr-threshold 0.3
     """
+    lang = resolve_lang(lang)
     ref_s, cur_s = str(ref), str(cur)
     for label, p in (("ref", ref), ("cur", cur)):
         if not p.exists():
-            _blind(f"{label} 경로가 존재하지 않습니다: {p}",
-                   ref=ref_s, cur=cur_s, json_out=json_out, report=report)
+            _blind(t("reason.path_missing", lang, label=label, path=p),
+                   ref=ref_s, cur=cur_s, json_out=json_out, lang=lang, report=report)
 
     ref_kind, ref_detail = sniff_modality(ref)
     cur_kind, cur_detail = sniff_modality(cur)
@@ -414,22 +424,22 @@ def diff_command(
                               cur_detail.get("files") or [cur_s])
             engine = "builtin"
         except Exception as e:  # noqa: BLE001
-            _blind(f"CSV 비교 실패: {e}", ref=ref_s, cur=cur_s,
-                   json_out=json_out, modality="tabular", report=report)
+            _blind(t("reason.csv_failed", lang, error=e), ref=ref_s, cur=cur_s,
+                   json_out=json_out, lang=lang, modality="tabular", report=report)
 
     # 3) Still nothing → honest BLIND with a prescription.
     if result is None:
         hints = []
         if kind == "vision":
-            hints.append("이미지 드리프트 플러그인 설치: pip install ddoc-plugin-vision (torch 필요)")
+            hints.append(t("hint.install_vision", lang))
         elif kind in ("audio", "text"):
-            hints.append(f"pip install ddoc-plugin-{kind}")
+            hints.append(t("hint.install_plugin", lang, kind=kind))
         elif kind == "unknown":
-            hints.append("지원 입력: 이미지/오디오/텍스트 폴더, CSV, ddoc categorical 레이아웃")
+            hints.append(t("hint.supported_inputs", lang))
         _blind(
-            f"감지된 입력 종류 '{kind}' 를 처리할 엔진이 응답하지 않았습니다",
-            ref=ref_s, cur=cur_s, json_out=json_out, modality=kind, hints=hints,
-            report=report,
+            t("reason.no_engine", lang, kind=kind),
+            ref=ref_s, cur=cur_s, json_out=json_out, lang=lang, modality=kind,
+            hints=hints, report=report,
         )
 
     verdict, severity, top = compute_verdict(
@@ -438,9 +448,9 @@ def diff_command(
     hints: List[str] = []
     if verdict == "DRIFT":
         worst = top[0][0] if top else "?"
-        hints.append(f"처방: '{worst}' 축의 최근 샘플을 재계측/재라벨 후보로 검토")
+        hints.append(t("hint.rx_worst", lang, attr=worst))
         if report is None:
-            hints.append("소견서: --report note.html 로 근거 포함 리포트 생성")
+            hints.append(t("hint.report_suggest", lang))
 
     evidence = _collect_evidence(kind, ref, cur, result)
     _finish({
@@ -456,4 +466,4 @@ def diff_command(
         "ref": ref_s, "cur": cur_s,
         "hints": hints,
         "raw": result,
-    }, json_out=json_out, report=report, distributions=evidence)
+    }, json_out=json_out, lang=lang, report=report, distributions=evidence)

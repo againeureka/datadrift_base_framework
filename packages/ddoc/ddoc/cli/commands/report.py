@@ -23,6 +23,7 @@ import typer
 from rich import print as rprint
 
 from .utils import get_pmgr
+from ...i18n import resolve_lang, t
 
 
 def _load_input(input_path: Path) -> Dict[str, Any]:
@@ -147,6 +148,9 @@ def _builtin_render(
         loader=FileSystemLoader(str(templates_dir)),
         autoescape=select_autoescape(["html", "xml"]),
     )
+    lang = cfg.get("lang") or resolve_lang()
+    env.globals["lang"] = lang
+    env.globals["_"] = lambda key, **kw: t(key, lang, **kw)
 
     def _status_class(score: Optional[float]) -> str:
         if score is None:
@@ -205,19 +209,20 @@ def _builtin_render(
 
 
 def _render_markdown(drift, eda, cfg) -> str:
-    title = cfg.get("title") or ("Drift Report" if drift else "EDA Report")
+    lang = cfg.get("lang") or resolve_lang()
+    title = cfg.get("title") or t("report.drift_title" if drift else "report.eda_title", lang)
     lines = [f"# {title}", ""]
     if drift is not None:
-        lines.append(f"- modality: `{drift.get('modality', 'unknown')}`")
-        lines.append(f"- timestamp: {drift.get('timestamp', 'n/a')}")
-        lines.append(f"- overall_score: **{drift.get('overall_score', 0):.4f}**")
+        lines.append(f"- {t('report.modality', lang)}: `{drift.get('modality', 'unknown')}`")
+        lines.append(f"- {t('report.timestamp', lang)}: {drift.get('timestamp', 'n/a')}")
+        lines.append(f"- {t('report.overall_score', lang)}: **{drift.get('overall_score', 0):.4f}**")
         if drift.get("status"):
-            lines.append(f"- status: **{drift['status']}**")
+            lines.append(f"- {t('report.status', lang)}: **{drift['status']}**")
         if drift.get("embedding_drift_detector"):
-            lines.append(f"- embedding detector: `{drift['embedding_drift_detector']}`")
+            lines.append(f"- {t('report.embedding_detector', lang)}: `{drift['embedding_drift_detector']}`")
         normalized = _normalize_attribute_drifts(drift.get("attribute_drifts"))
         if normalized:
-            lines += ["", "## Attribute drifts", ""]
+            lines += ["", f"## {t('report.attribute_drifts', lang)}", ""]
             for name, score, extras in normalized:
                 score_str = "—" if score is None else f"{score:.4f}"
                 extras_str = (
@@ -226,12 +231,12 @@ def _render_markdown(drift, eda, cfg) -> str:
                 )
                 lines.append(f"- `{name}`: {score_str}{extras_str}")
     if eda is not None:
-        lines.append(f"- modality: `{eda.get('modality', 'unknown')}`")
+        lines.append(f"- {t('report.modality', lang)}: `{eda.get('modality', 'unknown')}`")
         if "summary" in eda:
-            lines += ["", "## Summary", ""]
+            lines += ["", f"## {t('report.summary', lang)}", ""]
             for k, v in eda["summary"].items():
                 lines.append(f"- `{k}`: {v}")
-    lines += ["", "## Raw envelope", "", "```json"]
+    lines += ["", f"## {t('report.raw_envelope', lang)}", "", "```json"]
     lines.append(json.dumps(drift if drift is not None else eda, indent=2, ensure_ascii=False, default=str))
     lines += ["```", ""]
     return "\n".join(lines)
@@ -262,6 +267,10 @@ def render_report(
         False, "--json",
         help="Emit machine-readable JSON envelope to stdout instead of pretty progress.",
     ),
+    lang: Optional[str] = typer.Option(
+        None, "--lang",
+        help="Report language: en | ko (default: $DDOC_LANG, else en).",
+    ),
 ):
     """Render a drift / EDA envelope to an HTML, PDF, or Markdown report.
 
@@ -285,7 +294,7 @@ def render_report(
         raise typer.Exit(code=2)
 
     drift_result, eda_result = _classify_envelope(payload)
-    cfg = {"title": title}
+    cfg = {"title": title, "lang": resolve_lang(lang)}
 
     # Try plugin hookimpls first; fall back to built-in if all return None.
     pm = get_pmgr().pm

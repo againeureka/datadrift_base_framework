@@ -3,6 +3,10 @@
 모든 명령은 `--help` 로 최신 옵션을 확인할 수 있습니다.
 `ddoc showcmd` 는 등록된 명령 트리를 보여줍니다.
 
+리포트와 안내 문구의 언어는 `--lang` 또는 환경변수 `DDOC_LANG`
+(`en` · `ko`) 으로 고릅니다. `--json` 출력의 키와 판정 값(`OK`, `DRIFT`,
+`high` 등)은 언어와 관계없이 영어로 유지됩니다.
+
 ## `ddoc diff <ref> <cur>`
 
 두 데이터셋의 한 줄 drift 판정. exit code: `0` OK · `1` DRIFT · `2` BLIND.
@@ -15,6 +19,7 @@
 | `--json` | | 판정 JSON 한 객체를 stdout 에 |
 | `--verbose` | | 플러그인 진단 메시지 표시 |
 | `--report <path>` | | 판정 + 근거 + 처방을 담은 HTML 소견서 저장 |
+| `--lang` | `$DDOC_LANG`, 없으면 `en` | 소견서·안내 문구·터미널 출력 언어 (`en` · `ko`) |
 
 ## `ddoc analyze drift`
 
@@ -47,6 +52,7 @@ drift / EDA envelope 를 리포트로 렌더.
 | `-o`, `--out` | 출력 경로 (필수). 형식은 확장자로 추정 |
 | `-f`, `--format` | `html` · `pdf` · `md` |
 | `--title` | 리포트 제목 |
+| `--lang` | 리포트 언어 (`en` · `ko`, 기본값 `$DDOC_LANG`, 없으면 `en`) |
 | `--json` | 결과 envelope 출력 |
 
 ## `ddoc export drift-report <input>`

@@ -219,7 +219,8 @@ def test_build_consultation_html_minimal():
         "modality": "tabular", "engine": "builtin", "detector": "x",
         "raw": {"attribute_drifts": {"a": 0.01}}, "hints": [],
     })
-    assert "<html>" in html_out and "OK" in html_out
+    assert html_out.startswith("<!doctype html><html") and "</html>" in html_out
+    assert "OK" in html_out
 
 
 # ── plugin isolation ──────────────────────────────────────────────────
