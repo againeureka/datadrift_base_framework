@@ -103,6 +103,11 @@ def _patterns(summary: Dict[str, Any]) -> List[Dict[str, Any]]:
     return found
 
 
+def patterns(summary: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Change patterns for one attribute summary."""
+    return _patterns(summary)
+
+
 def _rationale(verdict: str, overall: Optional[float], top: List[Tuple[str, float]],
                threshold: float, attr_threshold: float, reason: Optional[str]) -> List[Dict[str, Any]]:
     if verdict == "BLIND":

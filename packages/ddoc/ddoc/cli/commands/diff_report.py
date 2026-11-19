@@ -146,6 +146,40 @@ details.tv table { margin-top: 6px; }
 .insp tr.hot td:not(.sys) { font-weight: 600; }
 .insp td.crit { color: var(--ink-2); white-space: nowrap; }
 .note-s { font-size: 13px; color: var(--ink-2); margin-top: 8px; }
+.dg-lead { color: var(--ink-2); margin: 0 0 10px; font-size: 14px; }
+.dg { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+      border: 2px solid var(--ink-2); border-radius: 6px; overflow: hidden; }
+.dg .part { position: relative; display: flex; flex-direction: column; min-width: 0;
+            border-right: 1px solid var(--grid); border-bottom: 1px solid var(--grid);
+            color: inherit; text-decoration: none; background: var(--surface); }
+.dg .part .bar-s { height: 4px; }
+.dg .part .nm { font-size: 13px; font-weight: 600; padding: 6px 8px 0; overflow: hidden;
+                text-overflow: ellipsis; white-space: nowrap; background: var(--chip); }
+.dg .part .ty { font-size: 11px; color: var(--ink-2); padding: 0 8px 4px; background: var(--chip);
+                border-bottom: 1px solid var(--grid); }
+.dg .part svg { height: 44px; margin: 6px 0 2px; }
+.dg .part .st { font-size: 12px; padding: 0 8px 6px; display: flex; align-items: center; gap: 4px;
+                color: var(--ink-2); white-space: nowrap; }
+.dg .part .no { position: absolute; top: 8px; right: 6px; min-width: 20px; height: 20px; border-radius: 10px;
+                background: var(--ink); color: var(--surface); font-size: 12px; font-weight: 700;
+                display: flex; align-items: center; justify-content: center; padding: 0 5px; }
+.dg .part.off { background: repeating-linear-gradient(135deg, transparent 0 6px, var(--grid) 6px 7px); }
+.dg .part.off .nm, .dg .part.off .ty { background: transparent; }
+.dg .part.s-fail { box-shadow: inset 0 0 0 2px var(--critical); }
+.dg .part.s-caution { box-shadow: inset 0 0 0 2px var(--warning); }
+.dg .part.hl, .dg a.part:hover, .dg a.part:focus-visible { outline: 3px solid var(--cur); outline-offset: -3px;
+                                                           z-index: 1; }
+.dg-more { font-size: 13px; color: var(--ink-2); margin-top: 6px; }
+.callouts { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
+.callouts li { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: start;
+               border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; }
+.callouts li.hl { border-color: var(--cur); }
+.callouts .no { width: 22px; height: 22px; border-radius: 11px; background: var(--ink); color: var(--surface);
+                font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.callouts a { color: inherit; font-weight: 600; }
+.callouts .fd { color: var(--ink-2); font-size: 14px; }
+.pod { scroll-margin-top: 16px; }
+.pod:target { outline: 3px solid var(--cur); outline-offset: 2px; }
 .checks td.done { width: 56px; text-align: center; color: var(--muted); }
 .limits { color: var(--ink-2); }
 .foot { margin-top: 32px; padding-top: 10px; border-top: 1px solid var(--grid);
@@ -181,6 +215,7 @@ details.tv table { margin-top: 6px; }
   .tile .val { font-size: 21px; white-space: nowrap; }
   .tile .sub { font-size: 11px; }
   details.tv, #tip { display: none; }
+  .dg .part { break-inside: avoid; }
   h2 { break-after: avoid; }
 }
 """
@@ -214,6 +249,20 @@ _SCRIPT = """
     var p = bar.querySelector('.print');
     if (p) p.addEventListener('click', function () { window.print(); });
   }
+})();
+(function () {
+  function pair(name, on) {
+    document.querySelectorAll('[data-col]').forEach(function (el) {
+      if (el.getAttribute('data-col') === name) el.classList.toggle('hl', on);
+    });
+  }
+  document.querySelectorAll('[data-col]').forEach(function (el) {
+    var name = el.getAttribute('data-col');
+    el.addEventListener('pointerenter', function () { pair(name, true); });
+    el.addEventListener('pointerleave', function () { pair(name, false); });
+    el.addEventListener('focusin', function () { pair(name, true); });
+    el.addEventListener('focusout', function () { pair(name, false); });
+  });
 })();
 (function () {
   var tip = document.getElementById('tip');
@@ -613,7 +662,8 @@ def _pod(name: str, score: float, attr: Dict[str, Any], dists: Optional[Dict[str
                                                    t("col.cur", lang), t("col.change", lang)], table, (1, 2, 3)))
     if not body:
         return ""
-    return f"<section class='pod'>{head}<div class='bd'>{''.join(body)}</div></section>"
+    return (f"<section class='pod' id='{anchor_id(name)}'>{head}"
+            f"<div class='bd'>{''.join(body)}</div></section>")
 
 
 def _features_table(attributes: List[Dict[str, Any]], lang: str) -> str:
@@ -761,6 +811,180 @@ def _inspection_table(rows: List[Dict[str, Any]], lang: str) -> str:
             f"<tbody>{''.join(body)}</tbody></table><p class='note-s'>{_e(t('insp.note', lang))}</p>")
 
 
+# ── Data diagram ──────────────────────────────────────────────────────
+#
+# The data drawn as an object, the way an inspection sheet draws the
+# vehicle: one part per column (attribute), in the data's own order, each
+# with a thumbnail of baseline vs current, its result, and a number when
+# something needs attention. Numbers match the callout list below it, and
+# each numbered part links to that attribute's findings.
+
+_DIAGRAM_MAX = 40
+_RANK = {"pass": 0, "caution": 1, "fail": 2}
+
+
+def anchor_id(name: str) -> str:
+    return "d-" + hashlib.sha1(str(name).encode("utf-8")).hexdigest()[:10]
+
+
+def _spark(dists: Optional[Dict[str, Any]], summary: Optional[Dict[str, Any]]) -> str:
+    """Tiny baseline-vs-current thumbnail (gray vs accent)."""
+    if not dists:
+        return ""
+    ref_raw, cur_raw = dists.get("ref") or {}, dists.get("cur") or {}
+    if dx.is_stat_dict(ref_raw) or dx.is_stat_dict(cur_raw):
+        return ""
+    ref_n, cur_n = _norm(ref_raw), _norm(cur_raw)
+    labels = list(dict.fromkeys([*ref_raw, *cur_raw]))
+    if not labels:
+        return ""
+    W, H, pad = 100.0, 40.0, 4.0
+    out = [f"<svg viewBox='0 0 {W:g} {H:g}' preserveAspectRatio='none' aria-hidden='true'>"]
+    bins = [(_RANGE.match(str(k)), k) for k in labels]
+    discrete = (summary or {}).get("discrete")
+    if summary and summary.get("kind") == "numeric" and not discrete and all(m for m, _ in bins):
+        ordered = sorted(((float(m.group(1)), k) for m, k in bins))
+        peak = max([*ref_n.values(), *cur_n.values(), 1e-9])
+        step = (W - 2 * pad) / len(ordered)
+        for share, color in ((ref_n, "var(--ref)"), (cur_n, "var(--cur)")):
+            d = []
+            for i, (_, k) in enumerate(ordered):
+                y = H - pad - (H - 2 * pad) * share.get(k, 0.0) / peak
+                x0, x1 = pad + i * step, pad + (i + 1) * step
+                d.append(f"{'M' if i == 0 else 'L'}{x0:.1f},{y:.1f}L{x1:.1f},{y:.1f}")
+            out.append(f"<path d='{''.join(d)}' fill='none' stroke='{color}' stroke-width='1.5' "
+                       f"vector-effect='non-scaling-stroke'/>")
+    else:
+        # The values that moved most, so a new or vanished value is never
+        # left out of the thumbnail; drawn in value order when values are numbers.
+        if not discrete:
+            labels.sort(key=lambda k: abs(cur_n.get(k, 0.0) - ref_n.get(k, 0.0)), reverse=True)
+            labels = labels[:6]
+        try:
+            labels.sort(key=float)
+        except ValueError:
+            labels.sort(key=lambda k: ref_n.get(k, 0.0), reverse=True)
+        peak = max([*(ref_n.get(k, 0.0) for k in labels), *(cur_n.get(k, 0.0) for k in labels), 1e-9])
+        slot = (W - 2 * pad) / len(labels)
+        bw = slot * 0.36
+        for i, k in enumerate(labels):
+            cx = pad + slot * (i + 0.5)
+            for x0, share, color in ((cx - bw - 0.5, ref_n.get(k, 0.0), "var(--ref)"),
+                                     (cx + 0.5, cur_n.get(k, 0.0), "var(--cur)")):
+                h = (H - 2 * pad) * share / peak
+                if h > 0:
+                    out.append(f"<rect x='{x0:.1f}' y='{H - pad - h:.1f}' width='{bw:.1f}' "
+                               f"height='{h:.1f}' fill='{color}'/>")
+    out.append(f"<line x1='{pad}' y1='{H - pad}' x2='{W - pad}' y2='{H - pad}' stroke='var(--axis)' "
+               f"stroke-width='1' vector-effect='non-scaling-stroke'/></svg>")
+    return "".join(out)
+
+
+def _attr_status(diagnosis: Dict[str, Any], scores: Dict[str, float], threshold: float,
+                 attr_threshold: float) -> Tuple[Dict[str, str], Dict[str, List[Dict[str, Any]]]]:
+    """Worst result per attribute, and the inspection rows that name it."""
+    status: Dict[str, str] = {}
+    rows: Dict[str, List[Dict[str, Any]]] = {}
+    for name, score in scores.items():
+        status[name] = "fail" if score >= attr_threshold else "caution" if score >= threshold else "pass"
+    for r in diagnosis.get("inspection") or []:
+        name = r.get("attr")
+        if not name or r.get("count") is not None or r["status"] == "pass":
+            continue
+        rows.setdefault(name, []).append(r)
+        if _RANK[r["status"]] > _RANK[status.get(name, "pass")]:
+            status[name] = r["status"]
+    return status, rows
+
+
+def _diagram(scores: List[Tuple[str, float]], diagnosis: Dict[str, Any],
+             dists: Dict[str, Any], summaries: Dict[str, Any], profile: Optional[Dict[str, Any]],
+             threshold: float, attr_threshold: float, linked: set, lang: str) -> str:
+    score_of = dict(scores)
+    status, rows = _attr_status(diagnosis, score_of, threshold, attr_threshold)
+    # Parts in the data's own order when it is known; otherwise by score.
+    parts: List[Tuple[str, str, Optional[str]]] = []  # (name, type, off-reason)
+    if profile:
+        cols = profile.get("columns") or {}
+        types = {c["name"]: c["type"] for side in ("ref", "cur")
+                 for c in (profile.get(side) or {}).get("columns") or []}
+        off = {**{c: "only_ref" for c in cols.get("only_ref") or []},
+               **{c: "only_cur" for c in cols.get("only_cur") or []},
+               **{c: "time" for c in cols.get("time") or []}}
+        order = [c["name"] for c in (profile.get("ref") or {}).get("columns") or []]
+        order += [c for c in cols.get("only_cur") or [] if c not in order]
+        parts = [(c, types.get(c, ""), off.get(c)) for c in order]
+    else:
+        parts = [(k, (summaries.get(k) or {}).get("kind") or "", None) for k, _ in scores]
+    if not parts:
+        return ""
+    hidden = 0
+    if len(parts) > _DIAGRAM_MAX:
+        # Always draw what needs attention or is not compared; fill the
+        # rest of the room with passing columns in order.
+        must = {i for i, p in enumerate(parts) if p[2] or status.get(p[0], "pass") != "pass"}
+        room = max(0, _DIAGRAM_MAX - len(must))
+        extra = set([i for i in range(len(parts)) if i not in must][:room])
+        hidden = len(parts) - len(must) - len(extra)
+        parts = [p for i, p in enumerate(parts) if i in must or i in extra]
+
+    numbered: List[str] = []
+    cells = []
+    for name, kind, off in parts:
+        st = None if off else status.get(name, "pass")
+        if st and st != "pass":
+            numbered.append(name)
+        no = f"<span class='no'>{len(numbered)}</span>" if st and st != "pass" else ""
+        if off:
+            state = f"<span class='st'>{_e(t('diagram.' + off, lang))}</span>"
+            bar = "<div class='bar-s'></div>"
+        else:
+            token, icon = _INSP_STATUS[st]
+            state = f"<span class='st status'>{_ico(token, icon, small=True)}{_e(t('insp.status.' + st, lang))}</span>"
+            bar = f"<div class='bar-s' style='background:var(--{token})'></div>" if st != "pass" else "<div class='bar-s'></div>"
+        sc = score_of.get(name)
+        tip = name + (f"\n{t('chart.score', lang)} {sc:.3f}" if sc is not None else "")
+        if off:
+            tip += "\n" + t("diagram." + off, lang)
+        else:
+            tip += "\n" + t("insp.status." + st, lang)
+        inner = (f"{bar}<div class='nm'>{_e(name)}</div>"
+                 f"<div class='ty'>{_e(t('kind.' + kind, lang) if kind else '')}&nbsp;</div>"
+                 f"{'' if off else _spark(dists.get(name), summaries.get(name))}{state}{no}")
+        cls = f"part {'off' if off else 's-' + st}"
+        if not off and name in linked:
+            cells.append(f"<a class='{cls}' href='#{anchor_id(name)}' data-col='{_e(name)}' "
+                         f"data-tip='{_e(tip)}' aria-label='{_e(tip)}'>{inner}</a>")
+        else:
+            cells.append(f"<div class='{cls}' data-col='{_e(name)}' data-tip='{_e(tip)}' "
+                         f"tabindex='0' aria-label='{_e(tip)}'>{inner}</div>")
+    lead = t("diagram.lead" if profile else "diagram.lead_scores", lang)
+    out = [f"<p class='dg-lead'>{_e(lead)}</p>", _legend(lang),
+           f"<div class='dg'>{''.join(cells)}</div>"]
+    if hidden:
+        out.append(f"<div class='dg-more'>{_e(t('diagram.more', lang, count=hidden))}</div>")
+
+    if numbered:
+        items = []
+        for i, name in enumerate(numbered, 1):
+            found = []
+            sc = score_of.get(name)
+            has_score_row = any(r["item"] == "attr_score" for r in rows.get(name, []))
+            if sc is not None and not has_score_row:
+                found.append(f"{t('insp.item.attr_score', lang)} {sc:.3f}")
+            for r in rows.get(name, []):
+                x = dx.inspection_text(r, lang)
+                found.append(f"{x['item']} {x['measured']} ({x['result']})")
+            token, icon = _INSP_STATUS[status[name]]
+            title = (f"<a href='#{anchor_id(name)}'>{_e(name)}</a>" if name in linked else f"<b>{_e(name)}</b>")
+            items.append(
+                f"<li data-col='{_e(name)}'><span class='no'>{i}</span><div>{title} "
+                f"<span class='status'>{_ico(token, icon, small=True)}{_e(t('insp.status.' + status[name], lang))}</span>"
+                f"<div class='fd'>{_e(' · '.join(found))}</div></div></li>")
+        out.append(f"<ol class='callouts'>{''.join(items)}</ol>")
+    return "".join(out)
+
+
 def _checks_table(items: List[Tuple[str, str]], lang: str) -> str:
     head = (f"<tr><th class='num'>{_e(t('col.no', lang))}</th><th>{_e(t('col.attribute', lang))}</th>"
             f"<th>{_e(t('col.item', lang))}</th><th>{_e(t('col.done', lang))}</th></tr>")
@@ -862,6 +1086,31 @@ def build_consultation_html(
         parts.append(f"<div class='caution'><b>{_e(t('note.caution', lang))}</b> — "
                      f"{_e(dx.warning_text(w, lang))}</div>")
 
+    # Findings panels: the top attributes plus any the diagram numbers.
+    summaries = dict(raw.get("summaries") or {})
+    by_name = {a["name"]: a for a in diagnosis.get("attributes") or []}
+    for a in by_name.values():
+        summaries.setdefault(a["name"], a.get("summary"))
+    status, _ = _attr_status(diagnosis, dict(scores), threshold, attr_threshold)
+    pod_names = [k for k, _ in scores[:max_evidence]]
+    pod_names += [k for k, _ in scores if k not in pod_names and status.get(k, "pass") != "pass"]
+    pods: List[Tuple[str, str]] = []
+    if verdict != "BLIND":
+        for k in pod_names:
+            attr = by_name.get(k)
+            if attr is None and summaries.get(k):
+                attr = {"summary": summaries[k], "patterns": dx.patterns(summaries[k])}
+            html_ = _pod(k, dict(scores)[k], attr or {}, dists.get(k), threshold, attr_threshold, lang)
+            if html_:
+                pods.append((k, html_))
+
+        # Data diagram.
+        diagram = _diagram(scores, diagnosis, dists, summaries, profile, threshold, attr_threshold,
+                           {k for k, _ in pods}, lang)
+        if diagram:
+            parts.append(section("sec.diagram"))
+            parts.append(diagram)
+
     if verdict == "BLIND":
         parts.append(section("sec.reason"))
         parts.append(f"<p>{_e(payload.get('reason') or '')}</p>")
@@ -891,14 +1140,10 @@ def build_consultation_html(
                                    "status.over" if s >= threshold else "status.under", lang)]
                  for k, s in scores], (1,)))
 
-        # 4. Findings by attribute.
-        by_name = {a["name"]: a for a in diagnosis.get("attributes") or []}
-        pods = [_pod(k, s, by_name.get(k, {}), dists.get(k), threshold, attr_threshold, lang)
-                for k, s in scores[:max_evidence]]
-        pods = [p for p in pods if p]
+        # Findings by attribute.
         if pods:
             parts.append(section("sec.detail"))
-            parts += pods
+            parts += [h for _, h in pods]
 
         # 5. Characteristics of the data.
         features = _features_table(diagnosis.get("attributes") or [], lang)

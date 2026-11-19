@@ -330,3 +330,37 @@ def test_inspection_without_profile_still_reports_scores():
     assert not any(s == "schema" for s, _, _ in items)
     rest = next(r for r in d["inspection"] if r["item"] == "attr_score")
     assert dx.inspection_text(rest, "en")["target"] == "all 2"
+
+
+# ── data diagram ──────────────────────────────────────────────────────
+
+
+def test_diagram_numbers_parts_that_need_attention_and_links_them(tmp_path):
+    ref = _orders(tmp_path / "r.csv", 1)
+    cur = _orders(tmp_path / "c.csv", 7, extra=True, missing_every=4)
+    note = tmp_path / "n.html"
+    runner.invoke(app, ["diff", ref, cur, "--report", str(note), "--lang", "ko"])
+    body = note.read_text(encoding="utf-8")
+    assert "데이터 도면" in body
+    import re as _re
+    from ddoc.cli.commands.diff_report import anchor_id
+    # parts in the data's own order; the time column and the one-sided column are drawn as such
+    order = _re.findall(r"class='part [^']*' (?:href='[^']*' )?data-col='([^']+)'", body)
+    assert order == ["order_date", "price", "channel", "coupon"]
+    assert "기간 열" in body and "현재에만 있음" in body
+    # price and channel are numbered, linked, and their panels carry the anchor
+    for name in ("price", "channel"):
+        assert f"href='#{anchor_id(name)}'" in body and f"id='{anchor_id(name)}'" in body
+    assert body.count("<li data-col=") == 2
+
+
+def test_diagram_folds_passing_columns_when_there_are_many(tmp_path):
+    cols = [f"c{i}" for i in range(60)]
+    ref = _csv(tmp_path / "r.csv", ",".join(cols), [",".join(str((i + j) % 5) for j in range(60)) for i in range(60)])
+    cur_rows = [",".join(str((i + j) % 5 if j else 9) for j in range(60)) for i in range(60)]
+    cur = _csv(tmp_path / "c.csv", ",".join(cols), cur_rows)
+    note = tmp_path / "n.html"
+    runner.invoke(app, ["diff", ref, cur, "--report", str(note), "--lang", "en"])
+    body = note.read_text(encoding="utf-8")
+    assert "passing columns not drawn" in body
+    assert "data-col='c0'" in body  # the drifted column is always drawn
