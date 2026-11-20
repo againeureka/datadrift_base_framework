@@ -20,7 +20,7 @@ ddoc examples list
 | `timeseries` | CSV `timestamp,x,y` (200 rows) | x ~ N(0,1) → x ~ N(1.5,1) |
 | `audio` | mono WAV, 8 kHz, 1 초 | 440 Hz → 880 Hz (octave) |
 | `text` | CSV `id,text` (20 rows) | 짧은 단어 → 긴 문장 |
-| `vision` | 5 × 64×64 PNG | 빨간색 → 파란색 |
+| `vision` | 40 × 96×96 PNG (밝은 배경에 색·크기가 제각각인 도형) | 어둡게, 푸른 톤 (카메라·조명이 바뀐 경우) |
 | `categorical` | `distributions.json` — color/type/hourly counts + confidence stats | 차량 통계 형태의 분포, 4 분포 모두 shift |
 
 각 modality 는 두 scenario 지원:

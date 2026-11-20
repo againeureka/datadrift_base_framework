@@ -22,6 +22,7 @@ CI_TESTS=(
   tests/test_examples_generate.py
   tests/test_recipe_catalog.py
   tests/test_docs.py
+  tests/test_zoo_drills.py
 )
 
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
@@ -42,6 +43,8 @@ Usage: ./run.sh <command> [args]
   serve [ddoc serve args]
                          Start the REST API + browser GUI (http://127.0.0.1:8765)
   test [--all]           Run the CI test set (or the whole suite)
+  zoo [--md]             Run the pattern-reading drills and Drift Zoo stories
+                         through ddoc diff and check every reading
   gate <ref> <cur> [report.html]
                          Drift gate: exit 0 OK, 1 DRIFT, 2 BLIND
   docker [up|down]       Build and run `ddoc serve` with Docker Compose
@@ -208,6 +211,11 @@ cmd_docs() {
   "$VENV/bin/python" "$ROOT/packages/ddoc/scripts/docs.py" "$what"
 }
 
+cmd_zoo() {
+  require_venv
+  "$VENV/bin/python" "$ROOT/packages/ddoc/zoo/eval.py" "$@"
+}
+
 cmd_menu() {
   require_venv
   exec ddoc scenarios menu "$@"
@@ -231,6 +239,7 @@ main() {
     docs)   cmd_docs "$@" ;;
     doctor) cmd_doctor "$@" ;;
     menu)   cmd_menu "$@" ;;
+    zoo)    cmd_zoo "$@" ;;
     ddoc)   cmd_ddoc "$@" ;;
     help|-h|--help) usage ;;
     *) usage >&2; exit 2 ;;

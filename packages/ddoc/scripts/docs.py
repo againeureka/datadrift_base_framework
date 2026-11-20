@@ -57,6 +57,15 @@ def _profile_findings() -> str:
     return f"현재 {len(pf.CATALOG)}가지입니다.\n\n" + "\n".join(rows)
 
 
+def _zoo_eval() -> str:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("ddoc_zoo_eval", PKG / "zoo" / "eval.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.markdown(mod.run())
+
+
 def _cheatsheet() -> str:
     from ddoc import scenarios
 
@@ -67,6 +76,7 @@ BLOCKS: Dict[str, Tuple[Path, Callable[[], str]]] = {
     "archetypes": (DOCS / "tutorial" / "concepts.md", _archetypes),
     "profile-findings": (DOCS / "guides" / "analysis.md", _profile_findings),
     "cheatsheet": (DOCS / "cheatsheet.md", _cheatsheet),
+    "zoo-eval": (PKG / "zoo" / "README.md", _zoo_eval),
 }
 
 _MARK = re.compile(r"(<!-- generated:(?P<name>[\w-]+)[^>]*-->\n)(?P<body>.*?)(<!-- /generated:(?P=name) -->)", re.S)

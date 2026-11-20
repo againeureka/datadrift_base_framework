@@ -20,7 +20,7 @@ import csv
 import math
 import random
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 
 def _write_yaml(path: Path, fields: Dict[str, Any]) -> None:
@@ -179,25 +179,46 @@ def make_toy_text(
 def make_toy_vision(
     out_dir: str | Path,
     *,
-    color: Tuple[int, int, int] = (255, 0, 0),
-    n: int = 5,
-    size: int = 64,
+    n: int = 40,
+    seed: int = 1,
+    shifted: bool = False,
+    size: int = 96,
+    color: Optional[Tuple[int, int, int]] = None,
     dataset_name: str = "toy_vision",
 ) -> Path:
-    """Write ``n`` solid-colour PNGs + ddoc.yaml under
-    ``<out_dir>/<dataset_name>/``.
+    """Write ``n`` PNGs + ddoc.yaml under ``<out_dir>/<dataset_name>/``.
+
+    Each image is a light background with 2–5 rectangles and circles of
+    random colours, so the set has real variety (brightness, colour,
+    edges, embeddings). ``shifted=True`` darkens the images and adds a
+    blue cast — the kind of change a new camera or lighting brings.
+    ``color`` keeps the old behaviour: ``n`` identical solid images.
 
     Pillow is imported lazily; callers needing vision fixtures install
     ``ddoc-plugin-vision`` first (which pulls Pillow and friends).
     """
-    from PIL import Image
+    from PIL import Image, ImageDraw, ImageEnhance
 
     base = Path(out_dir)
     dataset_dir = base / dataset_name
     dataset_dir.mkdir(parents=True, exist_ok=True)
 
+    rng = random.Random(seed)
     for i in range(n):
-        Image.new("RGB", (size, size), color).save(dataset_dir / f"img_{i}.png")
+        if color is not None:
+            im = Image.new("RGB", (size, size), color)
+        else:
+            im = Image.new("RGB", (size, size), tuple(rng.randint(170, 255) for _ in range(3)))
+            draw = ImageDraw.Draw(im)
+            for _ in range(rng.randint(2, 5)):
+                x, y, w = rng.randint(0, size - 20), rng.randint(0, size - 20), rng.randint(8, size // 3)
+                fill = tuple(rng.randint(0, 255) for _ in range(3))
+                (draw.ellipse if rng.random() < 0.5 else draw.rectangle)([x, y, x + w, y + w], fill=fill)
+            if shifted:
+                im = ImageEnhance.Brightness(im).enhance(0.45)
+                r, g, b = im.split()
+                im = Image.merge("RGB", (r, g, b.point(lambda v: min(255, v + 60))))
+        im.save(dataset_dir / f"img_{i:03d}.png")
 
     _write_yaml(
         dataset_dir / "ddoc.yaml",
@@ -326,16 +347,16 @@ def make_pair_text(out_dir: str | Path, *, scenario: str = "shifted") -> Tuple[P
 def make_pair_vision(out_dir: str | Path, *, scenario: str = "shifted") -> Tuple[Path, Path]:
     """Return ``(ref_dir, cur_dir)`` for a vision drift scenario.
 
-    ``scenario="shifted"``: 5 red 64×64 PNGs vs 5 blue. ``scenario=
-    "identical"``: both red.
+    ``scenario="shifted"``: 40 varied images vs 40 others, darker with a
+    blue cast. ``scenario="identical"``: the same 40 images on both sides.
     """
     base = Path(out_dir)
     if scenario == "shifted":
-        make_toy_vision(base / _REF_DIR, color=(255, 0, 0))
-        make_toy_vision(base / _CUR_DIR, color=(0, 0, 255))
+        make_toy_vision(base / _REF_DIR, seed=1)
+        make_toy_vision(base / _CUR_DIR, seed=2, shifted=True)
     elif scenario == "identical":
-        make_toy_vision(base / _REF_DIR, color=(255, 0, 0))
-        make_toy_vision(base / _CUR_DIR, color=(255, 0, 0))
+        make_toy_vision(base / _REF_DIR, seed=1)
+        make_toy_vision(base / _CUR_DIR, seed=1)
     else:
         raise ValueError(f"unsupported scenario: {scenario!r}")
     return base / _REF_DIR, base / _CUR_DIR
