@@ -204,6 +204,7 @@ details.tv table { margin-top: 6px; }
 .card .two ul.todo { list-style: none; padding-left: 0; }
 .card .two ul.todo li::before { content: "☐ "; color: var(--ink-2); }
 .card .cav { margin: 10px 0 0; font-size: 14px; color: var(--ink-2); }
+.card .crit-s { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
 .near { margin-top: 12px; font-size: 14px; }
 .near h3 { font-size: 14px; color: var(--ink-2); margin: 0 0 4px; }
 .near ul { margin: 0; padding-left: 18px; }
@@ -1114,7 +1115,8 @@ def _reading(cards: List[Dict[str, Any]], profile: Optional[Dict[str, Any]],
             + "".join(f"<li>{_e(v)}</li>" for v in x["causes"]) + "</ul></div>"
             f"<div><h4>{_e(t('reading.actions', lang))}</h4><ul class='todo'>"
             + "".join(f"<li>{_e(v)}</li>" for v in x["actions"]) + "</ul></div></div>"
-            f"<p class='cav'><b>{_e(t('reading.caveat', lang))}</b> — {_e(x['caveat'])}</p></article>")
+            f"<p class='cav'><b>{_e(t('reading.caveat', lang))}</b> — {_e(x['caveat'])}</p>"
+            f"<p class='crit-s'>{_e(t('reading.criterion', lang))}: {_e(x['criterion'])}</p></article>")
     out.append("</div>")
     if near:
         items = []
@@ -1394,7 +1396,8 @@ def build_consultation_markdown(payload: Dict[str, Any], *, lang: str = DEFAULT_
             lines += [f"- {s}" for s in x["signals"]]
             lines += ["", x["meaning"], "", f"**{t('reading.actions', lang)}**"]
             lines += [f"- [ ] {a}" for a in x["actions"]]
-            lines += ["", f"> {t('reading.caveat', lang)}: {x['caveat']}", ""]
+            lines += ["", f"> {t('reading.caveat', lang)}: {x['caveat']}",
+                      f"> {t('reading.criterion', lang)}: {x['criterion']}", ""]
     near = [c for c in cards if c["match"] == "near"]
     if near:
         lines += [f"**{t('reading.near_title', lang)}**", ""]

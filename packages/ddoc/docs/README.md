@@ -26,3 +26,17 @@
 
 - **[Changelog](changelog.md)** — 버전별 변경사항 요약
 - **[릴리스 노트](releases/)** — 각 버전의 상세 릴리스 노트
+
+## 문서 고치기
+
+표 일부는 코드에서 만들어집니다. `<!-- generated:… -->` 표시 사이는 손으로 고치지 말고
+코드(예: `ddoc/archetypes.py` 의 판단 기준)를 고친 뒤 다시 만드세요.
+
+```bash
+./run.sh docs build    # 생성 부분 다시 만들기 (유형 판독표, 품질 소견표)
+./run.sh docs check    # 최신인지 확인 — ./run.sh test 와 CI 가 함께 확인
+./run.sh docs shots    # README 스크린샷 다시 찍기 (Chrome 필요)
+```
+
+명령 레퍼런스의 옵션 설명은 손으로 쓰지만, 각 명령의 모든 옵션이 적혀 있는지는 테스트가
+확인합니다(`tests/test_docs.py`).

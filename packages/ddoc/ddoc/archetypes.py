@@ -565,6 +565,67 @@ def _signal_fields(code: str, s: Dict[str, Any], lang: str) -> Dict[str, Any]:
     return out
 
 
+# ── Criteria ──────────────────────────────────────────────────────────
+#
+# When each archetype is read, in words. Placeholders are filled from the
+# thresholds above, so the report cards and the generated docs follow the
+# code when a threshold changes.
+
+WHEN: Dict[str, Dict[str, str]] = {
+    "schema_change": {"en": "at least one column exists on one side only",
+                      "ko": "한쪽에만 있는 열이 하나 이상"},
+    "small_sample": {"en": "fewer than {small} samples on either side",
+                     "ko": "어느 쪽이든 표본이 {small}개 미만"},
+    "embedding_shift": {"en": "neighbour mixing on the embedding map at or below {mixing} (only with {few} or more items per side)",
+                        "ko": "임베딩 지도의 이웃 섞임이 {mixing} 이하 (한쪽 항목이 {few}개 이상일 때만)"},
+    "regime_shift": {"en": "3 or more attributes, of which {regime} or more score at or over the threshold",
+                     "ko": "속성 3개 이상 중 {regime} 이상이 기준 점수 이상"},
+    "local_shift": {"en": "3 or more attributes, of which at most {local} score at or over the threshold",
+                    "ko": "속성 3개 이상 중 {local} 이하만 기준 점수 이상"},
+    "hidden_change": {"en": "verdict OK while at least one attribute pattern matches",
+                      "ko": "판정은 OK인데 속성 유형이 하나 이상 해당"},
+    "stable": {"en": "verdict OK and no pattern matches",
+               "ko": "판정이 OK이고 해당하는 유형이 없음"},
+    "unit_change": {"en": "mean changed by ×{unit} or more (or ÷{unit}) and the spread by about the same factor",
+                    "ko": "평균이 {unit}배 이상(또는 1/{unit} 이하) 바뀌고 산포도 거의 같은 배율로 바뀜"},
+    "stuck_values": {"en": "current values nearly one (numeric: spread 0; categorical: one value {stuck} or more, where the baseline's top value held {stuck_ref} or less)",
+                     "ko": "현재 값이 거의 하나 (수치형은 산포 0, 범주형은 한 값이 {stuck} 이상 — 기준에서는 최빈값이 {stuck_ref} 이하)"},
+    "shift_and_spread": {"en": "mean moved {shift} or more and the spread grew ×{spread_shift} or more",
+                         "ko": "평균이 {shift} 이상 이동하고 산포도 {spread_shift}배 이상 커짐"},
+    "level_shift": {"en": "mean moved {shift} or more; spread within ×{spread}",
+                    "ko": "평균이 {shift} 이상 이동, 산포는 {spread}배 미만으로 비슷"},
+    "spread_change": {"en": "mean moved less than {shift}; spread changed ×{spread} or more (or ÷{spread})",
+                      "ko": "평균 이동은 {shift} 미만, 산포가 {spread}배 이상(또는 1/{spread} 이하) 달라짐"},
+    "tail_outliers": {"en": "median moved less than {shift} and the interquartile width stayed within ×{bulk}, yet {out} or more of the values lie outside the baseline range",
+                      "ko": "중앙값 이동 {shift} 미만, 사분위 범위 ×{bulk} 이내인데 기준 범위 밖 값이 {out} 이상"},
+    "missing_surge": {"en": "missing rate up {missing} or more",
+                      "ko": "결측률이 {missing} 이상 늘어남"},
+    "new_category": {"en": "values absent from the baseline make up {new} or more",
+                     "ko": "기준에 없던 값이 {new} 이상"},
+    "vanished_category": {"en": "baseline values holding {new} or more are gone",
+                          "ko": "기준에 있던 값({new} 이상)이 사라짐"},
+    "mix_shift": {"en": "no new or vanished values; one value's share moved {share} or more",
+                  "ko": "새 값·소멸 없이 한 값의 비중이 {share} 이상 바뀜"},
+}
+
+
+def limits() -> Dict[str, Any]:
+    """The thresholds, formatted for the criteria sentences."""
+    from .embedding import FEW_POINTS
+
+    return {"small": SMALL_SAMPLE, "regime": f"{REGIME_SHARE * 100:.0f}%", "local": f"{LOCAL_SHARE * 100:.0f}%",
+            "unit": f"{UNIT_RATIO:g}", "stuck": f"{STUCK_SHARE * 100:.0f}%", "stuck_ref": f"{STUCK_REF_SHARE * 100:.0f}%",
+            "shift": f"{MEAN_SHIFT_STD:g}σ", "spread": f"{SPREAD_RATIO:g}", "spread_shift": f"{SPREAD_WITH_SHIFT:g}",
+            "bulk": f"{BULK_STEADY:g}", "out": f"{OUT_OF_RANGE * 100:.0f}%", "missing": f"{MISSING_CHANGE * 100:.0f}%p",
+            "new": f"{NEW_VALUE_SHARE * 100:.0f}%", "share": f"{SHARE_SHIFT * 100:.0f}%p",
+            "mixing": f"{1 - EMBED_SEPARATION:g}", "few": FEW_POINTS, "near": f"{NEAR * 100:.0f}%"}
+
+
+def criterion_text(code: str, lang: str) -> str:
+    entry = WHEN[code]
+    return (entry.get(lang) or entry["en"]).format(**limits())
+
+
 def card_text(card: Dict[str, Any], lang: str, *,
               profile: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Display strings for one archetype card."""
@@ -580,4 +641,4 @@ def card_text(card: Dict[str, Any], lang: str, *,
     if card["code"] == "schema_change" and not (card.get("signal") or {}).get("only_ref"):
         actions = entry["actions_added"]  # columns were only added
     return {"title": entry["title"], "meaning": entry["meaning"], "causes": entry["causes"],
-            "actions": actions, "caveat": entry["caveat"], "signals": lines}
+            "criterion": criterion_text(card["code"], lang), "actions": actions, "caveat": entry["caveat"], "signals": lines}

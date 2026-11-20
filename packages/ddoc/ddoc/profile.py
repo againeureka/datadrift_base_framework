@@ -249,6 +249,36 @@ CATALOG: Dict[str, Dict[str, Dict[str, Any]]] = {
 }
 
 
+WHEN: Dict[str, Dict[str, str]] = {
+    "small_sample": {"en": "fewer than {small} rows", "ko": "행이 {small}개 미만"},
+    "duplicate_rows": {"en": "{dup} or more of the rows repeat an earlier row exactly",
+                       "ko": "앞의 행과 완전히 같은 행이 {dup} 이상"},
+    "empty_column": {"en": "no values at all", "ko": "값이 하나도 없음"},
+    "constant": {"en": "every value is the same", "ko": "모든 값이 같음"},
+    "near_constant": {"en": "one value holds {near_const} or more", "ko": "한 값이 {near_const} 이상"},
+    "high_missing": {"en": "{missing} or more empty", "ko": "결측 {missing} 이상"},
+    "id_like": {"en": "{id_like} or more of {id_rows}+ values are distinct (integer columns: their range also about the number of values)",
+                "ko": "값 {id_rows}개 이상 중 {id_like} 이상이 서로 다름 (정수 열은 값의 범위도 값 개수와 비슷할 때)"},
+    "far_outliers": {"en": "{far} or more of the values beyond quartiles ± 3 IQR",
+                     "ko": "사분위 ± 3 IQR 밖 값이 {far} 이상"},
+    "spelling_variants": {"en": "values that differ only in case, spaces or separators",
+                          "ko": "대소문자·공백·구분자만 다른 값이 있음"},
+    "numbers_as_text": {"en": "a text column where {num_text} or more of the values parse as numbers",
+                        "ko": "텍스트 열인데 값의 {num_text} 이상이 숫자로 읽힘"},
+}
+
+
+def limits() -> Dict[str, Any]:
+    return {"small": SMALL_SAMPLE, "dup": f"{DUPLICATE_ROWS * 100:.0f}%", "near_const": f"{NEAR_CONSTANT * 100:.0f}%",
+            "missing": f"{HIGH_MISSING * 100:.0f}%", "id_like": f"{ID_LIKE * 100:.0f}%", "id_rows": ID_LIKE_MIN_ROWS,
+            "far": f"{FAR_OUTLIERS * 100:.0f}%", "num_text": f"{NUMERIC_TEXT * 100:.0f}%"}
+
+
+def criterion_text(code: str, lang: str) -> str:
+    entry = WHEN[code]
+    return (entry.get(lang) or entry["en"]).format(**limits())
+
+
 def _fields(s: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(s)
     for key in ("share",):
@@ -268,6 +298,7 @@ def finding_text(finding: Dict[str, Any], lang: str) -> Dict[str, Any]:
     entry = CATALOG[finding["code"]].get(lang) or CATALOG[finding["code"]]["en"]
     signals = finding.get("signals") or [finding.get("signal") or {}]
     return {"title": entry["title"], "meaning": entry["meaning"], "actions": entry["actions"],
+            "criterion": criterion_text(finding["code"], lang),
             "signals": [entry["signal"].format(**_fields(s)) for s in signals]}
 
 

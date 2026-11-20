@@ -21,6 +21,7 @@ CI_TESTS=(
   tests/test_plugin_categorical.py
   tests/test_examples_generate.py
   tests/test_recipe_catalog.py
+  tests/test_docs.py
 )
 
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
@@ -40,6 +41,10 @@ Usage: ./run.sh <command> [args]
   gate <ref> <cur> [report.html]
                          Drift gate: exit 0 OK, 1 DRIFT, 2 BLIND
   docker [up|down]       Build and run `ddoc serve` with Docker Compose
+  docs [build|check|shots]
+                         Regenerate the doc parts that come from code (build),
+                         check they are current (check, also run by test), or
+                         re-take the README screenshots (shots: needs Chrome)
   ddoc [args]            Run any ddoc command inside the environment
   help                   Show this message
 
@@ -165,6 +170,16 @@ cmd_docker() {
   esac
 }
 
+cmd_docs() {
+  require_venv
+  local what="${1:-check}"
+  if [ "$what" = "shots" ] && ! "$VENV/bin/python" -c "import PIL" 2>/dev/null; then
+    say "Installing Pillow for the screenshots"
+    "$VENV/bin/python" -m pip install -q Pillow
+  fi
+  "$VENV/bin/python" "$ROOT/packages/ddoc/scripts/docs.py" "$what"
+}
+
 cmd_ddoc() {
   require_venv
   exec ddoc "$@"
@@ -180,6 +195,7 @@ main() {
     test)   cmd_test "$@" ;;
     gate)   cmd_gate "$@" ;;
     docker) cmd_docker "$@" ;;
+    docs)   cmd_docs "$@" ;;
     ddoc)   cmd_ddoc "$@" ;;
     help|-h|--help) usage ;;
     *) usage >&2; exit 2 ;;

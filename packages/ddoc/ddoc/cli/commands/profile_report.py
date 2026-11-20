@@ -174,7 +174,8 @@ def _cards(findings: List[Dict[str, Any]], linked: set, lang: str) -> str:
             "<ul class='sig'>" + "".join(f"<li>{_e(s)}</li>" for s in x["signals"]) + "</ul>"
             f"<p class='mean'>{_e(x['meaning'])}</p>"
             f"<div class='two one'><div><h4>{_e(t('reading.actions', lang))}</h4><ul class='todo'>"
-            + "".join(f"<li>{_e(a)}</li>" for a in x["actions"]) + "</ul></div></div></article>")
+            + "".join(f"<li>{_e(a)}</li>" for a in x["actions"]) + "</ul></div></div>"
+            f"<p class='crit-s'>{_e(t('reading.criterion', lang))}: {_e(x['criterion'])}</p></article>")
     out.append("</div>")
     return "".join(out)
 
