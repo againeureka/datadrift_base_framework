@@ -36,6 +36,15 @@
       'cli.copy':      'Copy',
       'cli.copied':    'copied',
       'submit':        'Submit',
+      'v.required':    '{field} is required',
+      'v.nonneg':      '{field} must be a non-negative number',
+      'v.sample_rows': 'sample-rows must be an integer 0–20',
+      'v.drift_paths': 'Provide either both data-path-ref + data-path-cur (path mode) or both baseline + current (snapshot mode)',
+      'v.fusion':      'fusion-weights only applies when fusion=weighted',
+      'v.detector':    'detector {det} is not in /plugins/detectors',
+      'v.config_obj':  'config must be a JSON object',
+      'v.config_json': 'config: invalid JSON',
+      'auth.placeholder': '(set DDOC_API_KEY on server)',
       'submit.fix':    'fix the chips above',
       'result.title':  'Result',
       'result.download': 'Download envelope',
@@ -69,14 +78,23 @@
       'cli.copy':      '복사',
       'cli.copied':    '복사됨',
       'submit':        '실행',
-      'submit.fix':    '위 오류 chip 을 먼저 해결해주세요',
+      'v.required':    '{field} 값이 필요합니다',
+      'v.nonneg':      '{field} 는 0 이상의 숫자여야 합니다',
+      'v.sample_rows': 'sample-rows 는 0–20 사이 정수여야 합니다',
+      'v.drift_paths': 'data-path-ref 와 data-path-cur 를 함께 (경로 모드), 또는 baseline 과 current 를 함께 (스냅샷 모드) 넣으세요',
+      'v.fusion':      'fusion-weights 는 fusion=weighted 일 때만 씁니다',
+      'v.detector':    'detector {det} 가 /plugins/detectors 목록에 없습니다',
+      'v.config_obj':  'config 는 JSON 객체여야 합니다',
+      'v.config_json': 'config: JSON 형식이 아닙니다',
+      'auth.placeholder': '(서버에 DDOC_API_KEY 설정)',
+      'submit.fix':    '위의 빨간 항목을 먼저 고쳐 주세요',
       'result.title':  '결과',
       'result.download': 'envelope 다운로드',
       'result.raw':    '원본 JSON',
       'auth.label':    'X-API-Key',
       'auth.clear':    '지움',
       'lang.toggle':   'English',
-      'cli.hint':      '좌측 form 은 ddoc CLI 옵션과 1대1 매핑됩니다. Submit 시 동일 동작의 REST endpoint 가 호출되며, 이 패널은 터미널에서 직접 입력할 동등한 명령어를 보여줍니다.',
+      'cli.hint':      '왼쪽 입력 칸은 ddoc CLI 옵션과 하나씩 대응합니다. 실행을 누르면 같은 일을 하는 REST API 를 부르고, 이 칸에는 터미널에서 똑같이 칠 명령이 보입니다.',
     },
   };
 
@@ -91,6 +109,7 @@
 
   let LANG = detectLang();
   const t = (key) => (I18N[LANG] && I18N[LANG][key]) || I18N.en[key] || key;
+  const tf = (key, vars) => t(key).replace(/\{(\w+)\}/g, (_, k) => (vars && vars[k] != null ? vars[k] : ''));
 
   // ── State ────────────────────────────────────────────────────────
   const STATE = {
@@ -247,7 +266,7 @@
   function applyI18n() {
     document.documentElement.lang = LANG;
     // Tab labels.
-    const tabKeys = { diff: 'tab.diff', scenarios: 'tab.scenarios', drift: 'tab.drift', eda: 'tab.eda', examples: 'tab.examples',
+    const tabKeys = { diff: 'tab.diff', scenarios: 'tab.scenarios', recipe: 'tab.recipe', drift: 'tab.drift', eda: 'tab.eda', examples: 'tab.examples',
                       report: 'tab.report', export: 'tab.export', fetch: 'tab.fetch' };
     $$('#tabs .tab').forEach(b => {
       const k = tabKeys[b.dataset.tab];
@@ -272,6 +291,7 @@
       authLabel.firstChild.nodeValue = t('auth.label') + ' ';
     }
     $('#auth-clear').textContent = t('auth.clear');
+    $('#api-key').placeholder = t('auth.placeholder');
     // Lang toggle button (rendered in topbar).
     const tog = $('#lang-toggle');
     if (tog) tog.textContent = t('lang.toggle');
@@ -485,12 +505,42 @@
   };
 
   // ── Form rendering ───────────────────────────────────────────────
+
+  // Korean for the form text (labels stay as CLI option names).
+  const SCHEMA_KO = {
+    diff: { title: '진단 · ddoc diff', help: '서버에 있는 두 데이터를 비교해 한 줄 판정(OK / DRIFT / BLIND)과 진단서를 냅니다.',
+      fields: { ref: '기준 데이터 (폴더 또는 파일)', cur: '현재 데이터 (폴더 또는 파일)', threshold: 'DRIFT 로 볼 전체 점수 기준',
+        attr_threshold: '단일 속성 기준', issuer: "진단서에 들어갈 발행처 (기본값 'ddoc')",
+        sample_rows: '진단서에 넣을 쪽마다 앞 N행 (0 = 끔, 원본 데이터 주의)',
+        with_embeddings: '이미지·텍스트: 임베딩까지 비교 (모델을 불러와 느림, 임베딩 지도 추가)',
+        include_report: 'HTML 진단서를 받아 아래에 표시' } },
+    drift: { title: '드리프트 분석', help: '두 데이터를 비교합니다 — 실제 폴더 경로를 넣으세요.',
+      fields: { data_path_ref: '기준 폴더', data_path_cur: '현재 폴더', fusion_weights: '예: image=0.6,text=0.4 (fusion 이 none 이 아닐 때만)',
+        with_embeddings: 'CLIP 을 불러와 임베딩 비교 (vision/text)', use_streaming: 'NDJSON 진행 상황을 실시간으로 (/analyze/drift/stream)' } },
+    eda: { title: 'EDA 분석', help: '데이터 하나를 분석합니다 (CSV 는 내장 프로파일러).', fields: { data_path: '입력 폴더 또는 파일' } },
+    examples: { title: '예제 데이터 만들기', help: '데이터 종류별로 (ref, cur) 예제 쌍을 만듭니다.',
+      fields: { out: '출력 폴더 (ref/ 와 cur/ 가 생김)' } },
+    report: { title: '보고서 만들기', help: '저장한 drift / EDA 결과 JSON 을 HTML · PDF · Markdown 보고서로 만듭니다.',
+      fields: { input: '결과 JSON 경로', out: '보고서 경로 (형식을 비우면 확장자로 결정)', format: '비우면 --out 확장자로 결정' } },
+    export: { title: '외부로 보내기', help: '드리프트 결과를 파일이나 HTTP 엔드포인트(또는 플러그인 대상)로 보냅니다.',
+      fields: { input: '드리프트 결과 JSON 경로', config_json: 'file: {"out_dir":"…"}; http: {"base_url":"http://…","path":"/drift-report","api_key":"…"}' } },
+    fetch: { title: '데이터 가져오기', help: 'URI(file/s3/gs/http)의 데이터를 로컬 폴더로 가져옵니다. file:// 은 내장, 나머지는 플러그인.',
+      fields: { source_uri: 'file:///경로, 그냥 경로, 또는 s3://… (file 이외는 플러그인 필요)', symlink: 'file:// 만: 복사 대신 심볼릭 링크',
+        config_json: '어댑터별 JSON. 예: s3 는 {"region":"us-east-1"}' } },
+    recipe: { title: '레시피 · 여러 단계 작업', help: '레시피 YAML 을 붙여 넣거나 서버 경로를 지정합니다. 단계를 차례로 실행하고 진행 상황을 보여줍니다.',
+      fields: { yaml: '최상위: name, vars, steps[]. 단계마다 id + run + with', path: '서버의 YAML 파일 경로 (YAML 을 붙여 넣는 대신)',
+        save_as: '현재 YAML 을 /recipes/<이름> 에 저장 (서버에 DDOC_RECIPES_WRITE=1 필요)', dry_run: '치환만 하고 명령은 실행하지 않음',
+        use_streaming: '단계별 진행 상황을 실시간으로 (/recipe/run/stream)', validate_only: '실행하지 않고 /recipe/validate 만' } },
+  };
+  const schemaText = (tab, key, fallback) => (LANG === 'ko' && SCHEMA_KO[tab] && SCHEMA_KO[tab][key]) || fallback;
+  const fieldHelp = (tab, f) => (LANG === 'ko' && SCHEMA_KO[tab] && SCHEMA_KO[tab].fields[f.name]) || f.help;
+
   function renderForms() {
     for (const [tab, schema] of Object.entries(SCHEMAS)) {
       const root = $(`.builder[data-builder="${tab}"]`);
       root.innerHTML = '';
-      root.appendChild(el('h2', {}, schema.title));
-      if (schema.help) root.appendChild(el('p', { class: 'help' }, schema.help));
+      root.appendChild(el('h2', {}, schemaText(tab, 'title', schema.title)));
+      if (schema.help) root.appendChild(el('p', { class: 'help' }, schemaText(tab, 'help', schema.help)));
 
       const formState = {};
       STATE.forms[tab] = formState;
@@ -515,7 +565,7 @@
           });
           checkRow.appendChild(el('label', { for: input.id }, input, ` ${f.label}`));
           if (f.help) {
-            const help = el('span', { class: 'help-inline' }, ` (${f.help})`);
+            const help = el('span', { class: 'help-inline' }, ` (${fieldHelp(tab, f)})`);
             checkRow.lastChild.appendChild(help);
           }
           continue;
@@ -548,7 +598,7 @@
         });
         fieldRow.appendChild(input);
         if (f.help) {
-          fieldRow.appendChild(el('span', { class: 'help-inline' }, f.help));
+          fieldRow.appendChild(el('span', { class: 'help-inline' }, fieldHelp(tab, f)));
         }
         root.appendChild(fieldRow);
       }
@@ -794,7 +844,7 @@
       if (f.required) {
         const v = state[f.name];
         if (v === undefined || v === '' || v === null) {
-          errors.push(`${f.label} is required`);
+          errors.push(tf('v.required', { field: f.label }));
         }
       }
     }
@@ -802,24 +852,24 @@
     if (tab === 'diff') {
       for (const k of ['threshold', 'attr_threshold']) {
         const v = Number(state[k]);
-        if (state[k] !== undefined && state[k] !== '' && (!Number.isFinite(v) || v < 0)) errors.push(`${k} must be a non-negative number`);
+        if (state[k] !== undefined && state[k] !== '' && (!Number.isFinite(v) || v < 0)) errors.push(tf('v.nonneg', { field: k.replace(/_/g, '-') }));
       }
       const n = Number(state.sample_rows || 0);
-      if (!Number.isInteger(n) || n < 0 || n > 20) errors.push('sample-rows must be an integer 0–20');
+      if (!Number.isInteger(n) || n < 0 || n > 20) errors.push(t('v.sample_rows'));
     }
     if (tab === 'drift') {
       const hasPaths = state.data_path_ref && state.data_path_cur;
       const hasSnaps = state.baseline && state.current;
       if (!hasPaths && !hasSnaps) {
-        errors.push('Provide either both data-path-ref + data-path-cur (path mode) or both baseline + current (snapshot mode)');
+        errors.push(t('v.drift_paths'));
       }
       if (state.fusion && state.fusion !== 'none' && state.fusion !== 'weighted' && state.fusion_weights) {
-        errors.push('fusion-weights only applies when fusion=weighted');
+        errors.push(t('v.fusion'));
       }
       const det = state.detector;
       if (det && det !== 'default') {
         const allow = detectorOptions();
-        if (!allow.includes(det)) errors.push(`detector ${det} is not in /plugins/detectors`);
+        if (!allow.includes(det)) errors.push(tf('v.detector', { det }));
       }
     }
     if (tab === 'eda' && !state.snapshot && !state.data_path) {
@@ -830,15 +880,15 @@
       try {
         const parsed = JSON.parse(state.config_json);
         if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-          errors.push('config must be a JSON object');
+          errors.push(t('v.config_obj'));
         }
       } catch (_) {
-        errors.push('config: invalid JSON');
+        errors.push(t('v.config_json'));
       }
     }
     if (state.timeout_sec !== undefined && state.timeout_sec !== '') {
       const t = Number(state.timeout_sec);
-      if (!Number.isFinite(t) || t < 0) errors.push('timeout-sec must be a non-negative number');
+      if (!Number.isFinite(t) || t < 0) errors.push(tf('v.nonneg', { field: 'timeout-sec' }));
     }
 
     return errors;
@@ -852,7 +902,7 @@
       errorsBox.appendChild(el('span', { class: 'error-chip' }, e));
     }
     $('#submit').disabled = errors.length > 0;
-    $('#submit-hint').textContent = errors.length ? 'fix the chips above' : '';
+    $('#submit-hint').textContent = errors.length ? t('submit.fix') : '';
   }
 
   // ── argv builders + endpoint mappers ─────────────────────────────
