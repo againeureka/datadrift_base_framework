@@ -10,6 +10,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV="${DDOC_VENV:-$ROOT/.venv}"
+case "$VENV" in /*) ;; *) VENV="$PWD/$VENV" ;; esac  # commands below change directory
 PYTHON="${PYTHON:-python3}"
 DEFAULT_PLUGINS=(categorical tabular)
 ALL_PLUGINS=(categorical tabular timeseries text audio evidently vision)
