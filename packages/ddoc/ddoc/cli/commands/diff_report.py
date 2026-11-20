@@ -161,6 +161,7 @@ details.tv table { margin-top: 6px; }
 .dg .part svg { height: 44px; margin: 6px 0 2px; }
 .dg .part .st { font-size: 12px; padding: 0 8px 6px; display: flex; align-items: center; gap: 4px;
                 color: var(--ink-2); white-space: nowrap; }
+.dg .part.numbered .nm { padding-right: 32px; }
 .dg .part .no { position: absolute; top: 8px; right: 6px; min-width: 20px; height: 20px; border-radius: 10px;
                 background: var(--ink); color: var(--surface); font-size: 12px; font-weight: 700;
                 display: flex; align-items: center; justify-content: center; padding: 0 5px; }
@@ -990,7 +991,7 @@ def _diagram(scores: List[Tuple[str, float]], diagnosis: Dict[str, Any],
         inner = (f"{bar}<div class='nm'>{_e(name)}</div>"
                  f"<div class='ty'>{_e(t('kind.' + kind, lang) if kind else '')}&nbsp;</div>"
                  f"{'' if off else _spark(dists.get(name), summaries.get(name))}{state}{no}")
-        cls = f"part {'off' if off else 's-' + st}"
+        cls = f"part {'off' if off else 's-' + st}{' numbered' if no else ''}"
         if not off and name in linked:
             cells.append(f"<a class='{cls}' href='#{anchor_id(name)}' data-col='{_e(name)}' "
                          f"data-tip='{_e(tip)}' aria-label='{_e(tip)}'>{inner}</a>")
@@ -1022,6 +1023,66 @@ def _diagram(scores: List[Tuple[str, float]], diagnosis: Dict[str, Any],
                 f"<div class='fd'>{_e(' · '.join(found))}</div></div></li>")
         out.append(f"<ol class='callouts'>{''.join(items)}</ol>")
     return "".join(out)
+
+
+# ── Embedding map ─────────────────────────────────────────────────────
+
+
+def _embedding_map(proj: Dict[str, Any], lang: str) -> str:
+    """Scatter of both embedding sets on their first two principal axes,
+    with each set's centre marked. Baseline first (gray), current on top."""
+    ref, cur = proj.get("ref") or [], proj.get("cur") or []
+    pts = ref + cur
+    if not pts:
+        return ""
+    W, H, pad, left, bottom = 720, 400, 14, 40, 30
+    xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    dx, dy = (x1 - x0) or 1.0, (y1 - y0) or 1.0
+    sx = lambda v: left + pad + (W - left - 2 * pad) * (v - x0) / dx  # noqa: E731
+    sy = lambda v: pad + (H - bottom - 2 * pad) * (1 - (v - y0) / dy)  # noqa: E731
+    ex = proj.get("explained") or [0, 0]
+    out = [f"<svg viewBox='0 0 {W} {H}' role='img' aria-label='{_e(t('sec.embedding', lang))}'>",
+           f"<rect x='{left}' y='0' width='{W - left}' height='{H - bottom}' fill='none' "
+           f"stroke='var(--grid)' stroke-width='1'/>",
+           f"<text x='{(left + W) / 2:.0f}' y='{H - 8}' text-anchor='middle' class='tick-lbl'>"
+           f"{_e(t('emb.axis', lang, n=1, pct=_pct(ex[0])))}</text>",
+           f"<text x='14' y='{(H - bottom) / 2:.0f}' text-anchor='middle' class='tick-lbl' "
+           f"transform='rotate(-90 14 {(H - bottom) / 2:.0f})'>{_e(t('emb.axis', lang, n=2, pct=_pct(ex[1])))}</text>"]
+    for side, color, opacity in (("ref", "var(--ref)", "0.45"), ("cur", "var(--cur)", "0.55")):
+        out.append(f"<g fill='{color}' fill-opacity='{opacity}'>" + "".join(
+            f"<circle cx='{sx(p[0]):.1f}' cy='{sy(p[1]):.1f}' r='2.6'/>" for p in proj.get(side) or [])
+            + "</g>")
+    centre = proj.get("centroid") or {}
+    for side, color, key in (("ref", "var(--ref)", "emb.centroid_ref"), ("cur", "var(--cur)", "emb.centroid_cur")):
+        c = centre.get(side)
+        if not c:
+            continue
+        x, y = sx(c[0]), sy(c[1])
+        label = t(key, lang)
+        anchor, nx = ("start", x + 12) if x < W * 0.7 else ("end", x - 12)
+        out.append(f"<circle cx='{x:.1f}' cy='{y:.1f}' r='7' fill='{color}' stroke='var(--surface)' stroke-width='3'/>")
+        out.append(f"<text x='{nx:.1f}' y='{y + 4:.1f}' text-anchor='{anchor}' class='val-lbl halo'>{_e(label)}</text>")
+        out.append(f"<circle class='hit' cx='{x:.1f}' cy='{y:.1f}' r='12' tabindex='0' "
+                   f"data-tip='{_e(label)}'><title>{_e(label)}</title></circle>")
+    out.append("</svg>")
+    n = proj.get("n") or {}
+    shift = proj.get("centroid_shift")
+    stats = t("emb.stats", lang, shift="—" if shift is None else f"{shift:.2f}",
+              mixing=f"{proj.get('mixing', 0):.2f}")
+    notes = []
+    if shift is None:
+        notes.append(t("emb.collapsed", lang))
+    if proj.get("few_points"):
+        notes.append(t("emb.few", lang))
+    shown = t("emb.shown", lang, ref=len(ref), ref_n=_int(n.get("ref")), cur=len(cur), cur_n=_int(n.get("cur")))
+    table = _table_view(lang, ["", t("chart.ref", lang), t("chart.cur", lang)], [
+        [t("emb.points", lang), f"{len(ref)} / {_int(n.get('ref'))}", f"{len(cur)} / {_int(n.get('cur'))}"],
+        [t("emb.centre", lang), str(centre.get("ref")), str(centre.get("cur"))]], (1, 2))
+    return (f"<p class='dg-lead'>{_e(t('emb.lead', lang))}</p>{_legend(lang)}{''.join(out)}"
+            f"<p class='summary'><b>{_e(stats)}</b></p>"
+            + "".join(f"<div class='caution'>{_e(n)}</div>" for n in notes)
+            + f"<div class='legend'>{_e(shown)}</div>{table}")
 
 
 # ── Pattern reading ───────────────────────────────────────────────────
@@ -1207,6 +1268,10 @@ def build_consultation_html(
         if diagram:
             parts.append(section("sec.diagram"))
             parts.append(diagram)
+        proj = raw.get("embedding_projection")
+        if isinstance(proj, dict) and proj.get("ref") and proj.get("cur"):
+            parts.append(section("sec.embedding"))
+            parts.append(_embedding_map(proj, lang))
 
     if verdict == "BLIND":
         parts.append(section("sec.reason"))
@@ -1371,5 +1436,5 @@ def for_paged_media(html_doc: str) -> str:
     marks black; paper is always the day theme anyway. The transparent
     hover targets over the charts go too: they only serve the pointer, and
     styled through CSS classes they would print as black boxes."""
-    html_doc = re.sub(r"<rect class='hit'[^>]*>.*?</rect>", "", html_doc, flags=re.S)
+    html_doc = re.sub(r"<(rect|circle) class='hit'[^>]*>.*?</\1>", "", html_doc, flags=re.S)
     return re.sub(r"var\(--([\w-]+)\)", lambda m: _LIGHT.get(m.group(1), m.group(0)).strip(), html_doc)

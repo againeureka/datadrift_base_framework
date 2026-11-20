@@ -139,7 +139,7 @@ def _diagram(envelope: Dict[str, Any], flagged: Dict[str, List[Dict[str, Any]]],
         tip = f"{name}\n{t('kind.' + kind, lang)} · {t('col.missing', lang)} {_pct(c.get('missing'))}"
         inner = (f"{bar}<div class='nm'>{_e(name)}</div><div class='ty'>{_e(t('kind.' + kind, lang))}&nbsp;</div>"
                  f"{spark}{state}{no}")
-        cls = f"part {'off' if off else 's-' + st}"
+        cls = f"part {'off' if off else 's-' + st}{' numbered' if no else ''}"
         if name in linked:
             cells.append(f"<a class='{cls}' href='#{anchor_id(name)}' data-col='{_e(name)}' "
                          f"data-tip='{_e(tip)}' aria-label='{_e(tip)}'>{inner}</a>")

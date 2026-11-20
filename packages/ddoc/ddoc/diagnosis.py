@@ -207,7 +207,8 @@ def build(
     reading = archetypes.read(
         verdict=verdict, scores=ordered, threshold=threshold,
         summaries={k: v for k, v in summaries.items() if isinstance(v, dict)},
-        evidence=evidence, profile=profile, smallest=smallest)
+        evidence=evidence, profile=profile, smallest=smallest,
+        projection=result.get("embedding_projection") if isinstance(result.get("embedding_projection"), dict) else None)
 
     return {
         "rationale": _rationale(verdict, overall, ordered[:1] if verdict == "OK" else ordered,

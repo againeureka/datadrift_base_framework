@@ -27,6 +27,7 @@ from .diagnosis import (MEAN_SHIFT_STD, MISSING_CHANGE, NEW_VALUE_SHARE, OUT_OF_
 NEAR = 0.8                 # "near": the missing condition is ≥ 80 % of its threshold
 REGIME_SHARE = 0.5         # ≥ half of the attributes over the threshold
 LOCAL_SHARE = 1 / 3        # ≤ a third of the attributes over the threshold
+EMBED_SEPARATION = 0.5     # embedding neighbour mixing ≤ 0.5 (1 − mixing ≥ 0.5)
 UNIT_RATIO = 2.0           # mean moved by at least ×2 (or ÷2) ...
 UNIT_COHERENCE = 0.2       # ... and the std by the same factor (|ln(mean/std ratio)| ≤ 0.2)
 BULK_STEADY = 1.25         # the middle half kept its width within ×1.25
@@ -36,7 +37,8 @@ STUCK_REF_SHARE = 0.8      # ... where the baseline's top value held ≤ 80 %
 _FACTORS = (10, 100, 1000, 60, 3600, 24)
 
 
-DATA_CODES = ("schema_change", "small_sample", "regime_shift", "local_shift", "hidden_change", "stable")
+DATA_CODES = ("schema_change", "small_sample", "embedding_shift", "regime_shift", "local_shift",
+              "hidden_change", "stable")
 ATTR_CODES = ("unit_change", "stuck_values", "shift_and_spread", "level_shift", "spread_change",
               "tail_outliers", "missing_surge", "new_category", "vanished_category", "mix_shift")
 
@@ -188,7 +190,8 @@ def _attr_cards(name: str, m: Dict[str, Any]) -> List[Dict[str, Any]]:
 def read(*, verdict: str, scores: List[Tuple[str, float]], threshold: float,
          summaries: Dict[str, Any], evidence: Optional[Dict[str, Any]] = None,
          profile: Optional[Dict[str, Any]] = None,
-         smallest: Optional[Dict[str, int]] = None) -> List[Dict[str, Any]]:
+         smallest: Optional[Dict[str, int]] = None,
+         projection: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     """Archetype cards for one comparison: dataset-level first, then
     attribute-level grouped by archetype (strongest attribute first)."""
     if verdict == "BLIND":
@@ -206,6 +209,16 @@ def read(*, verdict: str, scores: List[Tuple[str, float]], threshold: float,
         if n < SMALL_SAMPLE / NEAR:
             cards.append({"code": "small_sample", "match": "match" if n < SMALL_SAMPLE else "near",
                           "signal": dict(smallest)})
+
+    # Embeddings (image / text content) separated on the map. Not judged
+    # on a handful of items: the map itself carries that caution.
+    if isinstance(projection, dict) and projection.get("mixing") is not None \
+            and not projection.get("few_points"):
+        st = _status([(1 - projection["mixing"], EMBED_SEPARATION)])
+        if st:
+            cards.append({"code": "embedding_shift", "match": st,
+                          "signal": {"mixing": projection["mixing"],
+                                     "shift": projection.get("centroid_shift")}})
 
     n_attrs = len(scores)
     over = [k for k, v in scores if v >= threshold]
@@ -266,6 +279,20 @@ CATALOG: Dict[str, Dict[str, Dict[str, Any]]] = {
                "actions": ["새 상태가 계속될지(새 기준) 일시적인지 데이터 담당자와 확인", "계속된다면 기준 데이터를 갱신하고 모델 재학습 검토"],
                "caveat": "열을 하나씩 고치려 하지 마세요. 원인이 하나일 가능성이 큽니다.",
                "signal": "{n_attrs}개 속성 중 {n_over}개가 기준 이상 ({attrs})"},
+    },
+    "embedding_shift": {
+        "en": {"title": "Content shift in embeddings",
+               "meaning": "On the embedding map the current items sit apart from the baseline: what the images or texts show or say has changed, not only their measurable properties.",
+               "causes": ["New scenes, objects, topics or classes", "A camera, lighting or writing-style change", "A preprocessing change (resizing, colour handling, tokenisation)", "A different data source"],
+               "actions": ["Open a few items nearest each centre on the map and compare them by eye", "Check the preprocessing pipeline for recent changes", "Check the class or topic balance of the current data"],
+               "caveat": "Surface changes such as lighting also move embeddings; confirm by looking at items before concluding the content changed.",
+               "signal": "neighbour mixing {mixing} (1 = evenly mixed) · centre moved {shift}× the baseline spread"},
+        "ko": {"title": "임베딩 분리형",
+               "meaning": "임베딩 지도에서 현재 항목들이 기준과 떨어져 있습니다. 측정 가능한 속성뿐 아니라 이미지나 문장이 담은 내용 자체가 달라졌다는 뜻입니다.",
+               "causes": ["새로운 장면·객체·주제·클래스", "카메라·조명·문체 변화", "전처리 변경 (크기 조정, 색 처리, 토큰화)", "다른 데이터 출처"],
+               "actions": ["지도에서 각 중심에 가까운 항목 몇 개를 열어 눈으로 비교", "전처리 과정의 최근 변경 확인", "현재 데이터의 클래스·주제 구성 확인"],
+               "caveat": "조명 같은 표면 변화도 임베딩을 움직입니다. 내용이 바뀌었다고 결론 내리기 전에 항목을 직접 보세요.",
+               "signal": "이웃 섞임 {mixing} (1 = 고르게 섞임) · 중심 이동 기준 퍼짐의 {shift}배"},
     },
     "local_shift": {
         "en": {"title": "Local shift",
@@ -527,6 +554,9 @@ def _signal_fields(code: str, s: Dict[str, Any], lang: str) -> Dict[str, Any]:
         out["ref"], out["cur"] = _p(s["ref"]), _p(s["cur"])
     if code == "small_sample":
         out["ref"], out["cur"] = f"{s['ref']:,}", f"{s['cur']:,}"
+    if code == "embedding_shift":
+        out["mixing"] = f"{s['mixing']:.2f}"
+        out["shift"] = "—" if s.get("shift") is None else f"{s['shift']:.2f}"
     if "values" in s:
         out["values"] = ", ".join(f"{k} ({_p(v)})" for k, v in s["values"])
     if code == "new_category":

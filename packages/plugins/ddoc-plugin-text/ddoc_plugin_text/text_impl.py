@@ -876,6 +876,12 @@ class DOCTextPlugin:
                     ref_emb_array, cur_emb_array
                 )
                 drift_metrics['embedding_drift_detailed'] = ensemble
+                # 2-D map of both sets for the diagnostic report (numpy only).
+                try:
+                    from ddoc.embedding import project
+                    drift_metrics['embedding_projection'] = project(ref_emb_array, cur_emb_array)
+                except Exception as e:  # noqa: BLE001 — the map is optional
+                    print(f"⚠️ embedding map skipped: {e}")
 
                 # Map detector strategy → embedding_drift value.
                 _STRATEGY_TO_VALUE = {

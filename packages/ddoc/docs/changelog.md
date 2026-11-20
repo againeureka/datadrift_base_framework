@@ -12,7 +12,7 @@
 - ✨ `report render` 가 drift 입력을 진단서(HTML·PDF·Markdown)로 렌더, `ddoc serve` 의 `POST /diff` 와 GUI 진단 탭
 - ✨ `ddoc serve` (REST + GUI), `recipe`, `report`, `export`, `fetch`, `examples` 명령
 - ✨ 한글 리포트 (`--lang ko` / `DDOC_LANG=ko`)
-- ✨ 검사 보고서 형식의 진단서: 발행처·문서 번호, 요약 대시보드, 속성별 그래프, 데이터 특징, 패턴별 점검 항목 (`--json` 의 `diagnosis`), 화면 테마(자동·주간·야간)와 인쇄 버튼, 검사 대상 섹션, 유형 판독(15가지 드리프트 유형 카드), 데이터 도면, 계통별 검사표, `--sample-rows`
+- ✨ 검사 보고서 형식의 진단서: 발행처·문서 번호, 요약 대시보드, 속성별 그래프, 데이터 특징, 패턴별 점검 항목 (`--json` 의 `diagnosis`), 화면 테마(자동·주간·야간)와 인쇄 버튼, 검사 대상 섹션, 유형 판독(17가지 드리프트 유형 카드), 임베딩 지도(`--with-embeddings`), 데이터 도면, 계통별 검사표, `--sample-rows`
 - 🗑️ `init` / `add` / `snapshot`, 스냅샷 모드, `exp` / `train`, `ingest`, `vis`, v1 legacy 명령 제거
 - 🗑️ yolo / vis / nlp / reference-engine / keti-temporal 플러그인, 관련 hookspec 과 extras 제거 (hookspec 2.0.0)
 - 🐛 CSV 의 날짜·시간 텍스트 열을 비교하던 문제 — 이제 기간 표시에만 사용

@@ -555,6 +555,11 @@ def diff_command(
         None, "--issuer",
         help="Organization printed as the report's issuer (default: $DDOC_ISSUER, else 'ddoc').",
     ),
+    with_embeddings: bool = typer.Option(
+        False, "--with-embeddings",
+        help="Ask image / text plugins to compare embeddings too (loads the model, slower); "
+             "the report then includes an embedding map.",
+    ),
     sample_rows: int = typer.Option(
         0, "--sample-rows", min=0, max=20,
         help="Include the first N rows of each CSV side in the report and JSON "
@@ -598,7 +603,7 @@ def diff_command(
                 detector=detector,
                 cfg={"baseline_cache": None, "current_cache": None,
                      "baseline_metadata": None, "current_metadata": None,
-                     "with_embeddings": False},
+                     "with_embeddings": with_embeddings},
                 output_path="analysis/diff",
             )
         if verbose:

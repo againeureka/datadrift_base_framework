@@ -752,6 +752,12 @@ class DDOCVisionPlugin:
                 drift_metrics['embedding_drift'] = float(_STRATEGIES[_strategy])
                 drift_metrics['embedding_drift_detector'] = _strategy
                 drift_metrics['embedding_drift_detailed'] = embedding_drift_metrics
+                # 2-D map of both sets for the diagnostic report (numpy only).
+                try:
+                    from ddoc.embedding import project
+                    drift_metrics['embedding_projection'] = project(ref_emb_array, cur_emb_array)
+                except Exception as e:  # noqa: BLE001 — the map is optional
+                    print(f"⚠️ embedding map skipped: {e}")
                 
                 # Print detailed metrics
                 print(f"   📊 Metric Breakdown:")

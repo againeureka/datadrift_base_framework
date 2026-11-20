@@ -311,6 +311,7 @@
         { name: 'detector', label: 'detector', type: 'select', opts: () => detectorOptions(), default: 'default' },
         { name: 'issuer', label: 'issuer', type: 'text', help: "Organization printed on the report (default: 'ddoc')" },
         { name: 'sample_rows', label: 'sample-rows', type: 'text', default: '0', help: 'First N raw rows per side in the report (0 = off; raw data!)' },
+        { name: 'with_embeddings', label: 'with-embeddings', type: 'check', default: false, help: 'Image / text: also compare embeddings (loads the model; adds an embedding map)' },
         { name: 'include_report', label: 'report', type: 'check', default: true, help: 'Return and show the HTML diagnostic report' },
         { name: 'timeout_sec', label: 'timeout-sec', type: 'text', default: '600' },
       ],
@@ -781,6 +782,7 @@
       pushOpt('--lang', LANG);
       pushOpt('--issuer', state.issuer);
       if (Number(state.sample_rows) > 0) pushOpt('--sample-rows', state.sample_rows);
+      pushFlag('--with-embeddings', state.with_embeddings);
       if (state.include_report) pushOpt('--report', 'note.html');
     } else if (tab === 'drift') {
       args.push('analyze', 'drift');
@@ -870,6 +872,7 @@
         threshold: Number(body.threshold) || 0.15, attr_threshold: Number(body.attr_threshold) || 0.25,
         detector: body.detector || 'default', lang: LANG, issuer: body.issuer || null,
         sample_rows: Number(body.sample_rows) || 0, include_report: !!body.include_report,
+        with_embeddings: !!body.with_embeddings,
         timeout_sec: Number(body.timeout_sec) || 600,
       }, sse: false };
     }

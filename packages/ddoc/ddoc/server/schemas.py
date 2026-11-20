@@ -68,6 +68,7 @@ class DiffRequest(BaseModel):
     lang: Optional[str] = Field(None, description="en | ko (default: server $DDOC_LANG, else en).")
     issuer: Optional[str] = None
     sample_rows: int = Field(0, ge=0, le=20, description="First N raw rows per side in the report (0 = off).")
+    with_embeddings: bool = Field(False, description="Image / text plugins also compare embeddings (embedding map).")
     include_report: bool = Field(True, description="Return the HTML report as `report_html`.")
     timeout_sec: float = 600.0
 

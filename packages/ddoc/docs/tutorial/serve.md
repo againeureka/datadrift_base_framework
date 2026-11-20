@@ -102,6 +102,7 @@ curl -s -X POST http://localhost:8765/diff \
 ```
 
 `threshold`, `attr_threshold`, `detector`, `sample_rows`(0–20, 원본 행 미리보기),
+`with_embeddings`(이미지·텍스트 임베딩 비교와 임베딩 지도),
 `timeout_sec` 도 받습니다.
 
 ### Report 렌더 + 외부 export

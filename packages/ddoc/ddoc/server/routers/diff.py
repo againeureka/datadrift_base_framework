@@ -33,6 +33,8 @@ def _argv(req: DiffRequest, report: str | None) -> List[str]:
         args += ["--issuer", req.issuer]
     if req.sample_rows:
         args += ["--sample-rows", str(req.sample_rows)]
+    if req.with_embeddings:
+        args.append("--with-embeddings")
     if report:
         args += ["--report", report]
     return args
