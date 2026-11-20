@@ -20,6 +20,8 @@
 
 ## 레퍼런스
 
+- **[지금 상태](status.md)** — 무엇이 되고, 일부만 되고, 남았나 (확인한 방법과 함께)
+- **[용어](glossary.md)** — 판정, 유형 판독, 이웃 섞임 등
 - **[치트시트](cheatsheet.md)** — 상황별로 그대로 칠 명령 (`ddoc scenarios`, `./run.sh menu`)
 - **[명령어 레퍼런스](reference/commands.md)** — 모든 CLI 명령과 옵션
 

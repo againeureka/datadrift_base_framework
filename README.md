@@ -69,7 +69,8 @@ ddoc serve                                                # REST API + GUI on ht
 ```
 
 More in the [ddoc README](packages/ddoc/README.md), its [docs](packages/ddoc/docs/) and the
-[cheat sheet](packages/ddoc/docs/cheatsheet.md) of commands by situation.
+[cheat sheet](packages/ddoc/docs/cheatsheet.md) of commands by situation. What works, what is
+partial and what is not verified yet is in the [status page](packages/ddoc/docs/status.md) (Korean).
 
 ## The diagnostic report
 
