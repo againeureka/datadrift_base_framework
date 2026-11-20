@@ -26,7 +26,7 @@ except ImportError:
 
 try:
     import torch
-    import clip
+    from . import clip  # bundled OpenAI CLIP (MIT), see clip/LICENSE
     import nltk
     from nltk.corpus import stopwords
     from nltk.tokenize import word_tokenize

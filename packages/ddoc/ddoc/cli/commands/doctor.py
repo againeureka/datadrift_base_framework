@@ -89,9 +89,14 @@ def environment(lang: str) -> List[Dict[str, Any]]:
     for item, mods, enables in (
         ("pdf", ["weasyprint"], "doctor.feat_pdf"),
         ("serve", ["fastapi", "uvicorn"], "doctor.feat_serve"),
-        ("embeddings", ["torch", "clip"], "doctor.feat_embeddings"),
+        ("embeddings", ["torch"], "doctor.feat_embeddings"),
     ):
         errs = [f"{m}: {e}" for m in mods if (e := _try_import(m))]
+        if item == "embeddings":
+            # CLIP comes bundled with the vision and text plugins; one of them must load.
+            carriers = [p["name"] for p in plugins if p["name"] in ("ddoc_vision", "ddoc_text") and not p["error"]]
+            if not carriers:
+                errs.append(t("doctor.no_embedding_plugin", lang))
         row("features", t(enables, lang), "ok" if not errs else "warn", "; ".join(errs),
             t(f"doctor.fix_{item}", lang) if errs else "")
     return rows

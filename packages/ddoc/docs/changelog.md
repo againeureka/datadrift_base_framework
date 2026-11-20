@@ -8,6 +8,7 @@
 
 **주요 변경사항:**
 - ✨ `ddoc diff` 한 줄 판정 (OK / DRIFT / BLIND), `--report` HTML 진단서, Drift Zoo, GitHub Action
+- 📦 vision·text 플러그인이 CLIP 을 패키지에 담음 (GitHub 의존성 제거, 어휘 파일을 wheel 에 포함)
 - 📝 [지금 상태](status.md) (확인한 방법과 알려진 한계) · [용어](glossary.md)
 - ✨ 판독 드릴 — 유형마다 정답이 있는 케이스, `./run.sh zoo` 와 테스트로 확인, 결과표는 zoo README 에 생성. vision 예제를 도형·색이 다양한 40장으로 교체
 - ✨ 상황별 시나리오 카탈로그 — `ddoc scenarios` (목록·치트시트·실행·메뉴), `./run.sh menu`, GUI "상황별" 탭, 생성되는 치트시트. `diff --report` 의 `.md`·`.pdf`, `analyze eda --report`

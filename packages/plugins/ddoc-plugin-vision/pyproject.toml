@@ -12,7 +12,11 @@ dependencies = [
     "pluggy>=1.5.0",
     "torch>=2.0.0",
     "torchvision>=0.15.0",
-    "clip @ git+https://github.com/openai/CLIP.git",
+    # CLIP is bundled in the package (clip/, MIT); these are what it needs
+    "ftfy>=6.0",
+    "regex",
+    "tqdm",
+    "packaging",
     "pillow>=9.0.0",
     "matplotlib>=3.5.0",
     "seaborn>=0.11.0",
@@ -32,3 +36,6 @@ ddoc_vision = "ddoc_plugin_vision.vision_impl:DDOCVisionPlugin"
 packages = {find = {where = ["."], include = ["ddoc_plugin_vision*"]}}
 include-package-data = true
 zip-safe = false
+
+[tool.setuptools.package-data]
+ddoc_plugin_vision = ["clip/*.txt.gz", "clip/LICENSE"]

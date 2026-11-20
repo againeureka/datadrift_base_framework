@@ -1,5 +1,5 @@
 import torch
-import clip
+from .. import clip  # bundled OpenAI CLIP (MIT), see ../clip/LICENSE
 import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA

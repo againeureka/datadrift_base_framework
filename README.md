@@ -150,5 +150,5 @@ pinned as a regression test.
 
 Apache License 2.0 — see [LICENSE](LICENSE).
 Vendored third-party code retains its original license
-(e.g. OpenAI CLIP under MIT, see
+(e.g. OpenAI CLIP under MIT, bundled in the vision and text plugins, see
 `packages/plugins/ddoc-plugin-vision/ddoc_plugin_vision/clip/LICENSE`).
