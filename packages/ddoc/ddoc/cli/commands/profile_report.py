@@ -235,8 +235,11 @@ def build_profile_html(envelope: Dict[str, Any], *, lang: str = DEFAULT_LANG,
     parts.append(section("profile.sec_subject"))
     parts.append(f"<p class='lead'>{_e(t('profile.lead', lang))}</p>")
     rows = [(t("subject.path", lang), envelope.get("data_path") or "—"),
-            (t("subject.size", lang), t("subject.size_value", lang, rows=prof.get("rows", 0),
-                                         cols=len(prof.get("columns") or []))
+            (t("subject.size", lang), (t("subject.size_sampled", lang, rows=prof.get("rows", 0),
+                                          total=prof["total_rows"], cols=len(prof.get("columns") or []))
+                                        if prof.get("total_rows") else
+                                        t("subject.size_value", lang, rows=prof.get("rows", 0),
+                                          cols=len(prof.get("columns") or [])))
              + (t("subject.files", lang, files=prof["files"]) if (prof.get("files") or 1) > 1 else ""))]
     if prof.get("period"):
         rows.append((t("subject.period", lang), t("subject.period_value", lang, **prof["period"])))
@@ -317,8 +320,10 @@ def build_profile_markdown(envelope: Dict[str, Any], *, lang: str = DEFAULT_LANG
         return "\n".join(lines) + "\n"
     prof = envelope.get("profile") or {}
     lines += [f"- {t('subject.path', lang)}: `{envelope.get('data_path')}`",
-              f"- {t('subject.size', lang)}: " + t("subject.size_value", lang, rows=prof.get("rows", 0),
-                                                   cols=len(prof.get("columns") or []))]
+              f"- {t('subject.size', lang)}: " + (
+                  t("subject.size_sampled", lang, rows=prof.get("rows", 0), total=prof["total_rows"],
+                    cols=len(prof.get("columns") or [])) if prof.get("total_rows") else
+                  t("subject.size_value", lang, rows=prof.get("rows", 0), cols=len(prof.get("columns") or [])))]
     if prof.get("period"):
         lines.append(f"- {t('subject.period', lang)}: " + t("subject.period_value", lang, **prof["period"]))
     lines.append(f"- {t('profile.duplicates', lang)}: {_pct(envelope.get('duplicate_rows'))}")

@@ -85,13 +85,15 @@ def _categorical_column(x) -> Dict[str, Any]:
             "numeric_share": round(float(numeric.notna().mean()), 4)}
 
 
-def profile_csv(files: List[str], *, sample_rows: int = 0, bins: int = _BINS) -> Dict[str, Any]:
-    """Profile one CSV dataset (one or more files, concatenated)."""
-    from .cli.commands.diff import _as_datetime, _load_csv_frame, _profile, _rate
+def profile_csv(files: List[str], *, sample_rows: int = 0, bins: int = _BINS,
+                max_rows: Optional[int] = None) -> Dict[str, Any]:
+    """Profile one CSV dataset (one or more files, concatenated); a large
+    one through a uniform random sample of ``max_rows`` rows."""
+    from .cli.commands.diff import MAX_ROWS, _as_datetime, _load_csv_sampled, _profile, _rate
 
-    frame = _load_csv_frame(files)
+    frame, total = _load_csv_sampled(files, MAX_ROWS if max_rows is None else max_rows)
     time_cols = {c: p for c in frame.columns if (p := _as_datetime(frame[c])) is not None}
-    profile = _profile(frame, files, time_cols, sample_rows)
+    profile = _profile(frame, files, time_cols, sample_rows, total)
     n = int(len(frame))
     columns: Dict[str, Dict[str, Any]] = {}
     for col, info in zip(frame.columns, profile["columns"]):

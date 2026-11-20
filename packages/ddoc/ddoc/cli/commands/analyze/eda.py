@@ -44,6 +44,10 @@ def analyze_eda_command(
         0, "--sample-rows", min=0, max=20,
         help="Built-in CSV profile: include the first N rows (off by default: they are raw data).",
     ),
+    max_rows: int = typer.Option(
+        200_000, "--max-rows", min=0,
+        help="Built-in CSV profile: read a uniform random sample of this many rows when larger (0 = all).",
+    ),
     report: Optional[Path] = typer.Option(
         None, "--report",
         help="Also write the data profile report: .html, .md or .pdf.",
@@ -94,7 +98,7 @@ def analyze_eda_command(
     emit_progress(0.9, "merge", "merging plugin results",
                   enabled=ndjson_progress)
     if not [r for r in hook_results or [] if r is not None]:
-        builtin = _builtin_profile(Path(data_path), sample_rows=sample_rows)
+        builtin = _builtin_profile(Path(data_path), sample_rows=sample_rows, max_rows=max_rows)
         if builtin is not None:
             hook_results = [builtin]
     merged = _finish_eda(hook_results, json_out=json_out, return_dict=report is not None)
@@ -127,7 +131,7 @@ def _write_profile(envelope, report: Path, lang: Optional[str]) -> None:
         rprint(f"[yellow]report not written: {e}[/yellow]", file=sys.stderr)
 
 
-def _builtin_profile(path: Path, *, sample_rows: int = 0):
+def _builtin_profile(path: Path, *, sample_rows: int = 0, max_rows: Optional[int] = None):
     """The built-in CSV profile, or None when the path is not CSV."""
     from ..diff import sniff_modality
     from ....profile import profile_csv
@@ -137,7 +141,7 @@ def _builtin_profile(path: Path, *, sample_rows: int = 0):
     kind, detail = sniff_modality(path)
     if kind != "csv":
         return None
-    return profile_csv(detail.get("files") or [str(path)], sample_rows=sample_rows)
+    return profile_csv(detail.get("files") or [str(path)], sample_rows=sample_rows, max_rows=max_rows)
 
 
 def _finish_eda(hook_results, *, json_out: bool, return_dict: bool = False):

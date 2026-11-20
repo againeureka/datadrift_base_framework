@@ -178,11 +178,63 @@ def _category_changes(ref_counts: Dict[Any, float], cur_counts: Dict[Any, float]
                          if movers else None}
 
 
-def _load_csv_frame(files: List[str]):
+MAX_ROWS = 200_000      # rows per side read for a comparison; 0 = all
+_CHUNK = 100_000
+
+
+def _count_lines(files: List[str]) -> int:
+    """Data lines in the files (newlines minus one header each). An
+    estimate when quoted fields span lines; only used to decide whether
+    to sample."""
+    total = 0
+    for f in files:
+        with open(f, "rb") as fh:
+            total += sum(chunk.count(b"\n") for chunk in iter(lambda: fh.read(1 << 20), b"")) - 1
+    return max(total, 0)
+
+
+def _load_csv_sampled(files: List[str], max_rows: int = MAX_ROWS, seed: int = 0):
+    """``(frame, total_rows)``. Files with more than ``max_rows`` data rows
+    are read in chunks keeping a uniform random sample of ``max_rows`` rows
+    (each row gets a random key; the smallest keys stay), so memory stays
+    bounded and the same data always gives the same sample."""
+    import numpy as np
     import pandas as pd
 
-    frames = [pd.read_csv(f) for f in files]
-    return pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
+    estimate = _count_lines(files) if max_rows else 0
+    if not max_rows or estimate <= max_rows:
+        frames = [pd.read_csv(f) for f in files]
+        frame = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
+        return frame, int(len(frame))
+
+    # Rows with a key under ``cut`` are kept from each chunk; the final
+    # sample is the max_rows smallest keys overall, which all lie under
+    # ``cut`` whenever at least max_rows rows passed it (the margin makes
+    # that near certain). Same sample as keeping every key, far less work.
+    cut = min(1.0, 1.2 * max_rows / max(estimate, 1) + 1e-3)
+    rng = np.random.default_rng(seed)
+    parts, total = [], 0
+    for f in files:
+        for chunk in pd.read_csv(f, chunksize=_CHUNK):
+            key = rng.random(len(chunk))
+            chunk = chunk.assign(_ddoc_key=key, _ddoc_row=np.arange(total, total + len(chunk)))
+            total += len(chunk)
+            parts.append(chunk[key < cut])
+    kept = pd.concat(parts, ignore_index=True)
+    kept = kept.nsmallest(max_rows, "_ddoc_key")
+    frame = kept.sort_values("_ddoc_row").drop(columns=["_ddoc_key", "_ddoc_row"]).reset_index(drop=True)
+    # Chunks infer types on their own; a column that is numbers throughout
+    # but came back as text from one chunk is turned back into numbers.
+    for col in frame.columns[frame.dtypes == object]:
+        as_num = pd.to_numeric(frame[col], errors="coerce")
+        if as_num.notna().sum() == frame[col].notna().sum():
+            frame[col] = as_num
+    return frame, total
+
+
+def _load_csv_frame(files: List[str]):
+    """All rows (no sampling)."""
+    return _load_csv_sampled(files, max_rows=0)[0]
 
 
 _TIME_NAME = re.compile(r"(date|time|timestamp|datetime|^ts$|_at$|_dt$|일자|날짜|일시|시각)", re.I)
@@ -258,7 +310,8 @@ def _sample(frame, n: int) -> Dict[str, Any]:
             "rows": [[cell(v) for v in row] for row in frame[shown].head(n).itertuples(index=False)]}
 
 
-def _profile(frame, files: List[str], time_cols: Dict[str, Any], sample_rows: int) -> Dict[str, Any]:
+def _profile(frame, files: List[str], time_cols: Dict[str, Any], sample_rows: int,
+             total_rows: Optional[int] = None) -> Dict[str, Any]:
     out: Dict[str, Any] = {
         "files": len(files),
         "rows": int(len(frame)),
@@ -271,13 +324,15 @@ def _profile(frame, files: List[str], time_cols: Dict[str, Any], sample_rows: in
         if period:
             out["period"] = {"column": str(col), **period}
             break
+    if total_rows is not None and total_rows > len(frame):
+        out["total_rows"] = int(total_rows)  # the rows above are a random sample of these
     if sample_rows > 0:
         out["sample"] = _sample(frame, min(sample_rows, SAMPLE_ROWS_MAX))
     return out
 
 
 def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
-             sample_rows: int = 0) -> Dict[str, Any]:
+             sample_rows: int = 0, max_rows: int = MAX_ROWS) -> Dict[str, Any]:
     """Column-wise drift between two CSV datasets.
 
     Numeric columns → shared-range histogram JS divergence;
@@ -298,7 +353,8 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
     import numpy as np
     import pandas as pd
 
-    ref, cur = _load_csv_frame(ref_files), _load_csv_frame(cur_files)
+    (ref, ref_total), (cur, cur_total) = (_load_csv_sampled(ref_files, max_rows),
+                                          _load_csv_sampled(cur_files, max_rows))
     ref_time = {c: p for c in ref.columns if (p := _as_datetime(ref[c])) is not None}
     cur_time = {c: p for c in cur.columns if (p := _as_datetime(cur[c])) is not None}
     time_cols = [c for c in ref.columns if c in ref_time and c in cur_time]
@@ -308,8 +364,8 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
             f"no shared columns between ref {list(ref.columns)} and cur {list(cur.columns)}"
         )
     profile = {
-        "ref": _profile(ref, ref_files, ref_time, sample_rows),
-        "cur": _profile(cur, cur_files, cur_time, sample_rows),
+        "ref": _profile(ref, ref_files, ref_time, sample_rows, ref_total),
+        "cur": _profile(cur, cur_files, cur_time, sample_rows, cur_total),
         "columns": {
             "compared": [str(c) for c in shared],
             "time": [str(c) for c in time_cols],
@@ -584,6 +640,11 @@ def diff_command(
         help="Include the first N rows of each CSV side in the report and JSON "
              "(off by default: the rows are raw data).",
     ),
+    max_rows: int = typer.Option(
+        MAX_ROWS, "--max-rows", min=0,
+        help="CSV: compare a uniform random sample of this many rows per side when a side is "
+             "larger (0 = all rows). The report says when it sampled.",
+    ),
 ):
     """One-line drift verdict between REF and CUR.
 
@@ -641,7 +702,8 @@ def diff_command(
     if result is None and kind == "csv":
         try:
             result = csv_diff(ref_detail.get("files") or [ref_s],
-                              cur_detail.get("files") or [cur_s], sample_rows=sample_rows)
+                              cur_detail.get("files") or [cur_s], sample_rows=sample_rows,
+                              max_rows=max_rows)
             engine = "builtin"
         except Exception as e:  # noqa: BLE001
             _blind(t("reason.csv_failed", lang, error=e), ref=ref_s, cur=cur_s,

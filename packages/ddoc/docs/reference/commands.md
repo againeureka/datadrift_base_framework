@@ -21,6 +21,7 @@
 | `--report <path>` | | 진단서 저장. 확장자로 형식 결정: `.html`(단일 파일 진단서), `.md`(PR·이슈용 Markdown), `.pdf` |
 | `--lang` | `$DDOC_LANG`, 없으면 `en` | 진단서·안내 문구·터미널 출력 언어 (`en` · `ko`) |
 | `--issuer` | `$DDOC_ISSUER`, 없으면 `ddoc` | 진단서 머리글에 들어갈 발행처 |
+| `--max-rows N` | `200000` | CSV 한쪽이 이보다 크면 균등 무작위 표본 N행으로 비교 (`0` = 전체). 진단서에 "전체 중 N행 무작위 추출"로 표시 |
 | `--with-embeddings` | 끔 | 이미지·텍스트 플러그인이 임베딩까지 비교 (모델 로드, 느림). 진단서에 임베딩 지도 추가 |
 | `--sample-rows N` | `0` (끔) | CSV 양쪽의 앞 N행(최대 20)을 진단서와 JSON 에 포함. 원본 데이터가 담기므로 기본은 끔 |
 
@@ -100,6 +101,7 @@ ddoc scenarios menu                              # 번호로 고르고 값을 �
 | `--data-path` | 분석할 데이터 경로 (필수) |
 | `--invalidate-cache` | 분석 캐시 무시 |
 | `--sample-rows N` | 내장 CSV 프로필에 앞 N행 포함 (0–20, 기본 끔 — 원본 데이터) |
+| `--max-rows N` | 내장 CSV 프로필: 이보다 크면 균등 무작위 표본 N행으로 (기본 200000, `0` = 전체) |
 | `--report <path>` | 데이터 프로필 보고서도 함께 저장 (`.html` · `.md` · `.pdf`) |
 | `--lang` | 보고서 언어 (`en` · `ko`) |
 | `--json` / `--ndjson-progress` / `--quiet` | 출력 형식 제어 |

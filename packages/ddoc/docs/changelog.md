@@ -8,6 +8,7 @@
 
 **주요 변경사항:**
 - ✨ `ddoc diff` 한 줄 판정 (OK / DRIFT / BLIND), `--report` HTML 진단서, Drift Zoo, GitHub Action
+- ⚡ 큰 CSV 는 쪽마다 균등 무작위 표본(기본 20만 행, `--max-rows`)으로 비교·프로필, 진단서에 표시
 - ✨ 임베딩 지도에 열어 볼 항목(기준·현재의 대표 항목, 기준과 가장 다른 현재 항목)을 파일 이름으로
 - ✨ 날짜·시간 열을 이름뿐 아니라 값의 모양(연도 네 자리 날짜·ISO 시각)으로도 찾음
 - 📦 vision·text 플러그인이 CLIP 을 패키지에 담음 (GitHub 의존성 제거, 어휘 파일을 wheel 에 포함)

@@ -764,7 +764,9 @@ def _subject(payload: Dict[str, Any], profile: Optional[Dict[str, Any]],
         ref_p, cur_p, cols = profile.get("ref") or {}, profile.get("cur") or {}, profile.get("columns") or {}
 
         def size(p: Dict[str, Any]) -> str:
-            text = t("subject.size_value", lang, rows=p.get("rows", 0), cols=len(p.get("columns") or []))
+            text = (t("subject.size_sampled", lang, rows=p.get("rows", 0), total=p["total_rows"],
+                      cols=len(p.get("columns") or [])) if p.get("total_rows")
+                    else t("subject.size_value", lang, rows=p.get("rows", 0), cols=len(p.get("columns") or [])))
             if (p.get("files") or 1) > 1:
                 text += t("subject.files", lang, files=p["files"])
             return _e(text)
@@ -1383,6 +1385,9 @@ def build_consultation_markdown(payload: Dict[str, Any], *, lang: str = DEFAULT_
         ref_p, cur_p = profile.get("ref") or {}, profile.get("cur") or {}
 
         def size(p: Dict[str, Any]) -> str:
+            if p.get("total_rows"):
+                return t("subject.size_sampled", lang, rows=p.get("rows", 0), total=p["total_rows"],
+                         cols=len(p.get("columns") or []))
             return t("subject.size_value", lang, rows=p.get("rows", 0), cols=len(p.get("columns") or []))
 
         def period(p: Dict[str, Any]) -> str:
