@@ -81,3 +81,19 @@ def test_separated_embeddings_read_as_an_embedding_shift():
     d = dx.build(verdict="DRIFT", overall=0.4, top=[("a", 0.3)], threshold=0.15, attr_threshold=0.25,
                  result={"attribute_drifts": {"a": 0.3}, "embedding_projection": few})
     assert not any(c["code"] == "embedding_shift" for c in d["archetypes"])
+
+
+def test_examples_name_typical_and_unlike_items():
+    rng = np.random.default_rng(3)
+    ref = rng.normal(size=(60, 16))
+    cur = rng.normal(size=(60, 16))
+    cur[:3] += 6.0                                   # three current items far from everything
+    names_r = [f"r{i:02d}.png" for i in range(60)]
+    names_c = [f"c{i:02d}.png" for i in range(60)]
+    p = project(ref, cur, ref_names=names_r, cur_names=names_c)
+    ex = p["examples"]
+    assert len(ex["ref_typical"]) == 5 and all(n.startswith("r") for n in ex["ref_typical"])
+    assert set(ex["cur_unlike_ref"][:3]) == {"c00.png", "c01.png", "c02.png"}
+    page = build_consultation_html(_payload(p), lang="ko")
+    assert "기준과 가장 다른 현재 항목" in page and "c00.png" in page
+    assert "examples" not in project(ref, cur)          # no names, no list

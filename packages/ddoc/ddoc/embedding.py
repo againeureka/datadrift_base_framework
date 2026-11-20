@@ -14,15 +14,20 @@ Besides the points it measures two things a reader can act on:
   neighbours (in the full embedding space) that are baseline points,
   divided by the share expected if the two sets were one population.
   1 = evenly mixed, 0 = fully separated.
+
+Given the item names, it also picks items to open and look at: the most
+typical of each set (nearest its centre) and the current items least like
+the baseline (farthest from their nearest baseline item).
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 MAX_POINTS = 300      # points per side drawn on the map
 FEW_POINTS = 20       # fewer per side and the map and its numbers are fragile
 MAX_NEIGHBOUR = 400   # points per side used for the mixing measure
 NEIGHBOURS = 5
+EXAMPLES = 5          # items listed per group when names are given
 
 
 def _sample(n: int, k: int, rng) -> "Any":
@@ -31,8 +36,10 @@ def _sample(n: int, k: int, rng) -> "Any":
     return np.arange(n) if n <= k else np.sort(rng.choice(n, size=k, replace=False))
 
 
-def project(ref, cur, *, max_points: int = MAX_POINTS, seed: int = 0) -> Optional[Dict[str, Any]]:
-    """PCA of both sets together, plus centroid shift and mixing.
+def project(ref, cur, *, ref_names: Optional[List[str]] = None, cur_names: Optional[List[str]] = None,
+            max_points: int = MAX_POINTS, seed: int = 0) -> Optional[Dict[str, Any]]:
+    """PCA of both sets together, plus centroid shift, mixing and — with
+    names — items worth looking at.
 
     ``ref`` / ``cur`` are array-likes of shape (n, d). Returns None when
     either side has fewer than two vectors."""
@@ -71,6 +78,18 @@ def project(ref, cur, *, max_points: int = MAX_POINTS, seed: int = 0) -> Optiona
     expected = len(xi) / (len(pool) - 1)
     mixing = min(1.0, observed / expected) if expected else 0.0
 
+    examples = None
+    if ref_names is not None and cur_names is not None and len(ref_names) == len(X) and len(cur_names) == len(Y):
+        k = EXAMPLES
+        near_ref = np.argsort(((X - X.mean(axis=0)) ** 2).sum(axis=1))[:k]
+        near_cur = np.argsort(((Y - Y.mean(axis=0)) ** 2).sum(axis=1))[:k]
+        # distance from each (sampled) current item to its nearest (sampled) baseline item
+        far = np.sqrt(np.maximum(d2[:, :len(xi)].min(axis=1), 0))
+        unlike = np.argsort(-far)[:k]
+        examples = {"ref_typical": [str(ref_names[i]) for i in near_ref],
+                    "cur_typical": [str(cur_names[i]) for i in near_cur],
+                    "cur_unlike_ref": [str(cur_names[yi[i]]) for i in unlike]}
+
     sx, sy = _sample(len(X), max_points, rng), _sample(len(Y), max_points, rng)
     r4 = lambda a: [[round(float(p[0]), 4), round(float(p[1]), 4)] for p in a]  # noqa: E731
     return {
@@ -82,4 +101,5 @@ def project(ref, cur, *, max_points: int = MAX_POINTS, seed: int = 0) -> Optiona
         "centroid_shift": None if shift is None else round(shift, 4),
         "mixing": round(float(mixing), 4),
         "few_points": bool(min(len(X), len(Y)) < FEW_POINTS),
+        **({"examples": examples} if examples else {}),
     }

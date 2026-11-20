@@ -181,6 +181,8 @@ details.tv table { margin-top: 6px; }
 .callouts a { color: inherit; font-weight: 600; }
 .callouts .fd { color: var(--ink-2); font-size: 14px; }
 .pod { scroll-margin-top: 16px; }
+table.examples td.nm-cell { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px;
+                            word-break: break-all; }
 .pod:target { outline: 3px solid var(--cur); outline-offset: 2px; }
 .headline { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
 .headline .k { color: var(--ink-2); font-weight: 400; margin-right: 6px; }
@@ -1080,10 +1082,21 @@ def _embedding_map(proj: Dict[str, Any], lang: str) -> str:
     table = _table_view(lang, ["", t("chart.ref", lang), t("chart.cur", lang)], [
         [t("emb.points", lang), f"{len(ref)} / {_int(n.get('ref'))}", f"{len(cur)} / {_int(n.get('cur'))}"],
         [t("emb.centre", lang), str(centre.get("ref")), str(centre.get("cur"))]], (1, 2))
+    examples = ""
+    ex = proj.get("examples") or {}
+    if ex:
+        cols = [("ref_typical", "emb.ex_ref"), ("cur_typical", "emb.ex_cur"), ("cur_unlike_ref", "emb.ex_unlike")]
+        head = "".join(f"<th>{_e(t(key, lang))}</th>" for _, key in cols)
+        depth = max(len(ex.get(c) or []) for c, _ in cols)
+        body = "".join("<tr>" + "".join(
+            f"<td class='nm-cell'>{_e((ex.get(c) or [''] * depth)[i] if i < len(ex.get(c) or []) else '')}</td>"
+            for c, _ in cols) + "</tr>" for i in range(depth))
+        examples = (f"<p class='summary'>{_e(t('emb.ex_lead', lang))}</p>"
+                    f"<table class='examples'><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>")
     return (f"<p class='dg-lead'>{_e(t('emb.lead', lang))}</p>{_legend(lang)}{''.join(out)}"
             f"<p class='summary'><b>{_e(stats)}</b></p>"
             + "".join(f"<div class='caution'>{_e(n)}</div>" for n in notes)
-            + f"<div class='legend'>{_e(shown)}</div>{table}")
+            + examples + f"<div class='legend'>{_e(shown)}</div>{table}")
 
 
 # ── Pattern reading ───────────────────────────────────────────────────

@@ -879,7 +879,9 @@ class DOCTextPlugin:
                 # 2-D map of both sets for the diagnostic report (numpy only).
                 try:
                     from ddoc.embedding import project
-                    drift_metrics['embedding_projection'] = project(ref_emb_array, cur_emb_array)
+                    drift_metrics['embedding_projection'] = project(
+                        ref_emb_array, cur_emb_array,
+                        ref_names=list(baseline_emb), cur_names=list(current_emb))
                 except Exception as e:  # noqa: BLE001 — the map is optional
                     print(f"⚠️ embedding map skipped: {e}")
 
