@@ -104,7 +104,7 @@ def create_app(*, bind_info: str = "127.0.0.1:8765") -> FastAPI:
         analyze, commands as commands_router, diff as diff_router, examples,
         export as export_router, fetch as fetch_router,
         health, plugins, recipe as recipe_router,
-        recipes_lib, report as report_router,
+        recipes_lib, report as report_router, scenarios as scenarios_router,
     )
 
     # Mount the GUI before any router that could claim
@@ -127,6 +127,7 @@ def create_app(*, bind_info: str = "127.0.0.1:8765") -> FastAPI:
     app.include_router(plugins.router)
     app.include_router(examples.router)
     app.include_router(diff_router.router)
+    app.include_router(scenarios_router.router)
     app.include_router(analyze.router)
     app.include_router(report_router.router)
     app.include_router(export_router.router)

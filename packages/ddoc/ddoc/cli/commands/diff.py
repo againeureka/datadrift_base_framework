@@ -451,12 +451,18 @@ def _write_report(payload: Dict[str, Any], report: Optional[Path],
     if report is None:
         return
     try:
-        from .diff_report import build_consultation_html
+        from .diff_report import build_consultation_html, build_consultation_markdown, for_paged_media
         report.parent.mkdir(parents=True, exist_ok=True)
-        report.write_text(
-            build_consultation_html(payload, distributions, lang=lang, issuer=issuer),
-            encoding="utf-8",
-        )
+        suffix = report.suffix.lower()
+        if suffix == ".md":  # for pull requests, tickets and chat
+            report.write_text(build_consultation_markdown(payload, lang=lang), encoding="utf-8")
+        else:
+            page = build_consultation_html(payload, distributions, lang=lang, issuer=issuer)
+            if suffix == ".pdf":
+                from weasyprint import HTML
+                HTML(string=for_paged_media(page)).write_pdf(str(report))
+            else:
+                report.write_text(page, encoding="utf-8")
         payload["report_path"] = str(report)
         payload.setdefault("hints", []).insert(0, t("hint.report_written", lang, path=report))
     except Exception as e:  # noqa: BLE001
@@ -543,8 +549,8 @@ def diff_command(
     ),
     report: Optional[Path] = typer.Option(
         None, "--report",
-        help="Write a self-contained HTML diagnostic report (verdict, why, "
-             "what changed, evidence, what to check next) to this path.",
+        help="Write the diagnostic report to this path: .html (self-contained page), "
+             ".md (Markdown for pull requests and tickets) or .pdf.",
     ),
     lang: Optional[str] = typer.Option(
         None, "--lang",

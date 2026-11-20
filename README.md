@@ -48,6 +48,7 @@ Three ways to use it:
 ```bash
 ./run.sh setup        # create ./.venv, install ddoc + categorical/tabular plugins
 ./run.sh doctor       # check the environment: plugins load? PDF, serve, embeddings available?
+./run.sh menu         # pick what to do by situation, fill in values, run it
 ./run.sh demo         # toy data → verdict → HTML report in outputs/demo/
 ./run.sh serve        # REST API + GUI on http://127.0.0.1:8765
 ./run.sh help         # test, gate, docker, and running any ddoc command
@@ -67,7 +68,8 @@ ddoc diff /tmp/d/ref /tmp/d/cur --report note.html
 ddoc serve                                                # REST API + GUI on http://127.0.0.1:8765
 ```
 
-More in the [ddoc README](packages/ddoc/README.md) and its [docs](packages/ddoc/docs/).
+More in the [ddoc README](packages/ddoc/README.md), its [docs](packages/ddoc/docs/) and the
+[cheat sheet](packages/ddoc/docs/cheatsheet.md) of commands by situation.
 
 ## The diagnostic report
 

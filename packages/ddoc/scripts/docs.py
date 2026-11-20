@@ -57,9 +57,16 @@ def _profile_findings() -> str:
     return f"현재 {len(pf.CATALOG)}가지입니다.\n\n" + "\n".join(rows)
 
 
+def _cheatsheet() -> str:
+    from ddoc import scenarios
+
+    return scenarios.cheatsheet("ko")
+
+
 BLOCKS: Dict[str, Tuple[Path, Callable[[], str]]] = {
     "archetypes": (DOCS / "tutorial" / "concepts.md", _archetypes),
     "profile-findings": (DOCS / "guides" / "analysis.md", _profile_findings),
+    "cheatsheet": (DOCS / "cheatsheet.md", _cheatsheet),
 }
 
 _MARK = re.compile(r"(<!-- generated:(?P<name>[\w-]+)[^>]*-->\n)(?P<body>.*?)(<!-- /generated:(?P=name) -->)", re.S)

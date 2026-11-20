@@ -39,6 +39,10 @@ def register(app: typer.Typer) -> None:
         help="One-line drift verdict between two datasets (exit 0=OK, 1=DRIFT, 2=BLIND)",
     )(diff_command)
 
+    # What to run, by situation (one catalog for CLI, menu, GUI and docs).
+    from .scenarios import scenarios_app
+    app.add_typer(scenarios_app, name="scenarios")
+
     # Look before running: the environment, and what diff would do with a path.
     from .doctor import doctor_command, probe_command
     app.command(name="doctor", help="Check Python, core libraries, plugins (do they load?) and optional features")(doctor_command)

@@ -44,6 +44,13 @@ def analyze_eda_command(
         0, "--sample-rows", min=0, max=20,
         help="Built-in CSV profile: include the first N rows (off by default: they are raw data).",
     ),
+    report: Optional[Path] = typer.Option(
+        None, "--report",
+        help="Also write the data profile report: .html, .md or .pdf.",
+    ),
+    lang: Optional[str] = typer.Option(
+        None, "--lang", help="Report language: en | ko (default: $DDOC_LANG, else en).",
+    ),
 ):
     """
     Run EDA analysis on a data path.
@@ -90,9 +97,34 @@ def analyze_eda_command(
         builtin = _builtin_profile(Path(data_path), sample_rows=sample_rows)
         if builtin is not None:
             hook_results = [builtin]
-    result = _finish_eda(hook_results, json_out=json_out)
+    merged = _finish_eda(hook_results, json_out=json_out, return_dict=report is not None)
+    if report is not None:
+        if merged is None:  # the error was already printed; keep its exit code
+            raise typer.Exit(code=1)
+        _write_profile(merged, report, lang)
     emit_progress(1.0, "complete", "done", enabled=ndjson_progress)
-    return result
+    return None
+
+
+def _write_profile(envelope, report: Path, lang: Optional[str]) -> None:
+    """The data profile report next to the JSON (best-effort, like diff)."""
+    from ....i18n import resolve_lang
+    from ..diff_report import for_paged_media
+    from ..profile_report import build_profile_html, build_profile_markdown
+
+    lang = resolve_lang(lang)
+    try:
+        report.parent.mkdir(parents=True, exist_ok=True)
+        if report.suffix.lower() == ".md":
+            report.write_text(build_profile_markdown(envelope, lang=lang), encoding="utf-8")
+        elif report.suffix.lower() == ".pdf":
+            from weasyprint import HTML
+            HTML(string=for_paged_media(build_profile_html(envelope, lang=lang))).write_pdf(str(report))
+        else:
+            report.write_text(build_profile_html(envelope, lang=lang), encoding="utf-8")
+        rprint(f"[dim]report → {report}[/dim]", file=sys.stderr)
+    except Exception as e:  # noqa: BLE001 — the analysis already succeeded
+        rprint(f"[yellow]report not written: {e}[/yellow]", file=sys.stderr)
 
 
 def _builtin_profile(path: Path, *, sample_rows: int = 0):

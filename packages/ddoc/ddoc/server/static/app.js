@@ -14,6 +14,12 @@
   const I18N = {
     en: {
       'tab.diff':      'Diagnose (diff)',
+      'tab.scenarios': 'Scenarios',
+      'scen.lead':     'What to run, by situation. The same list as `ddoc scenarios` and ./run.sh menu.',
+      'scen.copy':     'Copy command',
+      'scen.copied':   'copied',
+      'scen.open':     'Open in its tab',
+      'scen.needs':    'fill in:',
       'diff.open':     'Open in new tab',
       'diff.save':     'Save HTML',
       'diff.report':   'Diagnostic report',
@@ -41,6 +47,12 @@
     },
     ko: {
       'tab.diff':      '진단 (diff)',
+      'tab.scenarios': '상황별',
+      'scen.lead':     '상황마다 실행할 명령입니다. `ddoc scenarios`, ./run.sh menu 와 같은 목록입니다.',
+      'scen.copy':     '명령 복사',
+      'scen.copied':   '복사됨',
+      'scen.open':     '탭에서 열기',
+      'scen.needs':    '채울 값:',
       'diff.open':     '새 탭에서 열기',
       'diff.save':     'HTML 저장',
       'diff.report':   '진단서',
@@ -143,12 +155,14 @@
 
   // ── Bootstrap ────────────────────────────────────────────────────
   async function bootstrap() {
-    const [health, detectors, examples, library] = await Promise.all([
+    const [health, detectors, examples, library, scenarios] = await Promise.all([
       api('GET', '/healthz'),
       api('GET', '/plugins/detectors'),
       api('GET', '/examples/scenarios'),
       api('GET', '/recipes'),
+      api('GET', '/scenarios?lang=' + encodeURIComponent(LANG)),
     ]);
+    STATE.scenarios = Array.isArray(scenarios.json) ? scenarios.json : [];
     STATE.health = health.json || {};
     STATE.detectors = detectors.json || { count: 0, registry: [] };
     STATE.examples = examples.json || { modalities: [], scenarios: [] };
@@ -157,13 +171,83 @@
     applyI18n();
     renderTopbar();
     renderForms();
+    renderScenarios();
     renderActiveTab();
+  }
+
+  // ── Scenarios tab ────────────────────────────────────────────────
+  // Read-only cards from GET /scenarios. A card with `gui` opens that
+  // tab with its parameters filled in; running goes through the tab's
+  // own Submit, so the server gains no new way to run commands.
+  function renderScenarios() {
+    const root = $('.builder[data-builder="scenarios"]');
+    if (!root) return;
+    root.innerHTML = '';
+    root.appendChild(el('h2', {}, t('tab.scenarios')));
+    root.appendChild(el('p', { class: 'help' }, t('scen.lead')));
+    let group = null;
+    for (const s of STATE.scenarios || []) {
+      if (s.group !== group) {
+        group = s.group;
+        root.appendChild(el('h3', { class: 'scen-group' }, group));
+      }
+      const card = el('div', { class: 'scen-card' });
+      card.appendChild(el('div', { class: 'scen-title' }, el('b', {}, s.title), el('code', {}, ' ' + s.id)));
+      card.appendChild(el('div', { class: 'scen-when' }, s.when));
+      if (s.commands.length) card.appendChild(el('pre', { class: 'scen-cmd' }, s.commands.join('\n')));
+      const needs = s.params.filter(p => p.required).map(p => p.name);
+      if (needs.length) card.appendChild(el('div', { class: 'scen-needs' }, `${t('scen.needs')} ${needs.join(', ')}`));
+      if (s.tips.length) {
+        const ul = el('ul', { class: 'scen-tips' });
+        s.tips.forEach(tip => ul.appendChild(el('li', {}, tip)));
+        card.appendChild(ul);
+      }
+      const bar = el('div', { class: 'scen-actions' });
+      if (s.commands.length) {
+        const copy = el('button', { type: 'button' }, t('scen.copy'));
+        copy.addEventListener('click', async () => {
+          try { await navigator.clipboard.writeText(s.commands.join('\n')); copy.textContent = t('scen.copied'); }
+          catch (_) { /* clipboard blocked: the command is on screen */ }
+        });
+        bar.appendChild(copy);
+      }
+      if (s.gui && SCHEMAS[s.gui]) {
+        bar.appendChild(el('button', { type: 'button', onclick: () => openScenario(s) }, t('scen.open')));
+      }
+      card.appendChild(bar);
+      root.appendChild(card);
+    }
+  }
+
+  function openScenario(s) {
+    const tabBtn = $(`#tabs .tab[data-tab="${s.gui}"]`);
+    if (tabBtn) tabBtn.click();
+    const fields = new Set(SCHEMAS[s.gui].fields.map(f => f.name));
+    for (const p of s.params) {
+      if (!fields.has(p.name) || !p.default) continue;
+      const input = $(`#${s.gui}-${p.name}`);
+      if (!input) continue;
+      input.value = p.default;
+      STATE.forms[s.gui][p.name] = p.default;
+    }
+    // A flag in the command (e.g. --with-embeddings) ticks the matching checkbox.
+    const cmd = s.commands.join(' ');
+    for (const f of SCHEMAS[s.gui].fields) {
+      if (f.type !== 'check') continue;
+      const box = $(`#${s.gui}-${f.name}`);
+      if (box && cmd.includes('--' + f.name.replace(/_/g, '-'))) {
+        box.checked = true;
+        STATE.forms[s.gui][f.name] = true;
+      }
+    }
+    updateCli();
+    validate();
   }
 
   function applyI18n() {
     document.documentElement.lang = LANG;
     // Tab labels.
-    const tabKeys = { diff: 'tab.diff', drift: 'tab.drift', eda: 'tab.eda', examples: 'tab.examples',
+    const tabKeys = { diff: 'tab.diff', scenarios: 'tab.scenarios', drift: 'tab.drift', eda: 'tab.eda', examples: 'tab.examples',
                       report: 'tab.report', export: 'tab.export', fetch: 'tab.fetch' };
     $$('#tabs .tab').forEach(b => {
       const k = tabKeys[b.dataset.tab];
@@ -586,6 +670,11 @@
   }
 
   function refreshSaveButtonVisibility() {
+    // The Scenarios tab has no form: no Submit, no CLI preview.
+    const formless = !SCHEMAS[STATE.activeTab];
+    $('.actions').style.display = formless ? 'none' : '';
+    $('.cli-panel').style.display = formless ? 'none' : '';
+    $('.form-panel').style.gridColumn = formless ? '1 / 3' : '';
     const ids = ['#recipe-save-btn', '#recipe-diff-btn',
                  '#recipe-restore-btn', '#recipe-delete-btn',
                  '#recipe-write-token-row'];
@@ -697,6 +786,7 @@
   function validateCurrent() {
     const tab = STATE.activeTab;
     const schema = SCHEMAS[tab];
+    if (!schema) return [];
     const state = STATE.forms[tab] || {};
     const errors = [];
 
@@ -853,6 +943,7 @@
 
   function updateCli() {
     const tab = STATE.activeTab;
+    if (!SCHEMAS[tab]) { $('#cli-hint').textContent = ''; return; }
     const args = buildArgv(tab, STATE.forms[tab] || {});
     $('#cli-hint').textContent = ['ddoc', ...args.map(quoteArg)].join(' ');
   }

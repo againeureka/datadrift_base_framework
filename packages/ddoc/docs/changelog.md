@@ -8,6 +8,7 @@
 
 **주요 변경사항:**
 - ✨ `ddoc diff` 한 줄 판정 (OK / DRIFT / BLIND), `--report` HTML 진단서, Drift Zoo, GitHub Action
+- ✨ 상황별 시나리오 카탈로그 — `ddoc scenarios` (목록·치트시트·실행·메뉴), `./run.sh menu`, GUI "상황별" 탭, 생성되는 치트시트. `diff --report` 의 `.md`·`.pdf`, `analyze eda --report`
 - ✨ `ddoc doctor` (환경·플러그인 로드·선택 기능 점검), `ddoc probe` (diff 전에 데이터 종류·판정 주체·BLIND 여부 확인), `./run.sh doctor`
 - ✨ 내장 CSV 프로파일러(`analyze eda`)와 데이터 프로필 보고서 (`--sample-rows`)
 - ✨ `report render` 가 drift 입력을 진단서(HTML·PDF·Markdown)로 렌더, `ddoc serve` 의 `POST /diff` 와 GUI 진단 탭

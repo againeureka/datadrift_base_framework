@@ -175,6 +175,7 @@ ddoc serve         # http://127.0.0.1:8765
 
 | Tab | 호출 endpoint | 비고 |
 |---|---|---|
+| 상황별 | `GET /scenarios` | 상황별 명령 목록(`ddoc scenarios` 와 같은 카탈로그). 명령 복사, `gui` 가 있는 시나리오는 "탭에서 열기"로 해당 탭에 값을 채움. 실행은 각 탭의 Submit 으로만 |
 | 진단 (diff) | `POST /diff` | 첫 탭. 판정 카드(판정·심각도·점수·판독·점검 안내)와 진단서를 함께 표시. 진단서는 sandbox iframe 안에서 툴바·툴팁·인쇄가 그대로 동작하고, "새 탭에서 열기" / "HTML 저장" 제공 |
 | Analyze drift | `POST /analyze/drift` (또는 `…/stream`) | "Use streaming" 체크 시 SSE 진행 chip |
 | Analyze EDA | `POST /analyze/eda` | `data_path` 기반 |

@@ -36,6 +36,8 @@ Usage: ./run.sh <command> [args]
                           categorical tabular timeseries text audio evidently vision)
   doctor                 Check the environment: venv, Python, plugins (do they
                          load?), optional features, Docker and Chrome
+  menu                   Pick what to do by situation, fill in values, run it
+                         (the same catalog as `ddoc scenarios` and the GUI)
   demo                   Generate toy data, judge it, and write an HTML report
   serve [ddoc serve args]
                          Start the REST API + browser GUI (http://127.0.0.1:8765)
@@ -206,6 +208,11 @@ cmd_docs() {
   "$VENV/bin/python" "$ROOT/packages/ddoc/scripts/docs.py" "$what"
 }
 
+cmd_menu() {
+  require_venv
+  exec ddoc scenarios menu "$@"
+}
+
 cmd_ddoc() {
   require_venv
   exec ddoc "$@"
@@ -223,6 +230,7 @@ main() {
     docker) cmd_docker "$@" ;;
     docs)   cmd_docs "$@" ;;
     doctor) cmd_doctor "$@" ;;
+    menu)   cmd_menu "$@" ;;
     ddoc)   cmd_ddoc "$@" ;;
     help|-h|--help) usage ;;
     *) usage >&2; exit 2 ;;

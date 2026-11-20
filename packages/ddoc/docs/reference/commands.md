@@ -18,7 +18,7 @@
 | `--detector` | `default` | 플러그인에 넘길 검출기 (`ddoc plugin detectors`) |
 | `--json` | | 판정 JSON 한 객체를 stdout 에 |
 | `--verbose` | | 플러그인 진단 메시지 표시 |
-| `--report <path>` | | 검사 보고서 형식의 HTML 진단서 저장 (검사 대상, 요약, 유형 판독, 데이터 도면, 판정 근거·계통별 검사표, 속성별 결과·상세, 데이터 특징, 점검 항목) |
+| `--report <path>` | | 진단서 저장. 확장자로 형식 결정: `.html`(단일 파일 진단서), `.md`(PR·이슈용 Markdown), `.pdf` |
 | `--lang` | `$DDOC_LANG`, 없으면 `en` | 진단서·안내 문구·터미널 출력 언어 (`en` · `ko`) |
 | `--issuer` | `$DDOC_ISSUER`, 없으면 `ddoc` | 진단서 머리글에 들어갈 발행처 |
 | `--with-embeddings` | 끔 | 이미지·텍스트 플러그인이 임베딩까지 비교 (모델 로드, 느림). 진단서에 임베딩 지도 추가 |
@@ -53,6 +53,30 @@ ddoc probe camA_ref/ camA_now/ --json
 | `--json` | 결과를 JSON 한 객체로 |
 | `--lang` | `en` · `ko` |
 
+## `ddoc scenarios`
+
+상황별 명령 카탈로그(`ddoc/scenarios.conf`). 같은 목록을 `./run.sh menu`, `ddoc serve` 의 "상황별" 탭,
+[치트시트](../cheatsheet.md)가 함께 씁니다.
+
+```bash
+ddoc scenarios                                   # 그룹별 목록
+ddoc scenarios --md --lang ko                    # 치트시트 (Markdown)
+ddoc scenarios run compare --set ref=jan.csv --set cur=aug.csv
+ddoc scenarios run compare --set ref=a --set cur=b -n   # 실행하지 않고 명령만
+ddoc scenarios menu                              # 번호로 고르고 값을 채워 실행
+```
+
+| 명령·옵션 | 설명 |
+|---|---|
+| `--md` / `--json` | 목록을 Markdown 치트시트 / JSON 으로 |
+| `run <id>` `--set 이름=값` | 시나리오 실행. 값이 없는 필수 매개변수가 있으면 종료 코드 2 |
+| `run <id>` `-n`, `--dry-run` | 실행하지 않고 명령만 출력 |
+| `menu` | 번호로 고르기 → 값 입력 → 명령 확인 → 실행 |
+| `--lang` | `en` · `ko` (실행하는 명령에도 같은 언어 적용) |
+
+여러 줄짜리 시나리오는 차례로 실행하며, 마지막 줄을 뺀 단계가 실패하면 멈춥니다. 종료 코드는
+마지막 명령의 것입니다(diff 면 0 OK · 1 DRIFT · 2 BLIND).
+
 ## `ddoc analyze drift`
 
 플러그인 기반 저수준 drift 분석.
@@ -76,6 +100,8 @@ ddoc probe camA_ref/ camA_now/ --json
 | `--data-path` | 분석할 데이터 경로 (필수) |
 | `--invalidate-cache` | 분석 캐시 무시 |
 | `--sample-rows N` | 내장 CSV 프로필에 앞 N행 포함 (0–20, 기본 끔 — 원본 데이터) |
+| `--report <path>` | 데이터 프로필 보고서도 함께 저장 (`.html` · `.md` · `.pdf`) |
+| `--lang` | 보고서 언어 (`en` · `ko`) |
 | `--json` / `--ndjson-progress` / `--quiet` | 출력 형식 제어 |
 
 ## `ddoc report render`

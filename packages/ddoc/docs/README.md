@@ -20,6 +20,7 @@
 
 ## 레퍼런스
 
+- **[치트시트](cheatsheet.md)** — 상황별로 그대로 칠 명령 (`ddoc scenarios`, `./run.sh menu`)
 - **[명령어 레퍼런스](reference/commands.md)** — 모든 CLI 명령과 옵션
 
 ## 릴리스 정보
