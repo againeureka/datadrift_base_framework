@@ -24,6 +24,35 @@
 | `--with-embeddings` | 끔 | 이미지·텍스트 플러그인이 임베딩까지 비교 (모델 로드, 느림). 진단서에 임베딩 지도 추가 |
 | `--sample-rows N` | `0` (끔) | CSV 양쪽의 앞 N행(최대 20)을 진단서와 JSON 에 포함. 원본 데이터가 담기므로 기본은 끔 |
 
+## `ddoc doctor`
+
+환경 점검. Python, 코어 라이브러리, 설치된 플러그인이 **실제로 불러지는지**, 선택 기능(PDF
+보고서, `ddoc serve`, 임베딩 비교)을 쓸 수 있는지 봅니다. 플러그인이 설치되어 있어도 불러지지
+않으면 그 플러그인이 맡는 데이터는 BLIND 가 되므로, 빠진 모듈을 함께 보여줍니다.
+종료 코드: 코어가 동작하면 0, 코어에 필요한 것이 없으면 1. `./run.sh doctor` 는 여기에
+venv 위치와 Docker·Chrome 유무를 더합니다.
+
+| 옵션 | 설명 |
+|---|---|
+| `--json` | 점검 결과를 JSON 한 객체로 |
+| `--lang` | `en` · `ko` |
+
+## `ddoc probe <ref> [<cur>]`
+
+`ddoc diff` 가 이 경로들을 어떻게 다룰지 판정 없이 미리 봅니다. 데이터 종류, 누가 판정할지(플러그인
+또는 내장 CSV 비교기), BLIND 가 될지와 그 이유. CSV 두 개면 행 수, 비교할 열, 한쪽에만 있는 열,
+날짜·시간 열도 보여줍니다. 종료 코드: 판정할 수 있으면 0, BLIND 가 되면 2.
+
+```bash
+ddoc probe jan.csv aug.csv
+ddoc probe camA_ref/ camA_now/ --json
+```
+
+| 옵션 | 설명 |
+|---|---|
+| `--json` | 결과를 JSON 한 객체로 |
+| `--lang` | `en` · `ko` |
+
 ## `ddoc analyze drift`
 
 플러그인 기반 저수준 drift 분석.

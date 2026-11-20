@@ -34,6 +34,8 @@ Usage: ./run.sh <command> [args]
   setup [plugin ...]     Create ./.venv and install ddoc plus plugins
                          (default: categorical tabular; "all" for every plugin:
                           categorical tabular timeseries text audio evidently vision)
+  doctor                 Check the environment: venv, Python, plugins (do they
+                         load?), optional features, Docker and Chrome
   demo                   Generate toy data, judge it, and write an HTML report
   serve [ddoc serve args]
                          Start the REST API + browser GUI (http://127.0.0.1:8765)
@@ -170,6 +172,30 @@ cmd_docker() {
   esac
 }
 
+cmd_doctor() {
+  if [ ! -x "$VENV/bin/ddoc" ]; then
+    printf '  ✕ no ddoc environment at %s\n      ⤷ ./run.sh setup\n' "$VENV"
+    return 1
+  fi
+  printf 'Environment: %s\n' "$VENV"
+  local rc=0
+  "$VENV/bin/ddoc" doctor || rc=$?
+  echo
+  printf 'Tools used by run.sh\n'
+  if command -v docker >/dev/null 2>&1; then
+    printf '  ✓ docker  (./run.sh docker)\n'
+  else
+    printf '  ! docker not found — only ./run.sh docker needs it\n'
+  fi
+  if [ -n "${DDOC_CHROME:-}" ] || [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ] \
+      || command -v google-chrome >/dev/null 2>&1 || command -v chromium >/dev/null 2>&1; then
+    printf '  ✓ chrome  (./run.sh docs shots)\n'
+  else
+    printf '  ! chrome not found — only ./run.sh docs shots needs it (or set DDOC_CHROME)\n'
+  fi
+  return "$rc"
+}
+
 cmd_docs() {
   require_venv
   local what="${1:-check}"
@@ -196,6 +222,7 @@ main() {
     gate)   cmd_gate "$@" ;;
     docker) cmd_docker "$@" ;;
     docs)   cmd_docs "$@" ;;
+    doctor) cmd_doctor "$@" ;;
     ddoc)   cmd_ddoc "$@" ;;
     help|-h|--help) usage ;;
     *) usage >&2; exit 2 ;;

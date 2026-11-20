@@ -47,6 +47,7 @@ Three ways to use it:
 
 ```bash
 ./run.sh setup        # create ./.venv, install ddoc + categorical/tabular plugins
+./run.sh doctor       # check the environment: plugins load? PDF, serve, embeddings available?
 ./run.sh demo         # toy data → verdict → HTML report in outputs/demo/
 ./run.sh serve        # REST API + GUI on http://127.0.0.1:8765
 ./run.sh help         # test, gate, docker, and running any ddoc command

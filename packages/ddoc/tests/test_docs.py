@@ -27,7 +27,7 @@ def _sections(text: str):
     """`## \\`ddoc a b <arg>\\`` headings → (command words, section text)."""
     parts = re.split(r"^## `ddoc ([^`]*)`\s*$", text, flags=re.M)
     for i in range(1, len(parts), 2):
-        words = [w for w in parts[i].split() if not w.startswith("<")]
+        words = [w for w in parts[i].split() if not w.startswith(("<", "["))]
         yield words, parts[i + 1]
 
 

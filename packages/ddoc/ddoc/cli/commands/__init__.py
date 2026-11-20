@@ -39,6 +39,11 @@ def register(app: typer.Typer) -> None:
         help="One-line drift verdict between two datasets (exit 0=OK, 1=DRIFT, 2=BLIND)",
     )(diff_command)
 
+    # Look before running: the environment, and what diff would do with a path.
+    from .doctor import doctor_command, probe_command
+    app.command(name="doctor", help="Check Python, core libraries, plugins (do they load?) and optional features")(doctor_command)
+    app.command(name="probe", help="What would `ddoc diff` make of these paths? Kind, who judges, BLIND or not")(probe_command)
+
     # ========================================================================
     # System Commands
     # ========================================================================
