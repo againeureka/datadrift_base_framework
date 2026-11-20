@@ -191,21 +191,34 @@ _SAMPLE_COLS_MAX = 12
 _SAMPLE_CELL_MAX = 40
 
 
+# Date-shaped text: always a 4-digit year, so codes like "1-2" never read as dates.
+_DATE_SHAPE = re.compile(
+    r"\s*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2}(\.\d+)?)?)?(Z|[+-]\d{2}:?\d{2})?"
+    r"|\d{1,2}/\d{1,2}/\d{4}( \d{1,2}:\d{2}(:\d{2})?)?)\s*")
+_SHAPE_SAMPLE = 200
+
+
 def _as_datetime(series):
     """The column parsed as date/time when it clearly is one, else None.
-    Only text columns with a time-like name are tried (numbers such as an
-    integer ``timestamp`` index stay numeric)."""
+
+    Text columns qualify by a time-like name, or — whatever the name — when
+    at least 90 % of the values have a date shape; either way 90 % must
+    parse. Numbers stay numeric (an integer ``timestamp`` index is data)."""
     import warnings
 
     import pandas as pd
 
     if pd.api.types.is_datetime64_any_dtype(series):
         return series
-    if pd.api.types.is_numeric_dtype(series) or not _TIME_NAME.search(str(series.name)):
+    if pd.api.types.is_numeric_dtype(series):
         return None
     values = series.dropna()
     if values.empty:
         return None
+    if not _TIME_NAME.search(str(series.name)):
+        sample = values.astype(str).head(_SHAPE_SAMPLE)
+        if sample.map(lambda v: bool(_DATE_SHAPE.fullmatch(v))).mean() < 0.9:
+            return None
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         parsed = pd.to_datetime(values, errors="coerce")
