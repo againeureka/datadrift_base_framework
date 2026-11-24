@@ -12,6 +12,8 @@
 - ✨ 임베딩 지도에 열어 볼 항목(기준·현재의 대표 항목, 기준과 가장 다른 현재 항목)을 파일 이름으로
 - ✨ 날짜·시간 열을 이름뿐 아니라 값의 모양(연도 네 자리 날짜·ISO 시각)으로도 찾음
 - 📦 vision·text 플러그인이 CLIP 을 패키지에 담음 (GitHub 의존성 제거, 어휘 파일을 wheel 에 포함)
+- 📦 text 플러그인이 nltk 없이 동작 — 내려받을 말뭉치가 없어 오프라인·프록시 뒤에서도 실행 (단어는 정규식,
+  영어 불용어는 scikit-learn 목록). 최근 nltk 에서 `punkt_tab` 이 없어 실패하던 문제도 함께 해결
 - 📝 [지금 상태](status.md) (확인한 방법과 알려진 한계) · [용어](glossary.md)
 - ✨ 판독 드릴 — 유형마다 정답이 있는 케이스, `./run.sh zoo` 와 테스트로 확인, 결과표는 zoo README 에 생성. vision 예제를 도형·색이 다양한 40장으로 교체
 - ✨ 상황별 시나리오 카탈로그 — `ddoc scenarios` (목록·치트시트·실행·메뉴), `./run.sh menu`, GUI "상황별" 탭, 생성되는 치트시트. `diff --report` 의 `.md`·`.pdf`, `analyze eda --report`
@@ -28,6 +30,7 @@
 - 📝 [판정 민감도](sensitivity.md) — 점수 방식 후보별 판정·오경보·검출 한계 비교 (기본값은 그대로)
 - 🐛 CSV 의 날짜·시간 텍스트 열을 비교하던 문제 — 이제 기간 표시에만 사용
 - 🐛 `ddoc serve` 가 JSON 이 아닌 요청 본문에 422 대신 500 을 내던 문제
+- 🐛 `ddoc diff` 가 실행한 디렉터리에 `analysis/diff/metrics.json` 을 남기던 문제
 - 🐛 PDF 진단서·보고서를 쓸 때 PDF 엔진 로그 수십~수천 줄이 stdout 에 섞여 `--json` 출력이 깨지던 문제 (로그는 stderr 로)
 - 🐛 플러그인 하나의 실패가 다른 플러그인 결과를 지우던 문제, 일반 설치에서 `examples generate` 가 실패하던 문제 수정
 - 🔄 코어와 플러그인을 `packages/ddoc/`, `packages/plugins/` 로 이동

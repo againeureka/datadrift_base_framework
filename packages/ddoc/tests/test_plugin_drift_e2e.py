@@ -146,23 +146,12 @@ def test_drift_audio_identical(toy_audio_identical: Tuple[Path, Path]):
     assert res.get("overall_score", 1.0) < 1e-6, res
 
 
-# ── Text — needs ddoc-plugin-text + nltk data ─────────────────────────
-
-
-def _nltk_ready() -> bool:
-    try:
-        import nltk
-        nltk.data.find("tokenizers/punkt_tab")
-        return True
-    except Exception:
-        return False
+# ── Text — needs ddoc-plugin-text (no downloaded corpora) ──────────────
 
 
 def test_drift_text_shifted(toy_text_pair: Tuple[Path, Path]):
     if not _plugin_installed("ddoc_text"):
         pytest.skip("ddoc-plugin-text not installed")
-    if not _nltk_ready():
-        pytest.skip("nltk punkt_tab not downloaded — run nltk.download('punkt_tab')")
     ref, cur = toy_text_pair
     res = _run_drift(ref, cur)
     assert res.get("modality") == "text"
@@ -173,8 +162,6 @@ def test_drift_text_shifted(toy_text_pair: Tuple[Path, Path]):
 def test_drift_text_identical(toy_text_identical: Tuple[Path, Path]):
     if not _plugin_installed("ddoc_text"):
         pytest.skip("ddoc-plugin-text not installed")
-    if not _nltk_ready():
-        pytest.skip("nltk punkt_tab not downloaded")
     ref, cur = toy_text_identical
     res = _run_drift(ref, cur)
     assert res.get("modality") == "text"

@@ -38,8 +38,10 @@ too — slower (~5 s + 600 MB RAM) but full cosine signal.
 
 ```bash
 pip install -e packages/plugins/ddoc-plugin-text   # editable, monorepo dev
-pip install nltk
-python -c "import nltk; [nltk.download(p) for p in ('punkt_tab','stopwords','averaged_perceptron_tagger')]"
-# CLIP only needed when --with-embeddings or snapshot-mode embedding cache:
-pip install 'git+https://github.com/openai/CLIP.git'
 ```
+
+Nothing else to download: CLIP is bundled in the package (MIT, see
+`ddoc_plugin_text/clip/LICENSE`; its weights are fetched once on first
+`--with-embeddings` use), words are split with a regular expression and
+English stopwords come from scikit-learn's built-in list. Other languages
+get no stopword ratio.

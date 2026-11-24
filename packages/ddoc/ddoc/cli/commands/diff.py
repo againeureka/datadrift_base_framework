@@ -29,6 +29,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -674,7 +675,11 @@ def diff_command(
     result: Optional[Dict[str, Any]] = None
     engine: Optional[str] = None
     try:
-        with _SilencePluginIO(json_out=True, quiet=not verbose):
+        # Plugins also write their metrics to ``output_path``; the verdict
+        # needs only what they return, so that copy goes to a scratch
+        # folder instead of ./analysis/diff in the caller's directory.
+        with tempfile.TemporaryDirectory(prefix="ddoc-diff-") as scratch, \
+                _SilencePluginIO(json_out=True, quiet=not verbose):
             hook_results, hook_errors = call_hook_isolated(
                 get_pmgr(), "drift_detect",
                 snapshot_id_ref="__path__", snapshot_id_cur="__path__",
@@ -684,7 +689,7 @@ def diff_command(
                 cfg={"baseline_cache": None, "current_cache": None,
                      "baseline_metadata": None, "current_metadata": None,
                      "with_embeddings": with_embeddings},
-                output_path="analysis/diff",
+                output_path=scratch,
             )
         if verbose:
             for plugin_name, err in hook_errors:

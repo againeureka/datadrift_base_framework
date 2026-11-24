@@ -322,3 +322,16 @@ def test_pdf_report_keeps_json_stdout_clean(tmp_path):
     assert json.loads(proc.stdout)["report_path"].endswith("note.pdf")
     assert (tmp_path / "note.pdf").stat().st_size > 10_000
     assert len(proc.stderr.splitlines()) < 5, proc.stderr[:500]
+
+
+def test_diff_leaves_nothing_in_the_working_directory(tmp_path, monkeypatch):
+    """Plugins write a metrics copy to their output folder; `ddoc diff`
+    must not leave it behind in the caller's directory."""
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "distributions.json").write_text(json.dumps({"label": {"a": 50, "b": 50}}))
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.chdir(work)
+    runner.invoke(app, ["diff", str(data), str(data), "--json"])
+    assert list(work.iterdir()) == []

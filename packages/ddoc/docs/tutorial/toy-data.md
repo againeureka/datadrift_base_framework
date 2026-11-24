@@ -63,11 +63,10 @@ ddoc analyze drift --data-path-ref /tmp/au/ref --data-path-cur /tmp/au/cur \
     --json --quiet
 ```
 
-text 는 `ddoc-plugin-text` + nltk 데이터:
+text 는 `ddoc-plugin-text` (따로 내려받을 데이터 없음, `--with-embeddings` 를 처음 쓸 때 CLIP 가중치만 받음):
 
 ```bash
 pip install ddoc-plugin-text
-python -c "import nltk; nltk.download('punkt_tab'); nltk.download('stopwords')"
 ddoc examples generate text --out /tmp/tx --scenario shifted
 ddoc analyze drift --data-path-ref /tmp/tx/ref --data-path-cur /tmp/tx/cur \
     --json --quiet

@@ -5,6 +5,7 @@ Provides hookimpl for:
 - eda_run: Text attribute analysis, CLIP text embedding extraction
 - drift_detect: Drift detection between baseline and current text datasets
 """
+import functools
 import os
 import yaml
 import json
@@ -27,20 +28,24 @@ except ImportError:
 try:
     import torch
     from . import clip  # bundled OpenAI CLIP (MIT), see clip/LICENSE
-    import nltk
-    from nltk.corpus import stopwords
-    from nltk.tokenize import word_tokenize
-    # Download required NLTK data
-    try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        nltk.download('punkt', quiet=True)
-    try:
-        nltk.data.find('corpora/stopwords')
-    except LookupError:
-        nltk.download('stopwords', quiet=True)
 except ImportError as e:
-    print(f"Warning: Some dependencies not available: {e}")
+    import sys
+    print(f"Warning: Some dependencies not available: {e}", file=sys.stderr)
+
+# Words and stopwords without downloaded corpora, so the plugin works
+# offline and behind proxies, and gives the same numbers everywhere.
+# Tokens: words (keeping inner apostrophes) and single punctuation marks.
+_TOKEN = re.compile(r"\w+(?:['’]\w+)*|[^\w\s]")
+
+
+@functools.lru_cache(maxsize=None)
+def _stopwords(language: str) -> frozenset:
+    """Stopwords for ``language``; English from scikit-learn's built-in list.
+    Other languages have none (their stopword ratio stays 0)."""
+    if language == "english":
+        from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+        return frozenset(ENGLISH_STOP_WORDS)
+    return frozenset()
 
 
 class DOCTextPlugin:
@@ -216,7 +221,7 @@ class DOCTextPlugin:
         
         # Length metrics
         length_chars = len(text_str)
-        words = word_tokenize(text_str.lower())
+        words = _TOKEN.findall(text_str.lower())
         length_words = len(words)
         
         # Whitespace ratio
@@ -228,12 +233,9 @@ class DOCTextPlugin:
         special_char_ratio = special_char_count / length_chars if length_chars > 0 else 0
         
         # Stopword ratio
-        try:
-            stop_words = set(stopwords.words(language))
-            stopword_count = sum(1 for w in words if w in stop_words)
-            stopword_ratio = stopword_count / length_words if length_words > 0 else 0
-        except:
-            stopword_ratio = 0
+        stop_words = _stopwords(language)
+        stopword_count = sum(1 for w in words if w in stop_words)
+        stopword_ratio = stopword_count / length_words if length_words > 0 else 0
         
         # Vocabulary diversity (Type-Token Ratio)
         unique_words = len(set(words))
