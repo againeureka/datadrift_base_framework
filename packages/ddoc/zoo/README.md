@@ -33,7 +33,8 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 이야기 케이스 말고도, 유형마다 변화 하나만 심은 작은 **드릴**([`drills.py`](drills.py))이 있습니다.
 각 드릴은 "이 데이터는 이 유형으로, 이 열에서 읽혀야 한다"는 정답을 갖고, [`eval.py`](eval.py) 가
 실제 `ddoc diff` 로 돌려 맞춰 봅니다(`./run.sh zoo`). 아래 표는 그 결과로 만들어지며
-(`./run.sh docs build`), 테스트가 전부 맞는지 확인합니다.
+(`./run.sh docs build`), 테스트가 전부 맞는지 확인합니다. 판정 규칙의 후보를 드릴과 무변화 데이터로
+비교하는 [`sensitivity.py`](sensitivity.py) 의 결과는 [판정 민감도](../docs/sensitivity.md)에 있습니다.
 
 <!-- generated:zoo-eval — scripts/docs.py build -->
 케이스 19개 중 19개가 기대한 판독과 정확히 일치합니다 (빠진 유형도, 더 나온 유형도 없음). 유형 17가지 중 16가지를 드릴로 확인하며, 임베딩 분리형은 이미지·텍스트 플러그인이 필요해 드릴에서 뺐습니다.
@@ -60,7 +61,7 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 | [creeping_degradation](creeping_degradation/) | 이야기 케이스 | DRIFT (0.336) | 이동·확산형 (reading) | ✓ |
 | [rhythm_not_drift](rhythm_not_drift/) | 이야기 케이스 | OK (0.010) | 안정형 | ✓ |
 
-**판정 민감도.** 변화를 심은 속성 드릴 8개(`shift-and-spread`, `level-shift`, `spread-change`, `tail-outliers`, `missing-surge`, `new-category`, `vanished-category`, `mix-shift`)가 판정은 OK 입니다. 판독은 변화를 정확히 짚고(잠복 변화형으로도 표시) 있지만, 분포 점수(Jensen–Shannon 발산)가 단일 속성 기준 0.25 에 닿지 않습니다. 판정 기준과 점수 방식은 이 표로 근거를 보며 따로 정할 문제라 드릴은 판정을 확인하지 않고 그대로 보여줍니다.
+**판정 민감도.** 변화를 심은 속성 드릴 8개(`shift-and-spread`, `level-shift`, `spread-change`, `tail-outliers`, `missing-surge`, `new-category`, `vanished-category`, `mix-shift`)가 판정은 OK 입니다. 판독은 변화를 정확히 짚고(잠복 변화형으로도 표시) 있지만, 분포 점수(Jensen–Shannon 발산)가 단일 속성 기준 0.25 에 닿지 않습니다. 판정 기준과 점수 방식은 따로 정할 문제라 드릴은 판정을 확인하지 않고 그대로 보여줍니다. 후보 방식의 비교는 [판정 민감도](../docs/sensitivity.md)에 있습니다.
 <!-- /generated:zoo-eval -->
 
 세 번째 케이스가 핵심입니다: 모든 것을 DRIFT라 우기는 탐지기는 알람 피로만
