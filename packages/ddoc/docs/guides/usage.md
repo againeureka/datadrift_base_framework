@@ -5,16 +5,17 @@
 ddoc 은 **기준 데이터와 현재 데이터를 비교해 `OK` · `DRIFT` · `BLIND`(판정 불가) 중 하나로 판정하고, 그 근거를
 진단서로 남기는** 도구입니다. 아래는 상황별로 그대로 따라 칠 수 있는 예제입니다. 출력은 실제 실행 결과입니다.
 
-- [0. 준비](#0-준비)
-- [1. 두 CSV 비교하기](#1-두-csv-비교하기)
-- [2. 판정 전에 미리 보기](#2-판정-전에-미리-보기)
-- [3. 데이터 하나 살펴보기](#3-데이터-하나-살펴보기)
-- [4. 이미지·텍스트 폴더 비교](#4-이미지텍스트-폴더-비교)
-- [5. 결과 공유하기](#5-결과-공유하기)
-- [6. 스크립트·CI 에서 쓰기](#6-스크립트ci-에서-쓰기)
-- [7. 브라우저 GUI 와 REST API](#7-브라우저-gui-와-rest-api)
-- [8. 명령이 기억나지 않을 때](#8-명령이-기억나지-않을-때)
-- [알아 둘 점](#알아-둘-점)
+- [사용 예제](#사용-예제)
+  - [0. 준비](#0-준비)
+  - [1. 두 CSV 비교하기](#1-두-csv-비교하기)
+  - [2. 판정 전에 미리 보기](#2-판정-전에-미리-보기)
+  - [3. 데이터 하나 살펴보기](#3-데이터-하나-살펴보기)
+  - [4. 이미지·텍스트 폴더 비교](#4-이미지텍스트-폴더-비교)
+  - [5. 결과 공유하기](#5-결과-공유하기)
+  - [6. 스크립트·CI 에서 쓰기](#6-스크립트ci-에서-쓰기)
+  - [7. 브라우저 GUI 와 REST API](#7-브라우저-gui-와-rest-api)
+  - [8. 명령이 기억나지 않을 때](#8-명령이-기억나지-않을-때)
+  - [알아 둘 점](#알아-둘-점)
 
 ## 0. 준비
 
@@ -103,9 +104,11 @@ ddoc analyze eda --data-path data/ref.csv --report profile.html --quiet
 
 ## 4. 이미지·텍스트 폴더 비교
 
-vision 또는 text 플러그인과 torch 가 필요합니다(`./run.sh setup all`, `ddoc doctor` 로 확인).
+vision 또는 text 플러그인과 torch 가 필요합니다. 플러그인은 아직 PyPI 에 없어 `pip install ddoc-plugin-vision` 처럼
+이름으로는 설치되지 않으니, 저장소의 폴더로 설치하세요(`ddoc doctor` 로 확인).
 
 ```bash
+./run.sh setup vision                                  # 또는: pip install -e packages/plugins/ddoc-plugin-vision
 ddoc examples generate vision --out /tmp/v --scenario shifted
 ddoc diff /tmp/v/ref /tmp/v/cur --with-embeddings --lang ko --report note.html
 ```

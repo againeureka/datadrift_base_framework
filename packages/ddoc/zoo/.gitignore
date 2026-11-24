@@ -1,2 +1,8 @@
 data/
 note.html
+# outputs of the usage examples run inside a case folder
+note.*
+profile.*
+drift.md
+report.*
+result.json

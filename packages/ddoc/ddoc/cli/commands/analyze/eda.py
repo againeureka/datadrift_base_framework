@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..utils import call_hook_isolated, get_pmgr
+from ....plugin_install import plugin_command
 from .drift import _emit, _emit_error, _merge_plugin_results, emit_progress, _SilencePluginIO
 
 
@@ -147,7 +148,8 @@ def _finish_eda(hook_results, *, json_out: bool, return_dict: bool = False):
     """Shared post-hook handling. Returns the merged dict if ``return_dict``."""
     if not hook_results:
         _emit_error(
-            "No plugin available for EDA analysis. Install via: pip install ddoc-full",
+            f"No plugin available for EDA analysis. `ddoc doctor` shows what is installed; "
+            f"install a plugin for your data, e.g. {plugin_command('tabular')}",
             code="no_plugin", json_out=json_out,
         )
         if return_dict:

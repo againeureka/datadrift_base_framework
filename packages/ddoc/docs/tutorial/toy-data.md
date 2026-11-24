@@ -54,10 +54,15 @@ ddoc analyze drift \
 
 ## 다른 modality
 
+플러그인은 아직 PyPI 에 올라가 있지 않아 `pip install ddoc-plugin-<이름>` 으로는 설치되지 않습니다.
+저장소 루트에서 폴더 경로로 설치하거나(`pip install -e packages/plugins/ddoc-plugin-<이름>`) `./run.sh setup <이름>`
+으로 `./.venv` 에 더합니다. 저장소를 받지 않았다면 git 주소로 설치합니다:
+`pip install "git+https://github.com/keti-datadrift/datadrift_base_framework#subdirectory=packages/plugins/ddoc-plugin-<이름>"`.
+
 audio 는 plugin (`ddoc-plugin-audio`) 과 librosa 가 필요합니다:
 
 ```bash
-pip install ddoc-plugin-audio
+pip install -e packages/plugins/ddoc-plugin-audio
 ddoc examples generate audio --out /tmp/au --scenario shifted
 ddoc analyze drift --data-path-ref /tmp/au/ref --data-path-cur /tmp/au/cur \
     --json --quiet
@@ -66,17 +71,16 @@ ddoc analyze drift --data-path-ref /tmp/au/ref --data-path-cur /tmp/au/cur \
 text 는 `ddoc-plugin-text` (따로 내려받을 데이터 없음, `--with-embeddings` 를 처음 쓸 때 CLIP 가중치만 받음):
 
 ```bash
-pip install ddoc-plugin-text
+pip install -e packages/plugins/ddoc-plugin-text
 ddoc examples generate text --out /tmp/tx --scenario shifted
 ddoc analyze drift --data-path-ref /tmp/tx/ref --data-path-cur /tmp/tx/cur \
     --json --quiet
 ```
 
-vision 은 `ddoc-plugin-vision` + torch + CLIP:
+vision 은 `ddoc-plugin-vision` (torch·torchvision·pillow 가 함께 설치되고, CLIP 은 플러그인에 들어 있음):
 
 ```bash
-pip install ddoc-plugin-vision torch torchvision pillow
-pip install 'git+https://github.com/openai/CLIP.git'
+pip install -e packages/plugins/ddoc-plugin-vision
 ddoc examples generate vision --out /tmp/vi --scenario shifted
 ddoc analyze drift --data-path-ref /tmp/vi/ref --data-path-cur /tmp/vi/cur \
     --json --quiet
@@ -86,7 +90,7 @@ categorical 은 *별도 모델 의존 없음* — 분포 dict 만 비교 (jensen
 shannon / overlap). vehicle / IoT / 카메라 분류 데이터에 맞는 modality:
 
 ```bash
-pip install ddoc-plugin-categorical    # ddoc-full 에 포함
+pip install -e packages/plugins/ddoc-plugin-categorical    # ./run.sh setup 이 기본으로 설치
 ddoc examples generate categorical --out /tmp/cat --scenario shifted
 ddoc analyze drift --data-path-ref /tmp/cat/ref --data-path-cur /tmp/cat/cur \
     --json --quiet

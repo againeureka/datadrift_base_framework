@@ -107,3 +107,19 @@ def test_usage_guide_links_resolve():
             if target.startswith(("http://", "https://", "#", "mailto:")):
                 continue
             assert (path.parent / target.split("#", 1)[0]).exists(), f"{path.name}: broken link {target}"
+
+
+def test_nothing_tells_people_to_install_ddoc_packages_by_name():
+    """The packages are not on PyPI: `pip install ddoc-plugin-vision` finds
+    nothing. Messages and docs give a folder or a git address instead
+    (``ddoc.plugin_install``). Release notes of past versions and the
+    ddoc-full README, which explains this, are left as written."""
+    root = PKG.parent.parent
+    by_name = re.compile(r"pip install +['\"]?ddoc(-plugin-[\w<>{}-]+|-full)?(\[[^\]]*\])?(?=['\"\s]|$)", re.M)
+    files = [*(PKG / "ddoc").rglob("*.py"), *(PKG / "docs").rglob("*.md"), *(PKG / "zoo").rglob("*.md"),
+             PKG / "README.md", root / "README.md", *(root / "packages" / "plugins").glob("ddoc-plugin-*/README.md"),
+             PKG / "ddoc" / "scenarios.conf"]
+    hits = [f"{f.relative_to(root)}: {m.group(0)}" for f in files
+            if "releases" not in f.parts and f.name != "changelog.md"
+            for m in by_name.finditer(f.read_text(encoding="utf-8"))]
+    assert hits == [], hits

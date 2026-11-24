@@ -37,6 +37,7 @@ import typer
 from rich import print as rprint
 
 from .utils import call_hook_isolated, get_pmgr
+from ...plugin_install import plugin_command
 from ... import archetypes
 from ... import diagnosis as dx
 from ...i18n import resolve_lang, severity_label, t
@@ -719,9 +720,9 @@ def diff_command(
     if result is None:
         hints = []
         if kind == "vision":
-            hints.append(t("hint.install_vision", lang))
+            hints.append(t("hint.install_vision", lang, cmd=plugin_command("vision")))
         elif kind in ("audio", "text"):
-            hints.append(t("hint.install_plugin", lang, kind=kind))
+            hints.append(t("hint.install_plugin", lang, kind=kind, cmd=plugin_command(kind)))
         elif kind == "unknown":
             hints.append(t("hint.supported_inputs", lang))
         _blind(

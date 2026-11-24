@@ -116,8 +116,10 @@ them in Korean.
 (third-party integration)
 
 Each plugin is an independent pip package registered through the
-`ddoc` entry-point group. `packages/plugins/ddoc-full` is a meta-package that
-installs the common set.
+`ddoc` entry-point group. The packages are not on PyPI yet, so install a
+plugin from its folder (`pip install -e packages/plugins/ddoc-plugin-vision`)
+or all of them with `./run.sh setup all`; `packages/plugins/ddoc-full` is the
+meta-package for the common set once they are published.
 
 ## Use it as a CI data gate
 

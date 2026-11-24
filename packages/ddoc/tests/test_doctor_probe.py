@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 from typer.testing import CliRunner
 
@@ -67,3 +68,22 @@ def test_probe_no_shared_columns_is_blind(tmp_path):
     cur = _csv(tmp_path / "c.csv", "b", ["1", "2"])
     res = runner.invoke(app, ["probe", ref, cur, "--json", "--lang", "en"])
     assert res.exit_code == 2 and "no column" in json.loads(res.output.strip().splitlines()[-1])["reason"]
+
+
+def test_plugin_install_command_is_one_that_works_without_pypi(tmp_path, monkeypatch):
+    """The plugins are not on PyPI: point at the checkout's folder when there
+    is one, else at the repository through git."""
+    from pathlib import Path
+
+    from ddoc import plugin_install as pi
+
+    checkout = Path(__file__).resolve().parents[2] / "plugins" / "ddoc-plugin-vision"
+    monkeypatch.setattr(pi, "plugin_folder", lambda kind: checkout)
+    monkeypatch.chdir(checkout.parents[2])                       # the repository root
+    assert pi.plugin_command("vision") == "pip install -e ./packages/plugins/ddoc-plugin-vision".replace("/", os.sep)
+    monkeypatch.chdir(tmp_path)                                  # elsewhere: the full path
+    assert pi.plugin_command("vision") == f"pip install -e {checkout}"
+
+    monkeypatch.setattr(pi, "plugin_folder", lambda kind: tmp_path / "missing")
+    assert pi.plugin_command("text") == ('pip install "git+https://github.com/keti-datadrift/'
+                                         'datadrift_base_framework#subdirectory=packages/plugins/ddoc-plugin-text"')

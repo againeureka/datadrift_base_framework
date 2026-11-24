@@ -34,8 +34,10 @@ Unsupported `--detector` values return an error envelope with
 ## Install
 
 ```bash
-pip install -e packages/plugins/ddoc-plugin-vision   # editable, monorepo dev
-# or once published:
-pip install ddoc-plugin-vision torch torchvision pillow
-pip install 'git+https://github.com/openai/CLIP.git'
+pip install -e packages/plugins/ddoc-plugin-vision   # from the repository root (torch, torchvision, pillow come with it)
+# without a checkout (the plugins are not on PyPI):
+pip install "git+https://github.com/keti-datadrift/datadrift_base_framework#subdirectory=packages/plugins/ddoc-plugin-vision"
 ```
+
+CLIP is bundled in the package (MIT, see `ddoc_plugin_vision/clip/LICENSE`); its weights are
+downloaded once, on first use.

@@ -4,11 +4,14 @@ ddoc with all analysis plugins (vision, text, timeseries, audio)
 
 ## 설치 방법
 
-### 프로덕션 설치 (PyPI에서)
+### PyPI 에서 (배포 후)
 
 ```bash
 pip install ddoc-full
 ```
+
+ddoc 과 플러그인은 아직 PyPI 에 올라가 있지 않아 지금은 이 명령이 동작하지 않습니다. 그때까지는 아래처럼
+각 패키지를 폴더 경로로 설치하거나, 저장소 루트에서 `./run.sh setup all` 을 쓰세요.
 
 ### 개발 환경 설치 (로컬)
 

@@ -15,6 +15,7 @@ from rich import print as rprint
 from typing import Optional
 
 from ..utils import call_hook_isolated, get_pmgr, _pretty
+from ....plugin_install import plugin_command
 
 
 def _emit(res: dict, json_out: bool) -> None:
@@ -466,7 +467,8 @@ def _finish_drift(
     """Shared post-hook handling (used by both modes)."""
     if not hook_results:
         _emit_error(
-            "No plugin available for drift detection. Install via: pip install ddoc-full",
+            f"No plugin available for drift detection. `ddoc doctor` shows what is installed; "
+            f"install a plugin for your data, e.g. {plugin_command('tabular')}",
             code="no_plugin", json_out=json_out,
         )
         raise typer.Exit(code=1)

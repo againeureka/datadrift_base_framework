@@ -107,9 +107,11 @@ identifier and date columns are better left out of a drift comparison.
 
 ## 4. Compare image or text folders
 
-Needs the vision or text plugin and torch (`./run.sh setup all`; check with `ddoc doctor`).
+Needs the vision or text plugin and torch. The plugins are not on PyPI yet, so
+`pip install ddoc-plugin-vision` finds nothing; install from the repository's folder (check with `ddoc doctor`).
 
 ```bash
+./run.sh setup vision                                  # or: pip install -e packages/plugins/ddoc-plugin-vision
 ddoc examples generate vision --out /tmp/v --scenario shifted
 ddoc diff /tmp/v/ref /tmp/v/cur --with-embeddings --report note.html
 ```

@@ -19,6 +19,7 @@ import typer
 from rich import print as rprint
 
 from ...i18n import resolve_lang, t
+from ...plugin_install import plugin_command
 
 # Which plugin judges which kind of input (entry-point names).
 KIND_PLUGIN = {"categorical": "ddoc_categorical", "vision": "ddoc_vision",
@@ -98,7 +99,7 @@ def environment(lang: str) -> List[Dict[str, Any]]:
             if not carriers:
                 errs.append(t("doctor.no_embedding_plugin", lang))
         row("features", t(enables, lang), "ok" if not errs else "warn", "; ".join(errs),
-            t(f"doctor.fix_{item}", lang) if errs else "")
+            t(f"doctor.fix_{item}", lang, cmd=plugin_command("vision")) if errs else "")
     return rows
 
 
@@ -205,8 +206,8 @@ def probe(ref: Path, cur: Optional[Path], lang: str) -> Dict[str, Any]:
                    hints=[t("probe.hint_doctor", lang)])
     else:
         out.update(blind=True, reason=t("probe.no_plugin", lang, kind=kind),
-                   hints=[t("hint.install_vision", lang) if kind == "vision"
-                          else t("hint.install_plugin", lang, kind=kind)])
+                   hints=[t("hint.install_vision", lang, cmd=plugin_command("vision")) if kind == "vision"
+                          else t("hint.install_plugin", lang, kind=kind, cmd=plugin_command(kind))])
     return out
 
 

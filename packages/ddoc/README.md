@@ -27,8 +27,10 @@ pip install -e packages/ddoc                              # 가벼운 코어 —
 pip install -e packages/plugins/ddoc-plugin-categorical   # 필요한 modality 플러그인을 추가
 ```
 
-플러그인은 각각 독립 패키지입니다 (`packages/plugins/ddoc-plugin-*`).
-`packages/plugins/ddoc-full` 은 기본 플러그인 묶음을 한 번에 설치하는 메타 패키지입니다.
+플러그인은 각각 독립 패키지입니다 (`packages/plugins/ddoc-plugin-*`). 아직 PyPI 에 올라가 있지 않아
+`pip install ddoc-plugin-vision` 처럼 이름으로는 설치되지 않습니다. 위처럼 폴더 경로로 설치하거나, 저장소 루트에서
+`./run.sh setup all` 로 모두 설치하세요. `packages/plugins/ddoc-full` 은 배포 뒤 기본 묶음을 한 번에 설치할 메타
+패키지입니다.
 
 ![ddoc diff demo](../../docs/imgs/ddoc_diff_demo.svg)
 

@@ -84,7 +84,8 @@ def generate_example(
         ref_dir, cur_dir = builder(out, scenario=scenario)
     except ImportError as e:
         rprint(f"[red]❌ Missing dependency for {modality}: {e}[/red]")
-        rprint(f"[yellow]   Install with: pip install ddoc-plugin-{modality}[/yellow]")
+        from ...plugin_install import plugin_command
+        rprint(f"[yellow]   Install with: {plugin_command(modality)}[/yellow]")
         raise typer.Exit(code=1)
     except Exception as e:
         rprint(f"[red]❌ Failed to generate {modality}: {e}[/red]")
