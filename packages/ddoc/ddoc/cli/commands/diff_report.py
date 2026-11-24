@@ -1459,3 +1459,24 @@ def for_paged_media(html_doc: str) -> str:
     styled through CSS classes they would print as black boxes."""
     html_doc = re.sub(r"<(rect|circle) class='hit'[^>]*>.*?</\1>", "", html_doc, flags=re.S)
     return re.sub(r"var\(--([\w-]+)\)", lambda m: _LIGHT.get(m.group(1), m.group(0)).strip(), html_doc)
+
+
+def write_pdf(html_doc: str, path) -> None:
+    """Write ``html_doc`` as a PDF, quietly.
+
+    WeasyPrint logs every CSS rule it does not use on paper (the screen
+    theme, SVG styling) and fontTools every font it subsets — over a
+    thousand lines for one report, none of them a problem with it."""
+    import logging
+
+    loggers = [logging.getLogger(name) for name in ("weasyprint", "fontTools")]
+    levels = [lg.level for lg in loggers]
+    for lg in loggers:
+        lg.setLevel(logging.ERROR)
+    try:
+        from weasyprint import HTML  # importing parses its stylesheets, and logs that too
+
+        HTML(string=html_doc).write_pdf(str(path))
+    finally:
+        for lg, level in zip(loggers, levels):
+            lg.setLevel(level)

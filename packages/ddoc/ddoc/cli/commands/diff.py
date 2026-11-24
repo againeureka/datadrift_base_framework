@@ -520,7 +520,8 @@ def _write_report(payload: Dict[str, Any], report: Optional[Path],
     if report is None:
         return
     try:
-        from .diff_report import build_consultation_html, build_consultation_markdown, for_paged_media
+        from .diff_report import (build_consultation_html, build_consultation_markdown,
+                                  for_paged_media, write_pdf)
         report.parent.mkdir(parents=True, exist_ok=True)
         suffix = report.suffix.lower()
         if suffix == ".md":  # for pull requests, tickets and chat
@@ -528,8 +529,7 @@ def _write_report(payload: Dict[str, Any], report: Optional[Path],
         else:
             page = build_consultation_html(payload, distributions, lang=lang, issuer=issuer)
             if suffix == ".pdf":
-                from weasyprint import HTML
-                HTML(string=for_paged_media(page)).write_pdf(str(report))
+                write_pdf(for_paged_media(page), report)
             else:
                 report.write_text(page, encoding="utf-8")
         payload["report_path"] = str(report)

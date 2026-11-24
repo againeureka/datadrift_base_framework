@@ -113,7 +113,7 @@ def analyze_eda_command(
 def _write_profile(envelope, report: Path, lang: Optional[str]) -> None:
     """The data profile report next to the JSON (best-effort, like diff)."""
     from ....i18n import resolve_lang
-    from ..diff_report import for_paged_media
+    from ..diff_report import for_paged_media, write_pdf
     from ..profile_report import build_profile_html, build_profile_markdown
 
     lang = resolve_lang(lang)
@@ -122,8 +122,7 @@ def _write_profile(envelope, report: Path, lang: Optional[str]) -> None:
         if report.suffix.lower() == ".md":
             report.write_text(build_profile_markdown(envelope, lang=lang), encoding="utf-8")
         elif report.suffix.lower() == ".pdf":
-            from weasyprint import HTML
-            HTML(string=for_paged_media(build_profile_html(envelope, lang=lang))).write_pdf(str(report))
+            write_pdf(for_paged_media(build_profile_html(envelope, lang=lang)), report)
         else:
             report.write_text(build_profile_html(envelope, lang=lang), encoding="utf-8")
         rprint(f"[dim]report → {report}[/dim]", file=sys.stderr)

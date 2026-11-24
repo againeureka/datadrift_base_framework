@@ -303,3 +303,22 @@ def test_isolated_call_matches_pluggy_convention():
     assert errors == []
     assert results == pm.hook.drift_detect(**_DRIFT_KWARGS)
     assert {"modality": "narrow", "seen": ["model.pth", "default"]} in results
+
+
+def test_pdf_report_keeps_json_stdout_clean(tmp_path):
+    """Writing a PDF must not leak the PDF engine's logging: stdout stays
+    exactly one JSON object, and the terminal is not flooded either."""
+    pytest.importorskip("weasyprint")
+    import subprocess
+    import sys
+
+    ref, cur = tmp_path / "ref.csv", tmp_path / "cur.csv"
+    ref.write_text("x,kind\n" + "\n".join(f"{i % 10},{'ab'[i % 2]}" for i in range(200)) + "\n")
+    cur.write_text("x,kind\n" + "\n".join(f"{i % 10 + 5},{'ab'[i % 3 > 0]}" for i in range(200)) + "\n")
+    proc = subprocess.run([sys.executable, "-m", "ddoc.cli.main", "diff", str(ref), str(cur),
+                           "--json", "--report", str(tmp_path / "note.pdf")],
+                          capture_output=True, text=True, timeout=180)
+    assert proc.returncode in (0, 1), proc.stderr
+    assert json.loads(proc.stdout)["report_path"].endswith("note.pdf")
+    assert (tmp_path / "note.pdf").stat().st_size > 10_000
+    assert len(proc.stderr.splitlines()) < 5, proc.stderr[:500]

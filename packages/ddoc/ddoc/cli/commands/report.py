@@ -176,7 +176,8 @@ def _builtin_render(
         diag = _diagnostic_payload(drift_result, threshold=cfg.get("threshold") or 0.15,
                                    attr_threshold=cfg.get("attr_threshold") or 0.25)
     if diag is not None:
-        from .diff_report import build_consultation_html, build_consultation_markdown, for_paged_media
+        from .diff_report import (build_consultation_html, build_consultation_markdown,
+                                  for_paged_media, write_pdf)
 
         if fmt == "md":
             out_path.write_text(build_consultation_markdown(diag, lang=lang, title=cfg.get("title")),
@@ -190,13 +191,12 @@ def _builtin_render(
             out_path.write_text(html, encoding="utf-8")
             return _written(out_path, "html")
         if fmt == "pdf":
-            from weasyprint import HTML
-            HTML(string=for_paged_media(html)).write_pdf(str(out_path))
+            write_pdf(for_paged_media(html), out_path)
             return _written(out_path, "pdf")
         raise typer.BadParameter(f"built-in fallback supports html|pdf|md; got {fmt!r}")
 
     if drift_result is None and eda_result is not None:
-        from .diff_report import for_paged_media
+        from .diff_report import for_paged_media, write_pdf
         from .profile_report import build_profile_html, build_profile_markdown
 
         if fmt == "md":
@@ -208,8 +208,7 @@ def _builtin_render(
             out_path.write_text(html, encoding="utf-8")
             return _written(out_path, "html")
         if fmt == "pdf":
-            from weasyprint import HTML
-            HTML(string=for_paged_media(html)).write_pdf(str(out_path))
+            write_pdf(for_paged_media(html), out_path)
             return _written(out_path, "pdf")
         raise typer.BadParameter(f"built-in fallback supports html|pdf|md; got {fmt!r}")
 
@@ -274,8 +273,8 @@ def _builtin_render(
         }
 
     if fmt == "pdf":
-        from weasyprint import HTML
-        HTML(string=html).write_pdf(str(out_path))
+        from .diff_report import write_pdf
+        write_pdf(html, out_path)
         return {
             "status": "success",
             "format": "pdf",

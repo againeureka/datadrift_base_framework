@@ -61,10 +61,12 @@ def init_app(debug: bool = False, load_plugins: bool = True):
     #click.echo("✅ .env 환경변수 로드됨")
     
     log_level = logging.DEBUG if debug else logging.INFO
+    # Logs go to stderr: stdout carries the command's answer (`--json`
+    # promises exactly one JSON object there).
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
+        handlers=[logging.StreamHandler(sys.stderr)],
     )
     logging.debug("📋 로깅이 초기화되었습니다.")
 
