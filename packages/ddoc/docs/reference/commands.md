@@ -179,6 +179,10 @@ ddoc export drift-report drift.json --to http --config '{"base_url":"http://my-a
 | `--log-level` | info | |
 | `--reload` | | 개발용 자동 재시작 |
 
+브라우저 화면(진단 화면)의 "서버에서 찾기"는 `DDOC_DATA_ROOT`(기본: 서버를 띄운 폴더와 홈 폴더, 여러 개는 `:` 로
+구분) 아래만 보여주고, 올린 파일은 `DDOC_WORKSPACE`(기본: 임시 폴더)에 하루 동안 둡니다. 파일 하나의 크기는
+`DDOC_UPLOAD_MAX_MB`(기본 1024)까지입니다. 자세한 내용은 [REST / GUI](../tutorial/serve.md#browser-gui).
+
 키가 없으면 이 컴퓨터만 상대합니다. `Host` 가 localhost · 127.0.0.1 · ::1 · 바인딩 주소 · `DDOC_ALLOWED_HOSTS`
 (쉼표로 구분) 가 아닌 요청과, 다른 사이트에서 온(`Origin` 이 다른) 변경 요청은 403 입니다. 키를 설정하면
 키가 이 역할을 맡습니다.

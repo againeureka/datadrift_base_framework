@@ -318,6 +318,7 @@
           LANG = LANG === 'ko' ? 'en' : 'ko';
           localStorage.setItem('ddoc_serve_lang', LANG);
           applyI18n();
+          document.dispatchEvent(new CustomEvent('ddoc:lang', { detail: LANG }));
           // Re-render forms so labels update too where applicable.
           renderForms();
           renderActiveTab();
@@ -334,6 +335,7 @@
       input.addEventListener('change', () => {
         STATE.apiKey = input.value.trim();
         localStorage.setItem('ddoc_serve_api_key', STATE.apiKey);
+        document.dispatchEvent(new CustomEvent('ddoc:auth'));
       });
       $('#auth-clear').addEventListener('click', () => {
         STATE.apiKey = '';
@@ -1724,6 +1726,9 @@
       alert('Clipboard API unavailable; select the text manually.');
     }
   });
+
+  // What the workbench (workbench.js) shares with this file.
+  window.ddocApp = { api, authHeaders, lang: () => LANG };
 
   // ── Go ───────────────────────────────────────────────────────────
   bootstrap().catch(err => {

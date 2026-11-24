@@ -175,8 +175,24 @@ For other CI systems see [examples/ci-gate](../../../../examples/ci-gate/).
 ## 7. Browser GUI and REST API
 
 ```bash
-ddoc serve            # http://127.0.0.1:8765 — enter two paths in the "Diagnose (diff)" tab for the verdict card and the report
+ddoc serve            # http://127.0.0.1:8765
 ```
+
+The front page is the workbench. Drop files or a folder onto the baseline and current sides (or use
+"Browse the server" to pick from the server's folders); each side shows what it holds — rows, columns,
+period, column names — before anything is judged, and "Diagnose" gives the verdict. The example cases
+underneath run a diagnosis without preparing any data.
+
+![Workbench: choosing the two datasets](../../../../docs/imgs/gui-intake.png)
+
+The result reads top-down: the verdict, the pattern cards with what to do first, each column with its
+distributions, then the full report, which can be saved as HTML, PDF or Markdown.
+
+![Workbench: the diagnosis](../../../../docs/imgs/gui-result.png)
+
+The page opens in English; the "한국어" button in the top bar or `http://127.0.0.1:8765/?lang=ko`
+switches it. A link such as `http://127.0.0.1:8765/?case=price-regime` opens straight on an example.
+The forms that take the CLI options as they are live under "Advanced tools".
 
 From another service:
 
@@ -206,7 +222,7 @@ ddoc scenarios                                    # commands by situation
 ddoc scenarios run compare --set ref=data/ref.csv --set cur=data/cur.csv -n   # -n: show the commands, do not run
 ```
 
-The same list is in the GUI's "Scenarios" tab and in the [cheat sheet](../cheatsheet.md) (Korean).
+The same list is in the GUI under "Advanced tools → Scenarios" and in the [cheat sheet](../cheatsheet.md) (Korean).
 
 ## Good to know
 

@@ -48,6 +48,17 @@ def _infer_format(req: ReportRenderRequest, out: Optional[str]) -> str:
     )
 
 
+def _presentation(req: ReportRenderRequest) -> list:
+    args = []
+    if req.title:
+        args += ["--title", req.title]
+    if req.lang:
+        args += ["--lang", req.lang]
+    if req.issuer:
+        args += ["--issuer", req.issuer]
+    return args
+
+
 def _validate_modes(req: ReportRenderRequest) -> None:
     has_input = bool(req.input)
     has_envelope = req.envelope is not None
@@ -87,8 +98,7 @@ def render_report(req: ReportRenderRequest):
             out_path = req.out or str(Path(tmpdir) / f"report{_FORMAT_TO_SUFFIX[fmt]}")
             args = ["report", "render", "-i", str(input_path),
                     "-o", out_path, "--format", fmt, "--json"]
-            if req.title:
-                args += ["--title", req.title]
+            args += _presentation(req)
             result = run(args, require_json=True, timeout=req.timeout_sec)
             envelope_json = result.json or {}
             if envelope_json.get("status") == "error":
@@ -119,7 +129,6 @@ def render_report(req: ReportRenderRequest):
     args = ["report", "render", "-i", req.input, "-o", req.out, "--json"]
     if req.format:
         args += ["--format", req.format]
-    if req.title:
-        args += ["--title", req.title]
+    args += _presentation(req)
     result = run(args, require_json=True, timeout=req.timeout_sec)
     return map_envelope_to_response(result.json)

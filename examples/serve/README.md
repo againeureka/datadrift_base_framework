@@ -19,7 +19,8 @@ Check that it is up:
 curl http://127.0.0.1:8765/healthz
 ```
 
-Open http://127.0.0.1:8765 for the GUI.
+Open http://127.0.0.1:8765 for the GUI and enter the key in the top bar. Datasets under
+`examples/serve/data/` show up in "Browse the server"; files can also be dropped onto the page.
 
 ## Call the API
 

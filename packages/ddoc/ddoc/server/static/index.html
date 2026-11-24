@@ -5,6 +5,7 @@
 <title>ddoc · data doctor</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/workbench.css">
 </head>
 <body>
 
@@ -14,6 +15,12 @@
     <span class="tagline">· data doctor</span>
     <span id="meta">loading…</span>
   </div>
+  <!-- Two views: the workbench (choose data, see the diagnosis) and the
+       advanced tools (one form per CLI command). -->
+  <nav id="views">
+    <button data-view="workbench" class="view active">Diagnose</button>
+    <button data-view="advanced" class="view">Advanced tools</button>
+  </nav>
   <div id="auth-block" hidden>
     <label>X-API-Key
       <input type="password" id="api-key" placeholder="(set DDOC_API_KEY on server)">
@@ -23,6 +30,9 @@
   <a class="link" href="/docs" target="_blank">Swagger /docs</a>
 </header>
 
+<div id="workbench"></div>
+
+<div id="advanced" hidden>
 <nav id="tabs">
   <button data-tab="diff" class="tab active">Diagnose (diff)</button>
   <button data-tab="scenarios" class="tab">Scenarios</button>
@@ -83,11 +93,13 @@
     </details>
   </section>
 </main>
+</div>
 
 <footer>
   <span>ddoc serve · GUI</span>
 </footer>
 
 <script src="/static/app.js"></script>
+<script src="/static/workbench.js"></script>
 </body>
 </html>

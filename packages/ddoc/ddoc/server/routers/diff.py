@@ -4,7 +4,7 @@ The verdict is an answer, not an error: OK / DRIFT / BLIND all return
 HTTP 200 with the CLI's JSON payload (``exit_code`` 0 / 1 / 2 alongside).
 With ``include_report`` the self-contained HTML diagnostic report comes
 back inline as ``report_html``, so the GUI can show it without a shared
-filesystem.
+filesystem; ``view`` carries the same diagnosis as display data.
 """
 from __future__ import annotations
 
@@ -58,6 +58,15 @@ def diff(req: DiffRequest) -> Dict[str, Any]:
             payload["hints"] = [h for h in payload.get("hints") or [] if path not in h]
         if report and Path(report).exists():
             payload["report_html"] = Path(report).read_text(encoding="utf-8")
+        # The same diagnosis as display data (verdict line, pattern cards,
+        # one row per attribute) for the GUI's result view.
+        try:
+            from ddoc.i18n import resolve_lang
+
+            from ..view import diff_view
+            payload["view"] = diff_view(payload, resolve_lang(req.lang))
+        except Exception:  # noqa: BLE001 — the verdict stands without its summary
+            pass
         return payload
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

@@ -13,7 +13,7 @@ vanilla HTML GUI 로 묶어 ML 모델이 보는 데이터의 상태를 일관되
 - 🔬 **분석**: 플러그인 기반 drift 감지 및 EDA (`ddoc analyze drift|eda`)
 - 📝 **리포트와 내보내기**: HTML / PDF / Markdown 리포트, file / HTTP export
 - 🧾 **레시피**: fetch → analyze → report → export 를 YAML 한 파일로
-- 🌐 **REST + GUI**: `ddoc serve` 로 모든 명령을 HTTP 와 브라우저에서
+- 🌐 **REST + GUI**: `ddoc serve` — 브라우저에서 데이터를 끌어다 놓고 진단 결과를 그림으로, 모든 명령은 HTTP 로도
 - 🔌 **플러그인 구조**: 새 검출기는 플러그인으로 — 프레임워크 수정 없음
 
 ## 🚀 빠른 시작

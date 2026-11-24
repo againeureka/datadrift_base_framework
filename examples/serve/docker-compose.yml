@@ -7,6 +7,8 @@ services:
     environment:
       # Required whenever the port is reachable from other machines.
       DDOC_API_KEY: ${DDOC_API_KEY:?set DDOC_API_KEY, e.g. in examples/serve/.env}
+      # What the GUI's "Browse the server" shows: the mounted datasets.
+      DDOC_DATA_ROOT: /data
     ports:
       - "127.0.0.1:8765:8765"
     volumes:

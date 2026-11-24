@@ -22,6 +22,9 @@
 - ✨ `ddoc doctor` (환경·플러그인 로드·선택 기능 점검), `ddoc probe` (diff 전에 데이터 종류·판정 주체·BLIND 여부 확인), `./run.sh doctor`
 - ✨ 내장 CSV 프로파일러(`analyze eda`)와 데이터 프로필 보고서 (`--sample-rows`)
 - ✨ `report render` 가 drift 입력을 진단서(HTML·PDF·Markdown)로 렌더, `ddoc serve` 의 `POST /diff` 와 GUI 진단 탭
+- ✨ `ddoc serve` 의 첫 화면을 진단 화면으로 — 파일·폴더 끌어다 놓기와 서버 폴더 탐색으로 데이터를 넣고, 넣는 즉시
+  내용(행·열·기간·열 이름)과 판정 전 확인을 보여주며, 결과는 판정·유형 카드·열별 분포 그림·진단서(HTML·PDF·Markdown
+  저장)로. 정답이 있는 예제 사례 4개, 주소로 바로 여는 링크(`/?case=…`, `/?ref=…&cur=…`), 주간·야간. 기존 폼은 "고급 도구"로
 - ✨ `ddoc serve` (REST + GUI), `recipe`, `report`, `export`, `fetch`, `examples` 명령
 - ✨ 한글 리포트 (`--lang ko` / `DDOC_LANG=ko`)
 - ✨ 검사 보고서 형식의 진단서: 발행처·문서 번호, 요약 대시보드, 속성별 그래프, 데이터 특징, 패턴별 점검 항목 (`--json` 의 `diagnosis`), 화면 테마(자동·주간·야간)와 인쇄 버튼, 검사 대상 섹션, 유형 판독(17가지 드리프트 유형 카드), 임베딩 지도(`--with-embeddings`), 데이터 도면, 계통별 검사표, `--sample-rows`

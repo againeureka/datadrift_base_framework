@@ -113,6 +113,8 @@ class ReportRenderRequest(BaseModel):
         None, description="html | pdf | md. Required in inline mode (no out suffix to infer from).",
     )
     title: Optional[str] = None
+    lang: Optional[str] = Field(None, description="en | ko (default: server $DDOC_LANG, else en).")
+    issuer: Optional[str] = Field(None, description="Issuer shown in a diagnostic report's header.")
     timeout_sec: float = 120.0
 
 

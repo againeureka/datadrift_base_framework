@@ -109,6 +109,21 @@ columns, far outliers or spelling variants:
 Reports are in English by default; `--lang ko` (or `DDOC_LANG=ko`) writes
 them in Korean.
 
+## In the browser
+
+`ddoc serve` opens the same diagnosis as a workbench at http://127.0.0.1:8765.
+Drop files or folders onto the baseline and current sides (or browse the
+server's data folders), see what each side holds before judging, and press
+Diagnose — or start from an example case with a known answer:
+
+![Workbench: choosing the two datasets](docs/imgs/gui-intake.png)
+
+The result reads top-down: the verdict, the patterns that match and what to
+do first, each column with its baseline-vs-current distribution, and the full
+report to open, save as HTML, PDF or Markdown, or reproduce from the CLI:
+
+![Workbench: the diagnosis](docs/imgs/gui-result.png)
+
 ## In-tree plugins
 
 `vision` (image EDA / embedding drift) · `text` · `timeseries` · `audio` ·
