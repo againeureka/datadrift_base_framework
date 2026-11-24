@@ -68,6 +68,11 @@ ddoc diff /tmp/d/ref /tmp/d/cur --report note.html
 ddoc serve                                                # REST API + GUI on http://127.0.0.1:8765
 ```
 
+**[Usage examples](packages/ddoc/docs/guides/usage.en.md)** ([한국어](packages/ddoc/docs/guides/usage.md))
+walk through every common situation with real output: comparing two CSVs and reading the result,
+checking before judging, profiling one dataset, images and text with the embedding map, sharing
+reports, CI gates, and the GUI and REST API.
+
 More in the [ddoc README](packages/ddoc/README.md), its [docs](packages/ddoc/docs/) and the
 [cheat sheet](packages/ddoc/docs/cheatsheet.md) of commands by situation. What works, what is
 partial and what is not verified yet is in the [status page](packages/ddoc/docs/status.md) (Korean).

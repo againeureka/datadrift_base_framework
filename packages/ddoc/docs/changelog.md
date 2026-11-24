@@ -15,6 +15,8 @@
 - 📦 text 플러그인이 nltk 없이 동작 — 내려받을 말뭉치가 없어 오프라인·프록시 뒤에서도 실행 (단어는 정규식,
   영어 불용어는 scikit-learn 목록). 최근 nltk 에서 `punkt_tab` 이 없어 실패하던 문제도 함께 해결
 - 📝 [지금 상태](status.md) (확인한 방법과 알려진 한계) · [용어](glossary.md)
+- 📝 [사용 예제](guides/usage.md) 한국어·[영어](guides/usage.en.md) — 상황별 예제와 실제 출력, 저장소 README 에서 연결.
+  예제의 명령·옵션이 실제 CLI 에 있는지, 두 언어판이 같은 명령을 보여주는지, 링크가 살아 있는지 테스트가 확인
 - ✨ 판독 드릴 — 유형마다 정답이 있는 케이스, `./run.sh zoo` 와 테스트로 확인, 결과표는 zoo README 에 생성. vision 예제를 도형·색이 다양한 40장으로 교체
 - ✨ 상황별 시나리오 카탈로그 — `ddoc scenarios` (목록·치트시트·실행·메뉴), `./run.sh menu`, GUI "상황별" 탭, 생성되는 치트시트. `diff --report` 의 `.md`·`.pdf`, `analyze eda --report`
 - ✨ `ddoc doctor` (환경·플러그인 로드·선택 기능 점검), `ddoc probe` (diff 전에 데이터 종류·판정 주체·BLIND 여부 확인), `./run.sh doctor`

@@ -16,6 +16,8 @@
 
 ## 가이드
 
+- **[사용 예제](guides/usage.md)** ([English](guides/usage.en.md)) — 상황별 예제와 실제 출력: 두 CSV 비교와 결과 읽기,
+  미리 보기, 데이터 하나, 이미지·텍스트, 공유, CI, GUI·REST
 - **[데이터 분석](guides/analysis.md)** — `ddoc analyze drift|eda`
 
 ## 레퍼런스

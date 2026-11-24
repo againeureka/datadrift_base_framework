@@ -103,6 +103,7 @@ dataset layout (modality 별 `ddoc.yaml` + 데이터 파일) 만 따르면 그�
 
 ## 📚 문서
 
+- **[사용 예제](docs/guides/usage.md)** ([English](docs/guides/usage.en.md)) — 상황별 예제와 실제 출력
 - **[빠른 시작](docs/tutorial/quick-start.md)** · **[핵심 개념](docs/tutorial/concepts.md)** · **[설치](docs/tutorial/installation.md)**
 - **[toy 데이터](docs/tutorial/toy-data.md)** · **[detector cookbook](docs/tutorial/detectors.md)** · **[데이터 분석](docs/guides/analysis.md)**
 - **[레시피](docs/tutorial/recipe.md)** · **[REST / GUI](docs/tutorial/serve.md)** · **[배포](docs/tutorial/deploy.md)**

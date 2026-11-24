@@ -51,3 +51,59 @@ def test_every_option_of_a_documented_command_is_in_its_section():
                 missing.append(f"ddoc {' '.join(words)}: {longs[0]}")
     assert checked > 30  # the check itself must be looking at something
     assert missing == [], missing
+
+
+# ── Usage guides (Korean and English) ─────────────────────────────────
+
+GUIDES = {"ko": PKG / "docs" / "guides" / "usage.md", "en": PKG / "docs" / "guides" / "usage.en.md"}
+RUN_SH = PKG.parent.parent / "run.sh"
+
+
+def _shell_commands(path: Path):
+    """`ddoc …` and `./run.sh …` lines of the ```bash blocks, as words
+    (comments, pipes and redirections cut off, leading VAR=value dropped)."""
+    import shlex
+
+    text = path.read_text(encoding="utf-8")
+    for block in re.findall(r"```bash\n(.*?)```", text, flags=re.S):
+        for line in block.replace("\\\n", " ").splitlines():
+            line = re.split(r"\s+#\s", " " + line)[0]
+            line = re.split(r"\s[|>]\s", line)[0].strip()
+            words = shlex.split(line) if line else []
+            while words and re.match(r"^[A-Z_]+=", words[0]):
+                words.pop(0)
+            if words and words[0] in ("ddoc", "./run.sh"):
+                yield words
+
+
+def _signature(words, root, run_sh_commands):
+    """(command path, options) of one line; fails if either does not exist."""
+    if words[0] == "./run.sh":
+        assert words[1] in run_sh_commands, f"./run.sh has no `{words[1]}`"
+        return ("./run.sh", words[1]), ()
+    cmd, rest, path = root, words[1:], []
+    while rest and hasattr(cmd, "commands") and rest[0] in cmd.commands:
+        path.append(rest[0])
+        cmd = cmd.commands[rest.pop(0)]
+    known = {o for p in cmd.params for o in getattr(p, "opts", [])}
+    opts = sorted({w.split("=", 1)[0] for w in rest if w.startswith("-")})
+    unknown = [o for o in opts if o not in known]
+    assert not unknown, f"`{' '.join(words)}`: no option {unknown}"
+    return ("ddoc", *path), tuple(o for o in opts if o != "--lang")
+
+
+def test_usage_guides_use_real_commands_and_say_the_same_in_both_languages():
+    root = typer.main.get_command(app)
+    run_sh = set(re.findall(r"^\s+([a-z]+)[|)]", RUN_SH.read_text(encoding="utf-8"), flags=re.M))
+    sigs = {lang: [_signature(w, root, run_sh) for w in _shell_commands(p)] for lang, p in GUIDES.items()}
+    assert len(sigs["ko"]) > 20  # the check itself must be looking at something
+    assert sigs["ko"] == sigs["en"], "the Korean and English guides show different commands"
+
+
+def test_usage_guide_links_resolve():
+    for path in GUIDES.values():
+        text = path.read_text(encoding="utf-8")
+        for target in re.findall(r"\]\(([^)\s]+)\)", text):
+            if target.startswith(("http://", "https://", "#", "mailto:")):
+                continue
+            assert (path.parent / target.split("#", 1)[0]).exists(), f"{path.name}: broken link {target}"
