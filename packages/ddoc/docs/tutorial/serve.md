@@ -160,6 +160,18 @@ curl -H 'X-API-Key: mysecret' http://server.local:8765/plugins
 
 `/healthz` 와 `/` 는 auth 우회 (모니터링 용).
 
+키가 없을 때는 서버가 이 컴퓨터만 상대하도록 HTTP 단에서도 막습니다. 브라우저로 아무 웹페이지나 열었을 때
+그 페이지가 로컬 서버를 부르는 두 가지 방법을 막기 위해서입니다.
+
+- **DNS rebinding** — `Host` 헤더가 localhost · 127.0.0.1 · ::1 · 바인딩한 주소가 아니면 403
+  (`host_not_allowed`). 다른 이름으로 접속해야 하면 `DDOC_ALLOWED_HOSTS=ddoc.lan,box` 처럼 더합니다.
+- **다른 사이트에서 보낸 요청** — 무언가를 바꾸는 요청(POST · PUT · DELETE)의 `Origin` 이 서버와 다르면 403
+  (`cross_origin_request`). GUI 와 curl·스크립트처럼 `Origin` 을 보내지 않는 클라이언트는 그대로 됩니다.
+
+`--host 0.0.0.0` 에 키 없이 띄우면 다른 컴퓨터에서 IP 로 오는 요청도 첫 번째 규칙에 걸립니다. 다른 컴퓨터를
+상대하려면 키를 설정하세요. 키가 있으면 위 두 검사는 꺼지고(다른 사이트는 키를 실어 보낼 수 없으므로) 리버스
+프록시가 `Host` 를 바꿔도 그대로 동작합니다.
+
 ## Browser GUI
 
 `ddoc serve` 가 띄운 그 서버의 루트(`/`) 에 vanilla HTML/JS GUI 가

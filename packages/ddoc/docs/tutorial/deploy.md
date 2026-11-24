@@ -6,6 +6,8 @@ systemd 를 더해서 그대로 ship 가능한 구성으로.
 기본 보안 모델:
 
 * `DDOC_API_KEY` 환경변수로 X-API-Key 헤더 검사 활성화
+* 키가 없으면 이 컴퓨터만 상대 — 낯선 `Host`(DNS rebinding)와 다른 사이트의 변경 요청(`Origin`)은 403
+  ([REST / GUI](serve.md#인증))
 * 비루프백 바인딩 시 반드시 API 키 + TLS
 * `/healthz`, `/` 는 인증 우회 (모니터/health-check 친화)
 * 외부 노출 시 reverse proxy 뒤로 (TLS / rate-limit / IP allowlist)

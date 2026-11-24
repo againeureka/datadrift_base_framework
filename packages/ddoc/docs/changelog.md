@@ -23,7 +23,11 @@
 - ✨ 검사 보고서 형식의 진단서: 발행처·문서 번호, 요약 대시보드, 속성별 그래프, 데이터 특징, 패턴별 점검 항목 (`--json` 의 `diagnosis`), 화면 테마(자동·주간·야간)와 인쇄 버튼, 검사 대상 섹션, 유형 판독(17가지 드리프트 유형 카드), 임베딩 지도(`--with-embeddings`), 데이터 도면, 계통별 검사표, `--sample-rows`
 - 🗑️ `init` / `add` / `snapshot`, 스냅샷 모드, `exp` / `train`, `ingest`, `vis`, v1 legacy 명령 제거
 - 🗑️ yolo / vis / nlp / reference-engine / keti-temporal 플러그인, 관련 hookspec 과 extras 제거 (hookspec 2.0.0)
+- 🔒 `ddoc serve` 를 키 없이 띄우면 이 컴퓨터만 상대 (낯선 `Host` 와 다른 사이트의 변경 요청은 403,
+  `DDOC_ALLOWED_HOSTS`), 키 비교를 상수 시간으로, `-` 로 시작해 옵션으로 읽힐 경로 값은 거절
+- 📝 [판정 민감도](sensitivity.md) — 점수 방식 후보별 판정·오경보·검출 한계 비교 (기본값은 그대로)
 - 🐛 CSV 의 날짜·시간 텍스트 열을 비교하던 문제 — 이제 기간 표시에만 사용
+- 🐛 `ddoc serve` 가 JSON 이 아닌 요청 본문에 422 대신 500 을 내던 문제
 - 🐛 플러그인 하나의 실패가 다른 플러그인 결과를 지우던 문제, 일반 설치에서 `examples generate` 가 실패하던 문제 수정
 - 🔄 코어와 플러그인을 `packages/ddoc/`, `packages/plugins/` 로 이동
 

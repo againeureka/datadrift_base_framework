@@ -10,10 +10,17 @@ unaffected.
 """
 from __future__ import annotations
 
+import hmac
 import os
 from typing import Optional
 
 from fastapi import Header, HTTPException
+
+
+def same_secret(provided: str, expected: str) -> bool:
+    """Constant-time comparison, so response timing says nothing about
+    how much of a guess was right."""
+    return hmac.compare_digest(provided.encode("utf-8"), expected.encode("utf-8"))
 
 
 def get_expected_key() -> Optional[str]:
@@ -30,7 +37,7 @@ def require_api_key(
     expected = get_expected_key()
     if not expected:
         return
-    if not x_api_key or x_api_key != expected:
+    if not x_api_key or not same_secret(x_api_key, expected):
         raise HTTPException(
             status_code=401,
             detail={

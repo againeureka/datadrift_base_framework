@@ -51,11 +51,20 @@ def serve_command(
     if api_key:
         os.environ["DDOC_API_KEY"] = api_key
 
-    if host not in ("127.0.0.1", "localhost") and not os.getenv("DDOC_API_KEY"):
-        rprint(
-            "[yellow]⚠️  Binding to non-loopback host without DDOC_API_KEY set. "
-            "Anyone on the network can call the API.[/yellow]"
-        )
+    from ddoc.server import guard
+
+    if guard.hostname(host) not in guard.LOOPBACK and not os.getenv("DDOC_API_KEY"):
+        if guard.hostname(host) in ("0.0.0.0", "::"):
+            rprint(
+                "[yellow]⚠️  Listening on every interface without DDOC_API_KEY. Without a key "
+                "only requests addressed to localhost (or a name in DDOC_ALLOWED_HOSTS) are "
+                "answered; set a key to serve other machines.[/yellow]"
+            )
+        else:
+            rprint(
+                "[yellow]⚠️  Binding to non-loopback host without DDOC_API_KEY set. "
+                "Anyone on the network can call the API.[/yellow]"
+            )
 
     try:
         import uvicorn
@@ -72,7 +81,7 @@ def serve_command(
 
     # Late-import the factory; create_app reads bind_info into app.state.
     from ddoc.server.app import create_app
-    app = create_app(bind_info=bind)
+    app = create_app(bind_info=bind, allowed_hosts=guard.allowed_hosts(host))
 
     uvicorn.run(
         app,

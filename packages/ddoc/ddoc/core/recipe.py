@@ -384,6 +384,10 @@ def _step_to_argv(run_kind: str, with_args: Dict[str, Any]) -> List[str]:
     for name in spec.get("positional", []):
         if name not in with_args:
             raise RecipeError(f"step {run_kind} requires `with.{name}`", code="missing_with")
+        if str(with_args[name]).startswith("-"):
+            # it would be read as a command-line option, not as the value
+            raise RecipeError(f"step {run_kind}: `with.{name}` must not start with '-'",
+                              code="invalid_with")
         args.append(str(with_args[name]))
         consumed.add(name)
     # positionals (optional, in declared order; only emit if present)

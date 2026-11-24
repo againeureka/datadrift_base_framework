@@ -41,7 +41,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
-from ..auth import require_api_key
+from ..auth import require_api_key, same_secret
 from .. import token_store
 
 _log = logging.getLogger(__name__)
@@ -178,7 +178,7 @@ def _check_write_token(request: Request) -> None:
     if env_expected is None and not store_initialized:
         return
     provided = request.headers.get("x-recipes-write-token", "")
-    if env_expected is not None and provided == env_expected:
+    if env_expected is not None and same_secret(provided, env_expected):
         return
     if base is not None and token_store.verify(base.resolve(), provided):
         return
@@ -218,7 +218,7 @@ def _check_admin_token(request: Request) -> None:
             },
         )
     provided = request.headers.get("x-recipes-admin-token", "")
-    if provided != expected:
+    if not same_secret(provided, expected):
         raise HTTPException(
             status_code=401,
             detail={

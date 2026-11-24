@@ -179,6 +179,10 @@ ddoc export drift-report drift.json --to http --config '{"base_url":"http://my-a
 | `--log-level` | info | |
 | `--reload` | | 개발용 자동 재시작 |
 
+키가 없으면 이 컴퓨터만 상대합니다. `Host` 가 localhost · 127.0.0.1 · ::1 · 바인딩 주소 · `DDOC_ALLOWED_HOSTS`
+(쉼표로 구분) 가 아닌 요청과, 다른 사이트에서 온(`Origin` 이 다른) 변경 요청은 403 입니다. 키를 설정하면
+키가 이 역할을 맡습니다.
+
 ## `ddoc plugin`
 
 | 하위 명령 | 설명 |

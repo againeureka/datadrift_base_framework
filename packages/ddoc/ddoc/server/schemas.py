@@ -11,14 +11,26 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
+from typing_extensions import Annotated
+
+
+def _not_an_option(value: str) -> str:
+    """Values that become positional CLI arguments: one starting with
+    ``-`` would be read as an option (``--report=…``) instead."""
+    if value.startswith("-"):
+        raise ValueError("must not start with '-' (it would be read as a command-line option)")
+    return value
+
+
+Positional = Annotated[str, AfterValidator(_not_an_option)]
 
 
 # ── /examples ────────────────────────────────────────────────────────
 
 
 class ExamplesGenerateRequest(BaseModel):
-    modality: str = Field(..., description="One of: timeseries, audio, text, vision.")
+    modality: Positional = Field(..., description="One of: timeseries, audio, text, vision.")
     out: str = Field(..., description="Output directory (will contain ref/ and cur/ subdirs).")
     scenario: str = Field("shifted", description="`shifted` or `identical`.")
 
@@ -60,8 +72,8 @@ class AnalyzeDriftRequest(BaseModel):
 class DiffRequest(BaseModel):
     """One-line verdict between two datasets (``ddoc diff``), optionally
     with the HTML diagnostic report inline."""
-    ref: str = Field(..., description="Baseline dataset path (directory or file) on the server.")
-    cur: str = Field(..., description="Current dataset path (directory or file) on the server.")
+    ref: Positional = Field(..., description="Baseline dataset path (directory or file) on the server.")
+    cur: Positional = Field(..., description="Current dataset path (directory or file) on the server.")
     threshold: float = 0.15
     attr_threshold: float = 0.25
     detector: str = "default"
@@ -108,7 +120,7 @@ class ReportRenderRequest(BaseModel):
 
 
 class ExportDriftReportRequest(BaseModel):
-    input: str = Field(..., description="Drift envelope JSON path.")
+    input: Positional = Field(..., description="Drift envelope JSON path.")
     target: str = Field(..., description="http | file (built-in) or any plugin-registered target.")
     config: Optional[Dict[str, Any]] = Field(
         default=None,
@@ -121,7 +133,7 @@ class ExportDriftReportRequest(BaseModel):
 
 
 class FetchRequest(BaseModel):
-    source_uri: str = Field(..., description="file://, bare path, s3://, gs://, http(s)://, …")
+    source_uri: Positional = Field(..., description="file://, bare path, s3://, gs://, http(s)://, …")
     dest: str = Field(..., description="Local directory to materialize into.")
     symlink: bool = False
     config: Optional[Dict[str, Any]] = None

@@ -1,12 +1,11 @@
 """FastAPI application factory for ``ddoc serve``."""
 from __future__ import annotations
 
-import os
-from typing import Any, Dict
-
 from pathlib import Path
+from typing import Any, Dict, Optional, Sequence
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -78,10 +77,12 @@ def map_envelope_to_response(envelope: Dict[str, Any]) -> JSONResponse:
     return JSONResponse(status_code=200, content=envelope)
 
 
-def create_app(*, bind_info: str = "127.0.0.1:8765") -> FastAPI:
+def create_app(*, bind_info: str = "127.0.0.1:8765",
+               allowed_hosts: Optional[Sequence[str]] = None) -> FastAPI:
     """Build the FastAPI app. ``bind_info`` is informational only —
     propagated into ``/healthz`` so operators can confirm what they're
-    talking to."""
+    talking to. ``allowed_hosts``: the Host names answered while no API
+    key is set (``ddoc serve`` passes them; see ``guard.py``)."""
     app = FastAPI(
         title="ddoc serve",
         description=(
@@ -97,6 +98,8 @@ def create_app(*, bind_info: str = "127.0.0.1:8765") -> FastAPI:
     # routers so even health-check / static-asset GETs are counted.
     from .metrics import install_middleware
     install_middleware(app)
+    from . import guard
+    guard.install(app, allowed_hosts)
 
     # Register routers (lazy-imported so optional FastAPI/uvicorn deps
     # don't cripple core ddoc imports).
@@ -141,13 +144,16 @@ def create_app(*, bind_info: str = "127.0.0.1:8765") -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def _validation_handler(request: Request, exc: RequestValidationError):  # noqa: ARG001
+        # Only where and why: the rejected input itself can be raw bytes
+        # (a body that is not JSON), which does not serialize.
+        errors = [{k: e.get(k) for k in ("type", "loc", "msg")} for e in exc.errors()]
         return JSONResponse(
             status_code=422,
             content={
                 "status": "error",
                 "error_code": "invalid_request",
                 "message": "request body failed validation",
-                "errors": exc.errors(),
+                "errors": jsonable_encoder(errors),
             },
         )
 
