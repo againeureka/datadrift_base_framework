@@ -37,6 +37,7 @@ _CSS = """
   --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,0.10);
   --cur: #2a78d6; --ref: #898781; --track: #cde2fb; --link: #c3c2b7;
   --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --warning-ink: #8a5a00;
   --chip: #f0efec; --tip-bg: #0b0b0b; --tip-ink: #f0efec;
 }
 /* Night theme: follows the OS unless the reader picks one; screen only,
@@ -47,6 +48,7 @@ _CSS = """
     --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
     --cur: #3987e5; --ref: #75746e; --track: #184f95; --link: #383835;
+    --warning-ink: #fab219;
     --chip: #2c2c2a; --tip-bg: #f0efec; --tip-ink: #0b0b0b;
   }
 }
@@ -56,6 +58,7 @@ _CSS = """
     --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
     --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,0.10);
     --cur: #3987e5; --ref: #75746e; --track: #184f95; --link: #383835;
+    --warning-ink: #fab219;
     --chip: #2c2c2a; --tip-bg: #f0efec; --tip-ink: #0b0b0b;
   }
 }
@@ -96,8 +99,13 @@ h3 { font-size: 16px; margin: 0; }
 .meter { position: relative; height: 8px; border-radius: 4px; background: var(--track); margin-top: 10px; }
 .meter .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; }
 .meter .tick { position: absolute; top: -4px; width: 2px; height: 16px; background: var(--ink-2); }
-.caution { border: 1px solid var(--warning); border-left-width: 4px; border-radius: 6px;
-           padding: 10px 14px; margin-top: 14px; font-size: 14px; }
+/* Marks, each with one meaning: corner brackets 「 」 frame a reading (a finding
+   to examine), ※ flags a note on how far to trust what is read, hatching is
+   "not compared", a dashed edge is "one side only" or "near". */
+.caution { position: relative; margin-top: 14px; padding: 9px 0 9px 1.9em; font-size: 14px;
+           border-top: 1px solid var(--grid); border-bottom: 1px solid var(--grid); }
+.caution::before { content: "※"; position: absolute; left: .25em; top: 9px;
+                   color: var(--warning-ink); font-weight: 700; }
 .why li, .plain li { margin: 6px 0; }
 .pod { border: 1px solid var(--border); border-radius: 6px; margin: 14px 0; break-inside: avoid; }
 .pod > .hd { display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
@@ -187,8 +195,12 @@ table.examples td.nm-cell { font-family: ui-monospace, SFMono-Regular, Menlo, mo
 .headline { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
 .headline .k { color: var(--ink-2); font-weight: 400; margin-right: 6px; }
 .cards { display: grid; gap: 12px; }
-.card { border: 1px solid var(--border); border-left: 4px solid var(--ink); border-radius: 6px;
+.card { position: relative; border: 1px solid var(--border); border-radius: 2px;
         padding: 14px 18px; break-inside: avoid; }
+.card::before, .card::after { content: ""; position: absolute; width: 14px; height: 14px;
+                              border: 0 solid var(--ink); pointer-events: none; }
+.card::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+.card::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
 .card header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
 .card h3 { font-size: 17px; }
 .card .badge { font-size: 12px; font-weight: 600; border: 1px solid var(--ink); border-radius: 10px;

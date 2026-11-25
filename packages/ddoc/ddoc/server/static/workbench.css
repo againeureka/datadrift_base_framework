@@ -194,10 +194,16 @@ body { background: var(--page); color: var(--ink); }
 .res-top { margin-bottom: 10px; }
 .verdict {
   --tok: var(--warning);
-  display: grid; grid-template-columns: auto minmax(220px, 300px) 1fr; gap: 28px; align-items: center;
-  background: color-mix(in srgb, var(--tok) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--tok) 45%, var(--grid));
-  border-left: 6px solid var(--tok); border-radius: 14px; padding: 22px 26px; box-shadow: var(--shadow);
+  position: relative; display: grid; grid-template-columns: auto minmax(220px, 300px) 1fr; gap: 28px; align-items: center;
+  background: color-mix(in srgb, var(--tok) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--tok) 35%, var(--grid));
+  border-radius: 3px; padding: 22px 26px;
 }
+/* the verdict is a reading: framed by the report's corner brackets 「 」, in its status colour */
+.verdict::before, .verdict::after {
+  content: ""; position: absolute; width: 26px; height: 26px; border: 0 solid var(--tok); pointer-events: none;
+}
+.verdict::before { top: -1px; left: -1px; border-width: 3px 0 0 3px; }
+.verdict::after { bottom: -1px; right: -1px; border-width: 0 3px 3px 0; }
 .tok-good { --tok: var(--good); } .tok-warning { --tok: var(--warning); }
 .tok-serious { --tok: var(--serious); } .tok-critical { --tok: var(--critical); }
 .v-main { display: flex; align-items: center; gap: 16px; }
@@ -244,7 +250,7 @@ body { background: var(--page); color: var(--ink); }
 .pcard header b { font-size: 16px; }
 .pcard.near header b { color: var(--ink-2); }
 .mtag { font-size: 11px; font-weight: 700; padding: 0.1em 0.5em; border-radius: 5px; background: var(--ink); color: var(--surface); }
-.mtag.near { background: none; color: var(--ink-2); border: 1px solid var(--axis); }
+.mtag.near { background: none; color: var(--ink-2); border: 1px dashed var(--ink-2); }
 .pcard .attrs { font-size: 12px; color: var(--muted); font-family: "SFMono-Regular", Consolas, monospace; }
 .pcard p { font-size: 13px; line-height: 1.55; color: var(--ink-2); }
 .pcard p.signal { color: var(--ink); font-weight: 550; }
