@@ -36,6 +36,7 @@ MESSAGES = {
         "console.reason": "Reason",
         # ddoc diff hints / reasons
         "hint.report_written": "Diagnostic report: {path}",
+        "hint.report_failed": "The diagnostic report could not be written ({path}): {error}. The verdict above stands.",
         "hint.report_suggest": "Diagnostic report: add --report note.html for a report with evidence and charts",
         "hint.install_vision": "Install the image drift plugin (it needs torch): {cmd}",
         "hint.install_plugin": "Install the {kind} plugin: {cmd}",
@@ -336,6 +337,7 @@ MESSAGES = {
         "console.meta": "모달리티: {modality} · 엔진: {engine} · 기준: {ref} · 현재: {cur}",
         "console.reason": "사유",
         "hint.report_written": "진단서: {path}",
+        "hint.report_failed": "진단서를 쓰지 못했습니다 ({path}): {error}. 위 판정은 그대로 유효합니다.",
         "hint.report_suggest": "진단서: --report note.html 로 근거와 그래프가 담긴 진단서 생성",
         "hint.install_vision": "이미지 드리프트 플러그인 설치 (torch 필요): {cmd}",
         "hint.install_plugin": "{kind} 플러그인 설치: {cmd}",

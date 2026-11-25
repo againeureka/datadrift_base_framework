@@ -332,6 +332,30 @@ def test_inspection_without_profile_still_reports_scores():
     assert dx.inspection_text(rest, "en")["target"] == "all (2)"
 
 
+
+def test_report_with_more_attributes_over_the_threshold_than_rows(tmp_path):
+    # Beyond eight attributes over the threshold the table folds the rest
+    # into one "and N more" row; that row needs its criterion too, or the
+    # whole report fails (seen on a real weather-station log).
+    import numpy as np
+    rng = np.random.default_rng(1)
+    cols = [f"c{i}" for i in range(11)]
+    for name, shift in (("r.csv", 0.0), ("c.csv", 3.0)):
+        rows = [",".join(cols)] + [",".join(f"{x:.3f}" for x in rng.normal(shift, 1, len(cols)))
+                                   for _ in range(300)]
+        (tmp_path / name).write_text("\n".join(rows) + "\n")
+    note = tmp_path / "n.html"
+    res = runner.invoke(app, ["diff", str(tmp_path / "r.csv"), str(tmp_path / "c.csv"),
+                              "--json", "--report", str(note)])
+    payload = json.loads(res.output.strip().splitlines()[-1])
+    assert "report_error" not in payload
+    more = next(r for r in payload["diagnosis"]["inspection"] if r.get("more"))
+    assert more["more"] == 3
+    assert dx.inspection_text(more, "en")["criterion"] == dx.inspection_text(
+        next(r for r in payload["diagnosis"]["inspection"]
+             if r["item"] == "attr_score" and r.get("attr")), "en")["criterion"]
+    assert note.exists() and "c10" in note.read_text(encoding="utf-8")
+
 # ── data diagram ──────────────────────────────────────────────────────
 
 

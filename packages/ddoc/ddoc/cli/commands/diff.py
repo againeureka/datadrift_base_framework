@@ -537,7 +537,10 @@ def _write_report(payload: Dict[str, Any], report: Optional[Path],
         payload["report_path"] = str(report)
         payload.setdefault("hints", []).insert(0, t("hint.report_written", lang, path=report))
     except Exception as e:  # noqa: BLE001
-        payload["report_error"] = str(e)
+        # the verdict stands, but say so: a missing file with no word is worse
+        payload["report_error"] = f"{type(e).__name__}: {e}"
+        payload.setdefault("hints", []).insert(
+            0, t("hint.report_failed", lang, path=report, error=payload["report_error"]))
 
 
 def _finish(payload: Dict[str, Any], *, json_out: bool, lang: str,

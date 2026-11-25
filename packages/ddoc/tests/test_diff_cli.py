@@ -186,6 +186,23 @@ def test_diff_report_csv_evidence(tmp_path):
     assert "Items to check" in body                       # checks for the drifted columns
 
 
+
+def test_a_report_that_fails_is_reported_not_swallowed(tmp_path, monkeypatch):
+    from ddoc.cli.commands import diff_report
+
+    def broken(*a, **k):
+        raise KeyError("threshold")
+    monkeypatch.setattr(diff_report, "build_consultation_html", broken)
+    ref, cur = _mk_pair(tmp_path, ["price", "100", "110", "105"], ["price", "300", "290", "310"])
+    note = tmp_path / "note.html"
+    out = runner.invoke(app, ["diff", str(ref), str(cur), "--report", str(note)])
+    assert out.exit_code == 1                      # the verdict still stands
+    assert not note.exists()
+    assert "could not be written" in out.output and "KeyError" in out.output
+    res = runner.invoke(app, ["diff", str(ref), str(cur), "--json", "--report", str(note)])
+    payload = json.loads(res.stdout.strip())
+    assert payload["report_error"].startswith("KeyError") and "report_path" not in payload
+
 def test_diff_report_categorical_evidence(tmp_path):
     import sys as _sys
     _sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))

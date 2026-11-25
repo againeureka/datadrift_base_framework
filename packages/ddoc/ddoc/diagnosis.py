@@ -321,7 +321,8 @@ def _inspection(*, summaries: Dict[str, Any], ordered: List[Tuple[str, float]],
                          "status": "fail" if score >= attr_threshold else "caution"})
         if len(over) > _ROWS_PER_ITEM:
             rows.append({"system": "distribution", "item": "attr_score",
-                         "more": len(over) - _ROWS_PER_ITEM, "status": "caution"})
+                         "more": len(over) - _ROWS_PER_ITEM, "status": "caution",
+                         "threshold": threshold, "attr_threshold": attr_threshold})
         rest = [(k, v) for k, v in ordered if v < threshold]
         if rest:
             rows.append({"system": "distribution", "item": "attr_score", "count": len(rest),
