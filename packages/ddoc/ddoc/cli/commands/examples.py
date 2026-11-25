@@ -36,7 +36,8 @@ def list_examples():
         rprint(f"  • [bold]{name}[/bold]  scenarios: {', '.join(factories.scenarios_of(name))}")
     rprint("\n  shifted   — ref vs cur with a clear shift (weather: the rainy season)")
     rprint("  identical — the same data on both sides (drift ≈ 0; a sanity check)")
-    rprint("  weather also takes the stories of a real weather-station log by name.")
+    rprint("  weather and dashcam also take the stories of real data by name "
+           "(a weather-station log, a dashcam drive).")
     rprint("\n[dim]💡 Try: ddoc examples generate weather --out /tmp/ex && "
            "ddoc diff /tmp/ex/ref.csv /tmp/ex/cur.csv — or the guided tour: ddoc examples tour[/dim]")
 
@@ -44,7 +45,7 @@ def list_examples():
 @examples_app.command("generate")
 def generate_example(
     modality: str = typer.Argument(
-        ..., help="One of: weather, timeseries, audio, text, vision, categorical (run `ddoc examples list` to see)."
+        ..., help="One of: weather, dashcam, timeseries, audio, text, vision, categorical (run `ddoc examples list` to see)."
     ),
     out: Path = typer.Option(
         ..., "--out", "-o",
@@ -53,7 +54,7 @@ def generate_example(
     scenario: str = typer.Option(
         "shifted", "--scenario", "-s",
         help="`shifted` (default) for a drift scenario, `identical` for a sanity-check pair; "
-             "weather also takes a story name (monsoon, yearly-reset, season, next-days).",
+             "weather and dashcam also take a story name (`ddoc examples list`).",
     ),
 ):
     """Generate a (ref, cur) toy dataset pair for the given modality.

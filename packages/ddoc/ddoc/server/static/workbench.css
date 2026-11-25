@@ -175,6 +175,9 @@ body { background: var(--page); color: var(--ink); }
 }
 .expect { font-size: 11.5px; color: var(--muted); }
 .case-top .real { font-size: 11px; font-weight: 650; color: var(--cur); margin: 0 auto 0 10px; }
+.case-top .needs { font-size: 11px; color: var(--ink-2); margin: 0 auto 0 10px; }
+.case-top .real + .needs { margin-left: 8px; }
+.case-top .real:has(+ .needs) { margin-right: 0; }
 .vbadge {
   font-size: 11px; font-weight: 700; letter-spacing: 0.03em; padding: 0.15em 0.55em; border-radius: 5px;
   color: var(--ink); background: var(--chip); border: 1px solid var(--axis);

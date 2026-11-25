@@ -405,9 +405,27 @@ def make_pair_weather(out_dir: str | Path, *, scenario: str = "shifted") -> Tupl
     return weather.write_pair(story, base)
 
 
+def make_pair_dashcam(out_dir: str | Path, *, scenario: str = "shifted") -> Tuple[Path, Path]:
+    """Return ``(ref_dir, cur_dir)``: two folders of frames from a real
+    dashcam drive.
+
+    ``scenario`` is one of the stories in :data:`ddoc.examples.dashcam.STORIES`
+    (``camera-swap``, ``next-stretch``, ``same-stretch``, ``blurry-lens``,
+    ``low-quality``, ``overexposed``); ``shifted`` is ``camera-swap``;
+    ``identical`` is ``same-stretch``.
+    """
+    from . import dashcam
+
+    story = {"shifted": "camera-swap", "identical": "same-stretch"}.get(scenario, scenario)
+    if story not in dashcam.STORIES:
+        raise ValueError(f"unsupported scenario: {scenario!r}")
+    return dashcam.write_pair(story, Path(out_dir))
+
+
 # Index for the ``ddoc examples`` CLI to enumerate.
 PAIR_BUILDERS = {
     "weather": make_pair_weather,
+    "dashcam": make_pair_dashcam,
     "timeseries": make_pair_timeseries,
     "audio": make_pair_audio,
     "text": make_pair_text,
@@ -422,6 +440,9 @@ def scenarios_of(modality: str) -> Tuple[str, ...]:
     """The scenarios one modality's builder takes."""
     if modality == "weather":
         from .weather import STORIES
+        return (*SUPPORTED_SCENARIOS, *STORIES)
+    if modality == "dashcam":
+        from .dashcam import STORIES
         return (*SUPPORTED_SCENARIOS, *STORIES)
     return SUPPORTED_SCENARIOS
 

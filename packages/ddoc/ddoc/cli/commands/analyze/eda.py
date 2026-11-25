@@ -99,7 +99,11 @@ def analyze_eda_command(
         rprint(f"[yellow]plugin {name} failed and was skipped: {err}[/yellow]", file=sys.stderr)
     emit_progress(0.9, "merge", "merging plugin results",
                   enabled=ndjson_progress)
-    if not [r for r in hook_results or [] if r is not None]:
+    # A plugin that looked and found nothing of its kind (an image plugin
+    # given a CSV says files_analyzed: 0) has not profiled the data.
+    hook_results = [r for r in hook_results or []
+                    if r is not None and not (isinstance(r, dict) and r.get("files_analyzed") == 0)]
+    if not hook_results:
         builtin = _builtin_profile(Path(data_path), sample_rows=sample_rows, max_rows=max_rows)
         if builtin is not None:
             hook_results = [builtin]

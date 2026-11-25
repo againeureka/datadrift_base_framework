@@ -15,6 +15,7 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 | [`creeping_degradation/`](creeping_degradation/) | 점진 열화 | **DRIFT** | 하루하루는 멀쩡해 보이는데 한 달 전과 비교하면 센서가 죽어가고 있다 |
 | [`rhythm_not_drift/`](rhythm_not_drift/) | 주기 리듬 (함정) | **OK** | 월요일과 화요일은 다르게 *보이지만* 드리프트가 아니다 — 탐지기는 아니라고 말할 줄도 알아야 한다 |
 | [`weather_station/`](weather_station/) | **실측 데이터** | **DRIFT** · OK | 가정용 기상관측소의 실제 기록. 장마가 시작되자 이슬점과 습도가 올라섰다(DRIFT). 연간 강우 누적값이 초기화된 날은 누적 열을 빼면 날씨가 그대로다(OK) |
+| [`dashcam/`](dashcam/) | **실측 이미지** | **DRIFT** | 블랙박스 주행의 실제 프레임. 후방 카메라 영상이 들어오면 지도에서 갈라지고, 다음 구간은 풍경 때문에 DRIFT, 실제 프레임에 심은 렌즈 흐림은 잡음 수준보다 훨씬 크다 (vision 플러그인 필요) |
 
 진단서는 측정값을 미리 정리해 둔 드리프트 유형에 대어 보고(유형 판독), 케이스마다
 이야기에 맞는 유형이 나오는지도 회귀 테스트로 고정합니다.

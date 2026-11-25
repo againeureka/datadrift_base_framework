@@ -26,8 +26,9 @@ def client(tmp_path, monkeypatch):
     return TestClient(create_app())
 
 
-@pytest.mark.parametrize("case", cases.CASES, ids=lambda c: c.id)
+@pytest.mark.parametrize("case", [c for c in cases.CASES if c.folders is None], ids=lambda c: c.id)
 def test_example_cases_get_the_verdict_they_promise(case, tmp_path):
+    # the CSV cases; the image ones need the vision plugin (tests/test_dashcam.py)
     from ddoc.cli.commands.diff import compute_verdict, csv_diff
 
     ref, cur = cases.build(case.id, tmp_path)

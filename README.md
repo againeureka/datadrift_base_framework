@@ -71,7 +71,8 @@ ddoc serve                                                # REST API + GUI on ht
 A **guided tour** runs a whole pipeline on real data — get the data, look before judging, profile,
 judge with a report, share only on DRIFT — showing for each step why, the command, and its own
 output. It is one recipe file: `ddoc examples tour weather --save check.yaml` gives you the same
-pipeline to run on your own data ([tours](packages/ddoc/docs/tutorial/tours.md)). Domain plugins
+pipeline to run on your own data ([tours](packages/ddoc/docs/tutorial/tours.md)). With the vision
+plugin, `ddoc examples tour dashcam` does the same for video, as frames of a real dashcam drive. Domain plugins
 (images, text, audio, ...) install from their folders: `pip install -e packages/plugins/ddoc-plugin-<name>`.
 
 **[Usage examples](packages/ddoc/docs/guides/usage.en.md)** ([한국어](packages/ddoc/docs/guides/usage.md))

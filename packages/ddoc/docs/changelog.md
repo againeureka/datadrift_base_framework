@@ -31,6 +31,10 @@
 - ✨ [투어](tutorial/tours.md) — `ddoc examples tour weather`: 실제 데이터로 받기 → 미리 보기 → 살펴보기 → 판정·진단서 →
   DRIFT 일 때만 공유까지, 단계마다 이유·명령·그 명령의 출력. 레시피 한 장이라 `--save` 로 내 데이터의 파이프라인이 됨.
   `./run.sh demo` 가 이 투어로
+- ✨ 실측 이미지 예제: 블랙박스 주행 12분의 프레임(전방·후방 카메라, 축소·대시보드 아래 잘라냄). Drift Zoo
+  [dashcam](../zoo/dashcam/), 투어 `ddoc examples tour dashcam`, 진단 화면 예제 사례 3개, `examples generate dashcam`
+- 🐛 vision 플러그인이 있으면 `analyze eda` 가 CSV 대신 빈 이미지 분석 결과를 내던 문제, 레시피의 플러그인 설치
+  안내가 PyPI 이름이던 문제
 - ✨ 레시피에 `diff`·`probe` 단계(판정은 실패가 아님), `${steps.<id>.verdict}`·`returncode`, 단계의 `title`·`note`,
   `recipe run --narrate`·`--var`. `examples generate weather` (실측 기상 기록, 이야기 이름으로)
 - 🎨 `analyze eda` 의 화면 출력이 결과 JSON 전체 대신 몇 줄 요약 (크기·열 종류·기간·품질 소견). 전체는 `--json`·`--report`

@@ -623,17 +623,13 @@ def execute_recipe(
     # mid-pipeline failure with traceback.
     missing = recipe.check_plugin_requirements()
     if missing:
+        from ..plugin_install import plugin_command
+        # entry points are named ddoc_<kind>; the plugins are not on PyPI
+        hint = " && ".join(plugin_command(p.removeprefix("ddoc_")) for p in sorted(missing))
         raise RecipeError(
-            f"recipe requires plugins not installed: {sorted(missing)}",
+            f"recipe requires plugins not installed: {sorted(missing)} — install with: {hint}",
             code="missing_required_plugins",
-            details={
-                "missing": sorted(missing),
-                "hint": (
-                    "Install with: "
-                    + " && ".join(f"pip install {p.replace('_', '-')}"
-                                    for p in sorted(missing))
-                ),
-            },
+            details={"missing": sorted(missing), "hint": f"Install with: {hint}"},
         )
 
     # Late-import the runner so unit tests that just want to validate

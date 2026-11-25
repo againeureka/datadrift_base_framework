@@ -1,26 +1,28 @@
 """Example cases — small stories with a known answer, for the GUI's front page.
 
-Each case writes a baseline and a current CSV and says what happened and
-what the verdict should be, so a first-time user can press one button and
-see a real problem being diagnosed. They ship inside the package (the
-Drift Zoo's make.py scripts live in the repository only) and carry a date
-column, so the report also shows the periods compared. The first two are
-real: windows of a home weather station's log (:mod:`ddoc.examples.weather`);
-the rest are generated stories, each with one planted change.
+Each case writes a baseline and a current dataset and says what happened
+and what the verdict should be, so a first-time user can press one button
+and see a real problem being diagnosed. They ship inside the package (the
+Drift Zoo's make.py scripts live in the repository only). The CSV cases
+carry a date column, so the report also shows the periods compared. Some
+are real: windows of a home weather station's log (:mod:`ddoc.examples.weather`)
+and frames of a dashcam drive (:mod:`ddoc.examples.dashcam`, two folders
+of images, judged by the vision plugin); the rest are generated stories,
+each with one planted change.
 
     from ddoc.examples import cases
     ref, cur = cases.build("price-regime", out_dir)
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from . import weather
+from . import dashcam, weather
 
 Rows = List[str]
 
@@ -31,13 +33,21 @@ class Case:
     icon: str                      # a glyph for the card
     verdict: str                   # what `ddoc diff` should answer
     text: Dict[str, Dict[str, str]]  # lang → title, story, look (what to look at in the result)
-    header: str
-    make: Callable[[np.random.Generator], Tuple[Rows, Rows]]
+    header: str = ""
+    make: Optional[Callable[[np.random.Generator], Tuple[Rows, Rows]]] = None
     real: bool = False             # measured data rather than a generated story
+    # cases that are not two CSVs write their own data: out_dir → (ref, cur)
+    folders: Optional[Callable[[Path], Tuple[Path, Path]]] = None
+    needs: Optional[str] = None    # the plugin that judges it (images: vision)
+    options: Dict[str, Any] = field(default_factory=dict)  # diff options for this case
 
 
 def _days(start: date, n: int) -> List[str]:
     return [(start + timedelta(days=i)).isoformat() for i in range(n)]
+
+
+def _dashcam(story: str) -> Callable[[Path], Tuple[Path, Path]]:
+    return lambda out_dir: dashcam.write_pair(story, out_dir)
 
 
 def _weather(story: str) -> Callable[[np.random.Generator], Tuple[Rows, Rows]]:
@@ -150,13 +160,41 @@ CASES: List[Case] = [
                "story": "매장 방문 기록, 한 주와 그다음 주. 매일 아침·점심·저녁 피크가 같고 잡음만 다릅니다.",
                "look": "탐지기는 '아니오'라고 말할 줄도 알아야 합니다. 판정은 OK, 판독은 '안정형'입니다."}},
          "date,hour,dwell_min,basket", _weekday_rhythm),
+    # images: frames of a real dashcam drive, judged by the vision plugin
+    Case("camera-swap", "⇆", "DRIFT", {
+        "en": {"title": "The rear camera's footage came in",
+               "story": "Frames of a real dashcam drive, every 6 s: the front camera against the rear one at the same moments, as if the wrong camera's footage reached a model trained on the front.",
+               "look": "Exposure and colour move most, and on the embedding map the two cameras' frames sit apart (content shift in embeddings). Under the map the report names frames to open."},
+        "ko": {"title": "후방 카메라 영상이 들어왔다",
+               "story": "실제 블랙박스 주행의 6초 간격 프레임. 같은 순간의 전방 카메라와 후방 카메라로, 전방 영상으로 학습한 모델에 후방 영상이 잘못 들어온 상황입니다.",
+               "look": "노출과 색이 가장 크게 바뀌고, 임베딩 지도에서 두 카메라의 프레임이 갈라집니다(임베딩 분리형). 지도 아래에 열어 볼 프레임이 나옵니다."}},
+         real=True, folders=_dashcam("camera-swap"), needs="vision", options={"with_embeddings": True}),
+    Case("next-stretch", "⟶", "DRIFT", {
+        "en": {"title": "Same camera, the next stretch of road",
+               "story": "The front camera, the first six minutes of the drive against the next six: expressway and open sky first, then more city streets.",
+               "look": "Nothing broke, and it is still DRIFT: the scenery changed. A baseline has to cover the roads, hours and weather the camera will meet."},
+        "ko": {"title": "같은 카메라, 다음 구간",
+               "story": "전방 카메라, 주행의 앞 6분과 뒤 6분. 고가도로와 트인 하늘에서 시내 도로로 바뀝니다.",
+               "look": "고장은 없는데도 DRIFT입니다. 풍경이 바뀐 것입니다. 기준 데이터는 카메라가 만날 도로·시간대·날씨를 덮어야 합니다."}},
+         real=True, folders=_dashcam("next-stretch"), needs="vision", options={"with_embeddings": True}),
+    Case("blurry-lens", "◌", "DRIFT", {
+        "en": {"title": "A smudged lens, planted on real frames",
+               "story": "The same stretch of the drive, frames three seconds apart; the current ones blurred as by a smudged or fogged lens.",
+               "look": "Sharpness, noise and dynamic range move far more than anything else, while the scenery stayed the same."},
+        "ko": {"title": "실제 프레임에 심은 렌즈 흐림",
+               "story": "주행의 같은 구간에서 3초씩 어긋난 프레임. 현재 쪽은 렌즈에 얼룩이나 김이 서린 것처럼 흐리게 했습니다.",
+               "look": "선명도·잡음·명암 범위가 다른 무엇보다 크게 움직입니다. 풍경은 그대로입니다."}},
+         folders=_dashcam("blurry-lens"), needs="vision"),
 ]
 BY_ID = {c.id: c for c in CASES}
 
 
 def build(case_id: str, out_dir: Path, *, seed: int = 5) -> Tuple[Path, Path]:
-    """Write ``ref.csv`` and ``cur.csv`` of a case under ``out_dir``."""
+    """Write a case's data under ``out_dir``: ``ref.csv`` and ``cur.csv``,
+    or for an image case ``ref/`` and ``cur/`` folders."""
     case = BY_ID[case_id]
+    if case.folders is not None:
+        return case.folders(out_dir)
     ref_rows, cur_rows = case.make(np.random.default_rng(seed))
     out_dir.mkdir(parents=True, exist_ok=True)
     ref, cur = out_dir / "ref.csv", out_dir / "cur.csv"
@@ -167,4 +205,5 @@ def build(case_id: str, out_dir: Path, *, seed: int = 5) -> Tuple[Path, Path]:
 
 def to_dict(case: Case, lang: str) -> Dict[str, Any]:
     text = case.text.get(lang) or case.text["en"]
-    return {"id": case.id, "icon": case.icon, "verdict": case.verdict, "real": case.real, **text}
+    return {"id": case.id, "icon": case.icon, "verdict": case.verdict, "real": case.real,
+            "needs": case.needs, "options": dict(case.options), **text}

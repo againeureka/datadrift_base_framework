@@ -121,7 +121,9 @@ def test_weather_example_writes_two_csvs_for_any_story(tmp_path):
     assert bad.exit_code == 2
 
 
-def test_profile_prints_a_summary_not_the_whole_envelope(tmp_path):
+def test_profile_prints_a_summary_not_the_whole_envelope(tmp_path, monkeypatch):
+    # (with an image plugin installed too: it finds no images in a CSV and steps aside)
+    monkeypatch.chdir(tmp_path)
     _, cur = factories.make_pair_weather(tmp_path, scenario="monsoon")
     res = runner.invoke(app, ["analyze", "eda", "--data-path", str(cur), "--quiet", "--lang", "en"])
     assert res.exit_code == 0, res.output

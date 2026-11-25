@@ -48,8 +48,8 @@
       'opt.embed': 'Compare embeddings too (images and text; slower)',
       'opt.threshold': 'Threshold, overall', 'opt.attr': 'Threshold, one column',
       'cases.title': 'Or start from an example',
-      'cases.lead': 'Stories with a known answer, two of them from a real weather station. One click builds the data and diagnoses it.',
-      'cases.run': 'Diagnose this case', 'cases.expect': 'expected', 'cases.real': 'real data',
+      'cases.lead': 'Stories with a known answer, some from a real weather station and a real dashcam drive. One click builds the data and diagnoses it; the image cases need the vision plugin.',
+      'cases.run': 'Diagnose this case', 'cases.expect': 'expected', 'cases.real': 'real data', 'cases.needs': '{p} plugin',
       'recent.title': 'Recent', 'recent.clear': 'Clear',
       'res.new': 'New diagnosis', 'res.severity': 'severity', 'res.score': 'Score', 'res.threshold': 'threshold',
       'res.what': 'What changed', 'res.patterns': 'Pattern reading', 'res.columns': 'By column',
@@ -101,8 +101,8 @@
       'opt.embed': '임베딩도 비교 (이미지·텍스트, 느림)',
       'opt.threshold': '전체 기준', 'opt.attr': '단일 열 기준',
       'cases.title': '또는 예제로 시작하기',
-      'cases.lead': '정답이 있는 사례입니다. 둘은 실제 기상관측소 기록입니다. 누르면 데이터를 만들어 바로 진단합니다.',
-      'cases.run': '이 사례 진단하기', 'cases.expect': '기대 판정', 'cases.real': '실측 데이터',
+      'cases.lead': '정답이 있는 사례입니다. 실제 기상관측소 기록과 블랙박스 주행에서 온 것도 있습니다. 누르면 데이터를 만들어 바로 진단하며, 이미지 사례는 vision 플러그인이 필요합니다.',
+      'cases.run': '이 사례 진단하기', 'cases.expect': '기대 판정', 'cases.real': '실측 데이터', 'cases.needs': '{p} 플러그인',
       'recent.title': '최근 진단', 'recent.clear': '지우기',
       'res.new': '새 진단', 'res.severity': '심각도', 'res.score': '점수', 'res.threshold': '기준',
       'res.what': '무엇이 달라졌나', 'res.patterns': '유형 판독', 'res.columns': '열별 결과',
@@ -323,7 +323,7 @@
 
   // ── Diagnose ─────────────────────────────────────────────────────
   let ticker = null;
-  async function diagnose() {
+  async function diagnose(extra) {
     const { ref, cur } = S.sides;
     if (!(ref && cur && ref.path && cur.path) || S.running) return;
     S.running = true; S.started = Date.now(); S.error = null;
@@ -332,7 +332,7 @@
       const b = root.querySelector('.run-btn');
       if (b) b.textContent = t('run.busy', { s: Math.round((Date.now() - S.started) / 1000) });
     }, 500);
-    const o = S.options;
+    const o = Object.assign({}, S.options, extra || {});  // a case's own options, this run only
     const r = await api('POST', '/diff', {
       ref: ref.path, cur: cur.path, lang: lang(), issuer: o.issuer || null,
       sample_rows: Number(o.sample_rows) || 0, with_embeddings: !!o.with_embeddings,
@@ -362,7 +362,7 @@
     const r = await api('POST', '/cases/' + encodeURIComponent(c.id));
     if (!r.ok) { S.sides = { ref: null, cur: null }; S.error = t('err.generic', { msg: errorText(r) }); return render(); }
     await Promise.all([describeSide('ref', r.json.ref, 'case'), describeSide('cur', r.json.cur, 'case')]);
-    diagnose();
+    diagnose(c.options);
   }
 
   // ── Render: intake ───────────────────────────────────────────────
@@ -508,6 +508,7 @@
         h('div', { class: 'case-grid' }, S.cases.map((c) => h('article', { class: 'case' },
           h('div', { class: 'case-top' }, h('span', { class: 'glyph' }, c.icon),
             c.real ? h('span', { class: 'real' }, t('cases.real')) : null,
+            c.needs ? h('span', { class: 'needs' }, t('cases.needs', { p: c.needs })) : null,
             h('span', { class: 'expect' }, t('cases.expect') + ' ', verdictBadge(c.verdict))),
           h('h3', {}, c.title), h('p', {}, c.story),
           h('button', { class: 'wb-btn', type: 'button', disabled: S.running, onclick: () => runCase(c) }, t('cases.run')))))) : null,
