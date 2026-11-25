@@ -30,9 +30,9 @@ Positional = Annotated[str, AfterValidator(_not_an_option)]
 
 
 class ExamplesGenerateRequest(BaseModel):
-    modality: Positional = Field(..., description="One of: timeseries, audio, text, vision.")
-    out: str = Field(..., description="Output directory (will contain ref/ and cur/ subdirs).")
-    scenario: str = Field("shifted", description="`shifted` or `identical`.")
+    modality: Positional = Field(..., description="One of: weather, timeseries, audio, text, vision, categorical.")
+    out: str = Field(..., description="Output directory: ref.csv and cur.csv for weather, ref/ and cur/ folders otherwise.")
+    scenario: str = Field("shifted", description="`shifted`, `identical`, or for weather a story name.")
 
 
 # ── /analyze ─────────────────────────────────────────────────────────

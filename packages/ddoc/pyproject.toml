@@ -103,6 +103,7 @@ ddoc = [
   "config/config.json",
   "scenarios.conf",
   "examples/data/*.csv.gz",
+  "examples/tours/*.yaml",
   "templates/*.html",
   "server/static/*.html",
   "server/static/*.js",

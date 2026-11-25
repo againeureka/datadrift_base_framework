@@ -234,3 +234,4 @@ cython_debug/
 # Recipes are source, not dataset artifacts — exempt from the blanket
 # dataset-format ignores above.
 !recipes/*.yaml
+!ddoc/examples/tours/*.yaml

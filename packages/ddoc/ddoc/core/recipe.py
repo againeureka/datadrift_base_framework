@@ -12,10 +12,13 @@ Schema (top level):
     vars: { key: value, ... }     # ${vars.key} substitutions
     steps:
       - id: string (unique per recipe)
-        run: one of [fetch, analyze.eda, analyze.drift, examples.generate,
-                     report.render, export.drift_report]
+        run: one of [fetch, examples.generate, probe, analyze.eda, diff,
+                     analyze.drift, report.render, export.drift_report, transform]
         with: { mapping of CLI option name → value }
         out: optional path used as this step's "output" reference
+        when: optional condition; the step is skipped when it is false
+        title, note: optional words for a reader (a string, or {en: .., ko: ..});
+                     shown when the recipe runs with narration
 
 Reference syntax inside ``with`` values:
 
@@ -24,10 +27,19 @@ Reference syntax inside ``with`` values:
 * ``${steps.<id>.output}`` — output path of a previous step
 * ``${steps.<id>.json.<dotted.path>}`` — pulls a value from a previous
   step's JSON envelope (e.g. ``${steps.drift.json.overall_score}``)
+* ``${steps.<id>.returncode}`` — a previous step's exit code
+* ``${steps.<id>.verdict}`` — ``OK`` / ``DRIFT`` / ``BLIND`` of a ``diff`` step
 
 The executor invokes the same hermetic ``ddoc`` subprocess each step
 uses, captures the JSON envelope, and feeds it to the substitution
 machinery. Failures stop the recipe; the error envelope is bubbled.
+A verdict is not a failure: ``diff`` exits 1 on DRIFT and 2 on BLIND,
+``probe`` 2 when diff would be BLIND, and the recipe carries on.
+
+Run *live* (``live=True``), each step prints what the command prints
+when typed by hand, nothing is captured, and later steps can use earlier
+steps' output paths, exit codes and verdicts but not their JSON. That is
+how ``ddoc examples tour`` walks a reader through a recipe.
 
 Why a recipe layer? The GUI and the REST API each cover one operation
 at a time. Real workflows are usually `fetch → analyze → report →
@@ -69,14 +81,42 @@ _STEP_KINDS: Dict[str, Dict[str, Any]] = {
         },
         "json_flag": False,                  # examples generate doesn't emit JSON envelope
     },
+    "probe": {
+        "argv": ["probe"],
+        "positional": ["ref"],
+        "positional_optional": ["cur"],
+        "options": {"lang": "--lang"},
+        "json_flag": True,
+        "ok_returncodes": (0, 2),            # 2: diff would come back BLIND
+    },
     "analyze.eda": {
         "argv": ["analyze", "eda"],
         "options": {
             "data_path": "--data-path",
             "invalidate_cache": "--invalidate-cache",
             "quiet": "--quiet",
+            "report": "--report",
+            "lang": "--lang",
+            "sample_rows": "--sample-rows",
+            "max_rows": "--max-rows",
         },
         "json_flag": True,
+    },
+    "diff": {
+        "argv": ["diff"],
+        "positional": ["ref", "cur"],
+        "options": {
+            "report": "--report",
+            "lang": "--lang",
+            "issuer": "--issuer",
+            "threshold": "--threshold",
+            "attr_threshold": "--attr-threshold",
+            "with_embeddings": "--with-embeddings",
+            "sample_rows": "--sample-rows",
+            "max_rows": "--max-rows",
+        },
+        "json_flag": True,
+        "ok_returncodes": (0, 1, 2),         # OK / DRIFT / BLIND are answers
     },
     "analyze.drift": {
         "argv": ["analyze", "drift"],
@@ -343,6 +383,8 @@ def _resolve_ref(ref: str, ctx: Dict[str, Any]) -> Any:
             kind = tail[1]
             if kind == "output":
                 return steps[step_id].get("output")
+            if kind in ("returncode", "verdict"):
+                return steps[step_id].get(kind)
             if kind == "json":
                 env = steps[step_id].get("json")
                 if env is None:
@@ -372,9 +414,10 @@ class StepResult:
     json: Optional[Dict[str, Any]] = None
     skipped: bool = False
     skipped_reason: Optional[str] = None  # "when" | "dry_run"
+    verdict: Optional[str] = None         # diff steps: OK | DRIFT | BLIND
 
 
-def _step_to_argv(run_kind: str, with_args: Dict[str, Any]) -> List[str]:
+def _step_to_argv(run_kind: str, with_args: Dict[str, Any], *, json_flag: bool = True) -> List[str]:
     spec = _STEP_KINDS.get(run_kind)
     if spec is None:
         raise RecipeError(f"unknown step kind: {run_kind}", code="unknown_step_kind")
@@ -416,7 +459,7 @@ def _step_to_argv(run_kind: str, with_args: Dict[str, Any]) -> List[str]:
             f"step {run_kind}: unknown `with` keys: {sorted(leftovers)}",
             code="unknown_with_key",
         )
-    if spec.get("json_flag"):
+    if spec.get("json_flag") and json_flag:
         args.append("--json")
     return args
 
@@ -540,6 +583,11 @@ class Recipe:
         with_args = step.get("with") or {}
         if not isinstance(with_args, dict):
             out.append(f"{label} {sid or '?'}: `with` must be a mapping")
+        for key in ("title", "note"):
+            words = step.get(key)
+            if words is not None and not isinstance(words, str) and not (
+                    isinstance(words, dict) and all(isinstance(v, str) for v in words.values())):
+                out.append(f"{label} {sid or '?'}: `{key}` must be text or a mapping of language → text")
         return out
 
 
@@ -551,12 +599,16 @@ def execute_recipe(
     *,
     dry_run: bool = False,
     on_step: Optional[callable] = None,
+    on_start: Optional[callable] = None,
+    live: bool = False,
 ) -> Dict[str, Any]:
     """Run all steps in order. Returns ``{status, recipe, steps:
     [StepResult-as-dict]}``.
 
     ``on_step`` is invoked with each ``StepResult`` after it
-    completes (live progress callback).
+    completes (live progress callback); ``on_start`` with the raw step
+    and its argv just before a step runs. ``live`` runs each command as
+    typed by hand: its own output on the terminal, no JSON envelopes.
     """
     issues = recipe.validate()
     if issues:
@@ -594,6 +646,7 @@ def execute_recipe(
     # reference the file via ``${steps.<id>.output}`` when no explicit
     # ``out`` path is provided.
     workspace = _resolve_workspace(recipe)
+    run = dict(dry_run=dry_run, runner=runner, workspace=workspace, live=live, on_start=on_start)
 
     ctx: Dict[str, Any] = {"vars": dict(recipe.vars), "env": {}, "steps": {}}
     out_steps: List[Dict[str, Any]] = []
@@ -612,13 +665,11 @@ def execute_recipe(
                     "`parallel:` must list at least one nested step",
                     code="bad_parallel",
                 )
-            results, fail_envelope = _run_parallel_group(
-                children, ctx, dry_run, runner, workspace, on_step,
-            )
+            results, fail_envelope = _run_parallel_group(children, ctx, run, on_step)
             for sr in results:
                 # Re-merge into ctx in declaration order to keep
                 # downstream reference resolution deterministic.
-                ctx["steps"][sr.id] = {"output": sr.output, "json": sr.json}
+                ctx["steps"][sr.id] = _step_context(sr)
                 out_steps.append(_stepresult_to_dict(sr))
             if fail_envelope is not None:
                 _record_recipe_metrics(out_steps, success=False)
@@ -631,13 +682,8 @@ def execute_recipe(
                 }
             continue
 
-        sr, error_envelope = _run_single_step(
-            raw_step, ctx, dry_run, runner, workspace,
-        )
-        ctx["steps"][sr.id] = {
-            "output": sr.output if not error_envelope else None,
-            "json": sr.json,
-        }
+        sr, error_envelope = _run_single_step(raw_step, ctx, **run)
+        ctx["steps"][sr.id] = _step_context(sr, failed=error_envelope is not None)
         out_steps.append(_stepresult_to_dict(sr))
         if on_step:
             on_step(sr)
@@ -680,7 +726,16 @@ def _record_recipe_metrics(out_steps, *, success: bool) -> None:
         pass
 
 
-def _run_single_step(raw_step, ctx, dry_run, runner, workspace):
+def _step_context(sr: StepResult, *, failed: bool = False) -> Dict[str, Any]:
+    """What later steps can refer to: ``${steps.<id>.output|json|returncode|verdict}``."""
+    return {"output": None if failed else sr.output, "json": sr.json,
+            "returncode": sr.returncode, "verdict": sr.verdict}
+
+
+_VERDICT_OF_EXIT = {0: "OK", 1: "DRIFT", 2: "BLIND"}
+
+
+def _run_single_step(raw_step, ctx, *, dry_run, runner, workspace, live=False, on_start=None):
     """Execute one regular (non-parallel-block) recipe step.
 
     Returns ``(StepResult, error_envelope_or_None)``. Substitution and
@@ -692,7 +747,7 @@ def _run_single_step(raw_step, ctx, dry_run, runner, workspace):
     with_args = _substitute(raw_step.get("with") or {}, ctx)
     out_path = _substitute(raw_step.get("out"), ctx) if raw_step.get("out") else None
 
-    argv = _step_to_argv(run_kind, with_args)
+    argv = _step_to_argv(run_kind, with_args, json_flag=not live)
     sr = StepResult(id=sid, run=run_kind, argv=argv, returncode=0, elapsed_ms=0)
 
     when_expr = raw_step.get("when")
@@ -708,16 +763,24 @@ def _run_single_step(raw_step, ctx, dry_run, runner, workspace):
         return sr, None
 
     spec = _STEP_KINDS[run_kind]
-    require_json = bool(spec.get("json_flag"))
+    require_json = bool(spec.get("json_flag")) and not live
+    ok = spec.get("ok_returncodes", (0,))
+    if on_start:
+        on_start(raw_step, argv)
     t0 = time.monotonic()
     try:
-        res = runner.run(argv, require_json=require_json)
+        if live:
+            res = runner.run_live(argv, ok_returncodes=ok)
+        else:
+            res = runner.run(argv, require_json=require_json, ok_returncodes=ok)
         sr.returncode = res.returncode
         sr.elapsed_ms = res.elapsed_ms
         sr.json = res.json or None
         sr.output = out_path or _infer_output(run_kind, with_args, res.json)
+        if run_kind == "diff":
+            sr.verdict = (sr.json or {}).get("verdict") or _VERDICT_OF_EXIT.get(sr.returncode)
         if require_json and sr.json is not None and sr.output is None:
-            env_path = workspace / f"{sid}.envelope.json"
+            env_path = workspace() / f"{sid}.envelope.json"
             _atomic_json_write(env_path, sr.json)
             sr.output = str(env_path)
         return sr, None
@@ -728,12 +791,13 @@ def _run_single_step(raw_step, ctx, dry_run, runner, workspace):
         return sr, e.to_dict()
 
 
-def _run_parallel_group(children, ctx, dry_run, runner, workspace, on_step):
+def _run_parallel_group(children, ctx, run, on_step):
     """Run all ``children`` concurrently. Returns ``(results_in_decl_order,
     fail_envelope_or_None)``. Fail envelope carries the first failing
     child's ``RunError.to_dict()``; remaining children still complete
     so their results are visible (parallel execution doesn't cancel
-    siblings — easier to debug)."""
+    siblings — easier to debug). Live runs go one at a time, so each
+    command's output stays readable."""
     from concurrent.futures import ThreadPoolExecutor
     if not children:
         return [], None
@@ -747,13 +811,13 @@ def _run_parallel_group(children, ctx, dry_run, runner, workspace, on_step):
 
     def _job(idx_and_step):
         idx, raw = idx_and_step
-        sr, err = _run_single_step(raw, snapshot, dry_run, runner, workspace)
+        sr, err = _run_single_step(raw, snapshot, **run)
         return idx, sr, err
 
     indexed = list(enumerate(children))
     results: List = [None] * len(children)
     failures: List = []
-    with ThreadPoolExecutor(max_workers=len(children)) as pool:
+    with ThreadPoolExecutor(max_workers=1 if run.get("live") else len(children)) as pool:
         for idx, sr, err in pool.map(_job, indexed):
             results[idx] = sr
             if on_step:
@@ -778,6 +842,8 @@ def _infer_output(run_kind: str, with_args: Dict[str, Any], envelope: Optional[D
     """
     if run_kind == "report.render":
         return with_args.get("out")
+    if run_kind in ("diff", "analyze.eda"):
+        return with_args.get("report")
     if run_kind == "fetch":
         if envelope and isinstance(envelope, dict):
             return envelope.get("local_path") or with_args.get("dest")
@@ -789,20 +855,28 @@ def _infer_output(run_kind: str, with_args: Dict[str, Any], envelope: Optional[D
     return None
 
 
-def _resolve_workspace(recipe: Recipe) -> Path:
-    """Resolve the recipe's auto-envelope workspace dir. Honors the
-    top-level ``workspace:`` field if set; otherwise creates a
-    deterministic per-recipe-source path under ``<source_dir>/.ddoc-recipe-out``,
-    or falls back to a unique tmp dir for inline recipes."""
-    if recipe.workspace:
-        d = Path(recipe.workspace)
-    elif recipe.source_path:
-        d = recipe.source_path.parent / ".ddoc-recipe-out" / recipe.source_path.stem
-    else:
-        import tempfile
-        d = Path(tempfile.mkdtemp(prefix="ddoc-recipe-"))
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+def _resolve_workspace(recipe: Recipe):
+    """The recipe's auto-envelope workspace dir, made on first use (a
+    live run, which keeps no envelopes, never makes it). Honors the
+    top-level ``workspace:`` field if set; otherwise a deterministic
+    per-recipe-source path under ``<source_dir>/.ddoc-recipe-out``, or
+    a unique tmp dir for inline recipes."""
+    made: List[Path] = []
+
+    def workspace() -> Path:
+        if not made:
+            if recipe.workspace:
+                d = Path(recipe.workspace)
+            elif recipe.source_path:
+                d = recipe.source_path.parent / ".ddoc-recipe-out" / recipe.source_path.stem
+            else:
+                import tempfile
+                d = Path(tempfile.mkdtemp(prefix="ddoc-recipe-"))
+            d.mkdir(parents=True, exist_ok=True)
+            made.append(d)
+        return made[0]
+
+    return workspace
 
 
 def _atomic_json_write(path: Path, payload: Dict[str, Any]) -> None:
@@ -824,4 +898,5 @@ def _stepresult_to_dict(sr: StepResult) -> Dict[str, Any]:
         "json": sr.json,
         "skipped": sr.skipped,
         "skipped_reason": sr.skipped_reason,
+        "verdict": sr.verdict,
     }

@@ -12,6 +12,10 @@
 - **환경 점검** (`check-env`) — 처음 시작할 때, 또는 예상과 달리 BLIND 가 나올 때  
   `ddoc doctor`  
   - ✕ 표시 플러그인은 설치는 되어 있지만 불러지지 않습니다 — 그 데이터는 BLIND 가 됩니다
+- **투어로 한 번에 보기** (`tour`) — 실제 데이터로 파이프라인 전체를 한 단계씩: 왜 하는지, 명령, 그 출력  
+  `ddoc examples tour weather`  
+  - 파일은 ./ddoc-tour-weather 에 남습니다. --pause 는 단계마다 Enter 를 기다립니다
+  - 투어는 레시피 한 장입니다: --save my.yaml 로 꺼내 ddoc recipe run my.yaml --narrate 로 내 데이터에
 - **예제 데이터로 해보기** (`try-demo`) — 처음 한 번: 드리프트가 있는 예제 쌍을 만들어 판정하고 진단서를 엽니다  
   `ddoc examples generate categorical --out ddoc-try --scenario shifted`  
   `ddoc diff ddoc-try/ref ddoc-try/cur --report ddoc-try/note.html`  

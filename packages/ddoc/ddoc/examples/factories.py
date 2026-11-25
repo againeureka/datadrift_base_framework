@@ -384,8 +384,30 @@ def make_pair_categorical(out_dir: str | Path, *, scenario: str = "shifted") -> 
     return base / _REF_DIR, base / _CUR_DIR
 
 
+def make_pair_weather(out_dir: str | Path, *, scenario: str = "shifted") -> Tuple[Path, Path]:
+    """Return ``(ref.csv, cur.csv)``: two windows of the real
+    weather-station log with every column, rain totals included.
+
+    ``scenario`` is one of the stories in :data:`ddoc.examples.weather.STORIES`
+    (``monsoon``, ``yearly-reset``, ``season``, ``next-days``);
+    ``shifted`` is ``monsoon``; ``identical`` is monsoon's baseline twice.
+    """
+    from . import weather
+
+    story = "monsoon" if scenario in ("shifted", "identical") else scenario
+    if story not in weather.STORIES:
+        raise ValueError(f"unsupported scenario: {scenario!r}")
+    base = Path(out_dir)
+    if scenario == "identical":
+        (r0, r1), _ = weather.STORIES[story]
+        return (weather.write_window(base / "ref.csv", r0, r1),
+                weather.write_window(base / "cur.csv", r0, r1))
+    return weather.write_pair(story, base)
+
+
 # Index for the ``ddoc examples`` CLI to enumerate.
 PAIR_BUILDERS = {
+    "weather": make_pair_weather,
     "timeseries": make_pair_timeseries,
     "audio": make_pair_audio,
     "text": make_pair_text,
@@ -394,3 +416,20 @@ PAIR_BUILDERS = {
 }
 
 SUPPORTED_SCENARIOS = ("shifted", "identical")
+
+
+def scenarios_of(modality: str) -> Tuple[str, ...]:
+    """The scenarios one modality's builder takes."""
+    if modality == "weather":
+        from .weather import STORIES
+        return (*SUPPORTED_SCENARIOS, *STORIES)
+    return SUPPORTED_SCENARIOS
+
+
+def pair_paths(modality: str, out_dir: str | Path) -> Tuple[Path, Path]:
+    """Where a builder puts its pair: two CSV files for ``weather``,
+    ``ref/`` and ``cur/`` folders for the others."""
+    base = Path(out_dir)
+    if modality == "weather":
+        return base / "ref.csv", base / "cur.csv"
+    return base / _REF_DIR, base / _CUR_DIR

@@ -26,6 +26,7 @@ def scenarios() -> Dict[str, Any]:
         "status": "ok",
         "modalities": list(factories.PAIR_BUILDERS.keys()),
         "scenarios": list(factories.SUPPORTED_SCENARIOS),
+        "scenarios_by_modality": {m: list(factories.scenarios_of(m)) for m in factories.PAIR_BUILDERS},
     }
 
 
@@ -44,12 +45,14 @@ def examples_generate(req: ExamplesGenerateRequest):
         "--scenario", req.scenario,
     ]
     result = run(args, require_json=False, timeout=120.0)
+    from ddoc.cli.commands.examples import _import_factories
+    ref, cur = _import_factories().pair_paths(req.modality, req.out)
     return {
         "status": "ok",
         "modality": req.modality,
         "out": req.out,
         "scenario": req.scenario,
-        "ref_dir": f"{req.out}/ref",
-        "cur_dir": f"{req.out}/cur",
+        "ref_dir": str(ref),
+        "cur_dir": str(cur),
         "elapsed_ms": result.elapsed_ms,
     }

@@ -24,7 +24,7 @@ From the repository root:
 ```bash
 ./run.sh setup        # create ./.venv, install ddoc + the categorical and tabular plugins ("setup all" for every plugin)
 ./run.sh doctor       # do the plugins load? are PDF, serve and embeddings available?
-./run.sh demo         # toy data → verdict → a diagnostic report in outputs/demo/
+./run.sh demo         # a tour on real data: look → profile → judge → report, in outputs/demo/
 ```
 
 `./run.sh ddoc <command>` runs ddoc from that environment; with the venv activated, plain `ddoc` works

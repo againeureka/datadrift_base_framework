@@ -49,7 +49,7 @@ Three ways to use it:
 ./run.sh setup        # create ./.venv, install ddoc + categorical/tabular plugins
 ./run.sh doctor       # check the environment: plugins load? PDF, serve, embeddings available?
 ./run.sh menu         # pick what to do by situation, fill in values, run it
-./run.sh demo         # toy data → verdict → HTML report in outputs/demo/
+./run.sh demo         # guided tour on real data: look → profile → judge → report, in outputs/demo/
 ./run.sh serve        # REST API + GUI on http://127.0.0.1:8765
 ./run.sh help         # test, gate, docker, and running any ddoc command
 ```
@@ -59,14 +59,20 @@ torch). Reports and hints are in English by default; set `DDOC_LANG=ko`
 (or pass `--lang ko`) for Korean, e.g. `DDOC_LANG=ko ./run.sh demo`. Without bash (e.g. Windows without WSL), the same steps by hand:
 
 ```bash
-pip install -e packages/ddoc                              # core CLI
-pip install -e packages/plugins/ddoc-plugin-categorical   # add a domain plugin
+pip install -e packages/ddoc                              # core CLI (CSV needs no plugin)
 
-ddoc examples generate categorical --out /tmp/d --scenario shifted
-ddoc diff /tmp/d/ref /tmp/d/cur                           # DRIFT, exit code 1
-ddoc diff /tmp/d/ref /tmp/d/cur --report note.html
+ddoc examples tour weather                                # the guided tour, in ./ddoc-tour-weather
+ddoc examples generate weather --out /tmp/w               # or one step at a time
+ddoc diff /tmp/w/ref.csv /tmp/w/cur.csv                   # DRIFT, exit code 1
+ddoc diff /tmp/w/ref.csv /tmp/w/cur.csv --report note.html
 ddoc serve                                                # REST API + GUI on http://127.0.0.1:8765
 ```
+
+A **guided tour** runs a whole pipeline on real data — get the data, look before judging, profile,
+judge with a report, share only on DRIFT — showing for each step why, the command, and its own
+output. It is one recipe file: `ddoc examples tour weather --save check.yaml` gives you the same
+pipeline to run on your own data ([tours](packages/ddoc/docs/tutorial/tours.md)). Domain plugins
+(images, text, audio, ...) install from their folders: `pip install -e packages/plugins/ddoc-plugin-<name>`.
 
 **[Usage examples](packages/ddoc/docs/guides/usage.en.md)** ([한국어](packages/ddoc/docs/guides/usage.md))
 walk through every common situation with real output: comparing two CSVs and reading the result,

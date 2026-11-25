@@ -1,0 +1,169 @@
+# A guided tour on real data, one recipe from start to finish:
+#
+#   ddoc examples tour weather              # narrated, in ./ddoc-tour-weather
+#
+# The same file is a pipeline for your own two CSVs. Save it, then run it
+# without the example data (`example` empty) on your paths:
+#
+#   ddoc examples tour weather --save check.yaml
+#   ddoc recipe run check.yaml --narrate --var example= --var ref=old.csv --var cur=new.csv
+#
+# Without --narrate the same run keeps each step's JSON envelope (under
+# `workspace`) for scripts and CI.
+name: tour-weather
+description: Real weather-station data through probe, profile, diff and report
+workspace: .ddoc-recipe-out
+
+tour:
+  title:
+    en: A weather station as the rainy season sets in
+    ko: 장마가 시작된 기상관측소
+  about:
+    en: Ten-minute readings from a real home weather station. Look, profile, judge, report and share, then a second story where only a rain total started over.
+    ko: 실제 가정용 기상관측소의 10분 기록. 미리 보기, 살펴보기, 판정, 진단서, 공유까지 이어 가고, 누적 강우값만 초기화된 두 번째 이야기로 마칩니다.
+  needs:
+    en: nothing beyond ddoc itself
+    ko: ddoc 만 있으면 됩니다
+  own: --var example= --var ref=<baseline.csv> --var cur=<current.csv>
+
+vars:
+  example: monsoon        # the story to fetch; empty = use your own ref and cur
+  ref: ref.csv
+  cur: cur.csv
+  lang: ""               # empty: each command follows $DDOC_LANG
+
+steps:
+  - id: get
+    title:
+      en: Get the data
+      ko: 데이터 받기
+    note:
+      en: >-
+        Two windows of a real weather station's ten-minute log: the two weeks before the
+        rainy season (the baseline) and its first two weeks (the current data). With your
+        own data this step is `ddoc fetch` (a file, S3, HTTP) or files you already have.
+      ko: >-
+        실제 기상관측소의 10분 기록에서 장마 전 2주(기준)와 장마가 시작된 2주(현재)를 꺼냅니다.
+        내 데이터라면 이 자리는 `ddoc fetch`(파일·S3·HTTP)나 이미 가진 파일입니다.
+    when: '${vars.example} != ""'
+    run: examples.generate
+    with:
+      modality: weather
+      out: .
+      scenario: ${vars.example}
+
+  - id: look
+    title:
+      en: Look before judging
+      ko: 판정 전에 미리 보기
+    note:
+      en: >-
+        What will diff make of these two files? What kind of data, who judges, which columns
+        are compared and which are set aside, and whether it can judge at all (BLIND). The time
+        column and the rain totals that only ever grow are set aside here.
+      ko: >-
+        diff 가 두 파일을 어떻게 다룰지 미리 봅니다. 어떤 데이터인지, 누가 판정하는지, 어떤 열을
+        비교하고 어떤 열을 빼는지, 판정할 수 있는지(BLIND 여부). 여기서는 시간 열과 늘어나기만 하는
+        누적 강우 열이 빠집니다.
+    run: probe
+    with:
+      ref: ${vars.ref}
+      cur: ${vars.cur}
+      lang: ${vars.lang}
+
+  - id: profile
+    title:
+      en: Profile the current data
+      ko: 현재 데이터 살펴보기
+    note:
+      en: >-
+        One dataset on its own: size, kinds of columns, the period, and quality findings
+        (missing values, constant columns, far outliers, ...). The details are in profile.html.
+      ko: >-
+        데이터 하나만 놓고 봅니다. 크기, 열 종류, 기간, 품질 소견(결측, 상수 열, 먼 극단값 등).
+        자세한 내용은 profile.html 에 있습니다.
+    run: analyze.eda
+    with:
+      data_path: ${vars.cur}
+      report: profile.html
+      lang: ${vars.lang}
+      quiet: true
+
+  - id: judge
+    title:
+      en: Judge, with a diagnostic report
+      ko: 판정하고 진단서 만들기
+    note:
+      en: >-
+        The core step. A one-line verdict (OK, DRIFT or BLIND), the columns that moved most,
+        the reading (what shape of change it is) and what to check first, plus note.html with
+        the evidence. The exit code is the verdict too: 0 OK, 1 DRIFT, 2 BLIND.
+      ko: >-
+        핵심 단계입니다. 한 줄 판정(OK·DRIFT·BLIND), 가장 변한 열, 판독(어떤 모양의 변화인지),
+        먼저 확인할 것을 보여 주고 근거를 담은 note.html 을 씁니다. 종료 코드도 판정입니다:
+        0 OK, 1 DRIFT, 2 BLIND.
+    run: diff
+    with:
+      ref: ${vars.ref}
+      cur: ${vars.cur}
+      report: note.html
+      lang: ${vars.lang}
+
+  - id: share
+    title:
+      en: "Only on DRIFT: a note for a pull request"
+      ko: "DRIFT 일 때만: PR·이슈에 붙일 진단서"
+    note:
+      en: >-
+        A step can follow the verdict (`when`). Only when the data drifted, the same comparison
+        is written as Markdown to paste into a pull request or an issue. In CI this is where
+        a job stops or someone gets told.
+      ko: >-
+        단계는 앞 단계의 판정을 따라갈 수 있습니다(`when`). 데이터가 DRIFT 일 때만 같은 비교를
+        Markdown 진단서로 남겨 PR 이나 이슈에 붙입니다. CI 라면 이 자리에서 작업을 멈추거나 알립니다.
+    when: '${steps.judge.verdict} == "DRIFT"'
+    run: diff
+    with:
+      ref: ${vars.ref}
+      cur: ${vars.cur}
+      report: note.md
+      lang: ${vars.lang}
+
+  - id: get-reset
+    title:
+      en: "A second story: the day a yearly total started over"
+      ko: "두 번째 이야기: 연간 누적값이 초기화된 날"
+    note:
+      en: >-
+        The same station, the second half of May against the first half of June. On 1 June
+        the station reset its yearly rain total from 1,294 mm to 0. The weather did not change.
+      ko: >-
+        같은 관측소의 5월 후반 2주와 6월 전반 2주. 6월 1일에 관측소의 연간 강우 누적값이
+        1,294mm 에서 0 으로 돌아갔습니다. 날씨는 바뀌지 않았습니다.
+    when: '${vars.example} != ""'
+    run: examples.generate
+    with:
+      modality: weather
+      out: reset
+      scenario: yearly-reset
+
+  - id: judge-reset
+    title:
+      en: An OK has its evidence too
+      ko: OK 에도 근거가 있습니다
+    note:
+      en: >-
+        Compared as levels, the reset total alone would make this DRIFT. ddoc sets aside the
+        columns that only grow, says which and why, and reads the weather that is left: OK.
+        reset.html records it.
+      ko: >-
+        누적값을 수준으로 비교하면 이 열 하나로 DRIFT 가 납니다. ddoc 은 늘어나기만 하는 열을
+        비교에서 빼고 어떤 열을 왜 뺐는지 적은 뒤, 남은 날씨 열로 판정합니다: OK.
+        reset.html 에 남습니다.
+    when: '${vars.example} != ""'
+    run: diff
+    with:
+      ref: reset/ref.csv
+      cur: reset/cur.csv
+      report: reset.html
+      lang: ${vars.lang}

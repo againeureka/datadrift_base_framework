@@ -40,7 +40,8 @@ Usage: ./run.sh <command> [args]
                          load?), optional features, Docker and Chrome
   menu                   Pick what to do by situation, fill in values, run it
                          (the same catalog as `ddoc scenarios` and the GUI)
-  demo                   Generate toy data, judge it, and write an HTML report
+  demo [tour] [--pause]  A guided tour on real data, step by step: look, profile,
+                         judge, report, share (in outputs/demo/; default tour: weather)
   serve [ddoc serve args]
                          Start the REST API + browser GUI (http://127.0.0.1:8765)
   test [--all]           Run the CI test set (or the whole suite)
@@ -98,30 +99,12 @@ cmd_setup() {
 
 cmd_demo() {
   require_venv
-  plugin_installed categorical \
-    || die "the demo uses the categorical plugin — run ./run.sh setup (or ./run.sh setup categorical)"
-
+  local tour=weather
+  if [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; then tour="$1"; shift; fi
   local out="$ROOT/outputs/demo"
   rm -rf "$out"
-  mkdir -p "$out"
-  # Plugins write their working files under ./analysis, so run in $out
-  # to keep everything the demo produces in one place.
-  cd "$out"
-
-  say "1/3  Generating a shifted toy dataset pair in $out"
-  ddoc examples generate categorical --out . --scenario shifted > /dev/null
-
-  say "2/3  Judging it: ddoc diff ref cur"
-  local code=0
-  ddoc diff ref cur || code=$?
-
-  say "3/3  Writing the evidence report"
-  ddoc diff ref cur --report note.html > /dev/null || true
-
-  echo
-  echo "verdict exit code : $code  (0 OK, 1 DRIFT, 2 BLIND)"
-  echo "report            : $out/note.html"
-  echo "data              : $out/ref, $out/cur"
+  # Each step runs where the tour works, so everything it writes stays in $out.
+  ddoc examples tour "$tour" --out "$out" "$@"
 }
 
 cmd_serve() {

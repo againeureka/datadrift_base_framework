@@ -71,10 +71,11 @@ def analyze_eda_command(
         )
         raise typer.Exit(code=2)
 
+    from ....i18n import resolve_lang, t
+    lang = resolve_lang(lang)
     emit_progress(0.05, "start", "eda path mode init", enabled=ndjson_progress)
     if not json_out:
-        rprint(f"[cyan]📊 EDA Analysis[/cyan]")
-        rprint(f"   Path: {data_path}\n")
+        rprint(f"[cyan]📊 {t('eda.cli.title', lang)}[/cyan] — {data_path}")
     emit_progress(0.2, "plugin_call", "invoking eda_run hook",
                   enabled=ndjson_progress)
     try:
@@ -102,7 +103,8 @@ def analyze_eda_command(
         builtin = _builtin_profile(Path(data_path), sample_rows=sample_rows, max_rows=max_rows)
         if builtin is not None:
             hook_results = [builtin]
-    merged = _finish_eda(hook_results, json_out=json_out, return_dict=report is not None)
+    merged = _finish_eda(hook_results, json_out=json_out, return_dict=report is not None,
+                         lang=lang, report=report)
     if report is not None:
         if merged is None:  # the error was already printed; keep its exit code
             raise typer.Exit(code=1)
@@ -144,7 +146,40 @@ def _builtin_profile(path: Path, *, sample_rows: int = 0, max_rows: Optional[int
     return profile_csv(detail.get("files") or [str(path)], sample_rows=sample_rows, max_rows=max_rows)
 
 
-def _finish_eda(hook_results, *, json_out: bool, return_dict: bool = False):
+def _summary(res, lang: str, report: Optional[Path]) -> None:
+    """A few lines for the built-in CSV profile: size, column kinds,
+    period and the quality findings. The whole profile is in --json and
+    the report."""
+    from collections import Counter
+
+    from ....i18n import MESSAGES, t
+    from ....profile import finding_text
+
+    prof, cols = res.get("profile") or {}, res.get("columns") or {}
+    kinds = Counter(c.get("type") for c in cols.values())
+    named = ", ".join(f"{t('kind.' + k, lang) if 'kind.' + k in MESSAGES['en'] else k} {n}"
+                      for k, n in kinds.most_common())
+    rows = f"{prof.get('rows', 0):,}"
+    rprint(f"   {t('eda.cli.size', lang, rows=rows, cols=len(cols), kinds=named)}")
+    period = prof.get("period") or {}
+    if period.get("start"):
+        rprint(f"   {t('eda.cli.period', lang, start=period['start'], end=period.get('end', ''))}")
+    found = res.get("findings") or []
+    if not found:
+        rprint(f"   {t('eda.cli.no_findings', lang)}")
+    else:
+        rprint(f"   {t('eda.cli.findings', lang, n=len(found))}")
+        for f in found:
+            text = finding_text(f, lang)
+            shown, rest = text["signals"][:2], len(text["signals"]) - 2
+            more = f" {t('eda.cli.more', lang, n=rest)}" if rest > 0 else ""
+            rprint(f"     · {text['title']}: {' · '.join(shown)}{more}")
+    if report is None:
+        rprint(f"[dim]   {t('eda.cli.hint', lang)}[/dim]")
+
+
+def _finish_eda(hook_results, *, json_out: bool, return_dict: bool = False,
+                lang: str = "en", report: Optional[Path] = None):
     """Shared post-hook handling. Returns the merged dict if ``return_dict``."""
     if not hook_results:
         _emit_error(
@@ -167,5 +202,9 @@ def _finish_eda(hook_results, *, json_out: bool, return_dict: bool = False):
         raise typer.Exit(code=1)
 
     res = _merge_plugin_results(valid, hook_name="eda_run")
-    _emit(res, json_out=json_out)
+    from ....profile import is_profile
+    if not json_out and is_profile(res):
+        _summary(res, lang, report)
+    else:
+        _emit(res, json_out=json_out)
     return res if return_dict else None

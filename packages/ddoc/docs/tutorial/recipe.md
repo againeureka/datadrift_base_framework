@@ -58,20 +58,31 @@ steps:
     with:                   # ddoc CLI 옵션을 1대1 매핑
       <option>: <value>
     out: <optional explicit output path>
+    when: <optional condition>  # 거짓이면 이 step 을 건너뜀
+    title: <optional>       # 읽는 사람을 위한 제목·설명. 문자열 또는 {en: .., ko: ..}
+    note: <optional>        #   --narrate 로 실행할 때 단계마다 보여 줌
 ```
+
+값이 빈 문자열인 `with` 키는 옵션을 아예 넘기지 않습니다. 그래서 `lang: ${vars.lang}` 처럼 두고 변수를 비워 두면
+명령이 자기 기본값(`$DDOC_LANG`)을 따릅니다.
 
 ### 지원 step kind
 
 | `run` | ddoc CLI 매핑 | 주요 `with` 키 |
 |---|---|---|
 | `fetch` | `ddoc fetch` | `dest`, `symlink`, `config` |
-| `examples.generate` | `ddoc examples generate` | `out`, `scenario` |
-| `analyze.eda` | `ddoc analyze eda` | `data_path`, `quiet` 등 |
+| `examples.generate` | `ddoc examples generate` | `modality`, `out`, `scenario` |
+| `probe` | `ddoc probe` | `ref`, `cur`, `lang` |
+| `analyze.eda` | `ddoc analyze eda` | `data_path`, `report`, `lang`, `quiet` 등 |
+| `diff` | `ddoc diff` | `ref`, `cur`, `report`, `lang`, `issuer`, `threshold`, `attr_threshold`, `with_embeddings` 등 |
 | `analyze.drift` | `ddoc analyze drift` | `data_path_ref/cur`, `detector`, `fusion`, `quiet` |
 | `report.render` | `ddoc report render` | `input`, `out`, `format`, `title` |
 | `export.drift_report` | `ddoc export drift-report` | `target`, `config` |
 
 `ddoc recipe kinds` 로 항상 최신 목록 확인 가능.
+
+판정은 실패가 아닙니다. `diff` 는 DRIFT 면 종료 코드 1, BLIND 면 2 를 내고 `probe` 는 diff 가 BLIND 일 때 2 를
+내지만, 레시피는 멈추지 않고 다음 step 으로 갑니다. 판정에 따라 갈라지려면 `when` 을 씁니다.
 
 ### 참조 (substitution) 문법
 
@@ -84,6 +95,15 @@ steps:
 | `${steps.<id>.output}` | 이전 step 의 산출 path (자동 추론) |
 | `${steps.<id>.json}` | 이전 step 의 JSON envelope (객체 그대로) |
 | `${steps.<id>.json.<dotted>}` | envelope 안의 dotted path 값 |
+| `${steps.<id>.returncode}` | 이전 step 의 종료 코드 |
+| `${steps.<id>.verdict}` | `diff` step 의 판정: `OK` · `DRIFT` · `BLIND` |
+
+```yaml
+  - id: share
+    when: '${steps.judge.verdict} == "DRIFT"'   # DRIFT 일 때만
+    run: diff
+    with: {ref: ref.csv, cur: cur.csv, report: note.md}
+```
 
 전체 문자열이 단일 placeholder 면 타입 보존 (envelope dict 가 그대로
 넘어감). 부분 치환은 문자열로 변환.
@@ -96,6 +116,17 @@ step 들은 자동으로 `<workspace>/<step_id>.envelope.json` 에 atomic
 경로를 받을 수 있음 (별도 "save to file" step 불필요).
 
 명시적 `out:` 을 step 에 두면 그 경로가 우선.
+
+## 읽는 사람을 위한 실행 — `--narrate`, `--var`
+
+```bash
+ddoc recipe run check.yaml --narrate --lang ko --var ref=old.csv --var cur=new.csv
+```
+
+`--narrate` 는 단계마다 번호·`title`·`note`·실행할 명령을 보여 준 뒤, 그 명령을 손으로 쳤을 때와 같은 출력을
+그대로 보여 줍니다. JSON envelope 은 남기지 않으므로 후속 step 은 이전 step 의 산출 경로·종료 코드·판정만 쓸 수
+있습니다(`${steps.X.json…}` 은 안 됨). `--var name=value` 는 `vars` 를 덮어씁니다(여러 번). 해설이 달린 레시피의
+예가 [투어](tours.md)입니다.
 
 ## 실행 contract
 

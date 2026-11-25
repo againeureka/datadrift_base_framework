@@ -24,7 +24,7 @@ ddoc 은 **기준 데이터와 현재 데이터를 비교해 `OK` · `DRIFT` · 
 ```bash
 ./run.sh setup        # ./.venv 생성, ddoc + categorical·tabular 플러그인 설치 ("setup all" 은 전부)
 ./run.sh doctor       # 플러그인이 불러지는지, PDF·serve·임베딩을 쓸 수 있는지 점검
-./run.sh demo         # 예제 데이터 → 판정 → outputs/demo/ 에 진단서
+./run.sh demo         # 실제 데이터 투어: 미리 보기 → 살펴보기 → 판정 → 진단서, outputs/demo/ 에
 ```
 
 `./run.sh ddoc <명령>` 은 그 환경의 ddoc 을 실행합니다. venv 를 켰다면 `ddoc` 을 바로 써도 됩니다. 한국어 출력은

@@ -220,6 +220,37 @@ def run(
     )
 
 
+def run_live(
+    args: List[str],
+    *,
+    cwd: Optional[str] = None,
+    timeout: Optional[float] = None,
+    ok_returncodes: tuple = (0,),
+) -> RunResult:
+    """Run a ddoc CLI command as if typed by hand: its output goes
+    straight to this terminal, nothing is captured or parsed."""
+    timeout_eff = timeout if timeout is not None else DEFAULT_TIMEOUT_SEC
+    if timeout_eff <= 0:
+        timeout_eff = None
+    argv = _build_argv(args)
+    t0 = time.monotonic()
+    try:
+        proc = subprocess.run(argv, cwd=cwd, timeout=timeout_eff)
+    except subprocess.TimeoutExpired as e:
+        raise RunError(
+            f"ddoc CLI timed out after {timeout_eff}s", error_type="timeout",
+            elapsed_ms=int((time.monotonic() - t0) * 1000), argv=argv,
+        ) from e
+    elapsed = int((time.monotonic() - t0) * 1000)
+    if proc.returncode not in ok_returncodes:
+        raise RunError(
+            f"ddoc CLI exited {proc.returncode}", error_type="nonzero_exit",
+            returncode=proc.returncode, elapsed_ms=elapsed, argv=argv,
+        )
+    return RunResult(argv=argv, returncode=proc.returncode, stdout="", stderr_tail="",
+                     elapsed_ms=elapsed)
+
+
 ProgressCallback = Callable[[Dict[str, Any]], None]
 
 

@@ -1,0 +1,76 @@
+# 투어로 배우기 — `ddoc examples tour`
+
+명령 하나가 실제 데이터로 파이프라인 전체를 한 단계씩 실행합니다. 단계마다 **왜 하는지**, **실행하는 명령**,
+**그 명령의 실제 출력**을 차례로 보여 주므로, 끝까지 따라가면 ddoc 이 무엇을 하고 어떻게 쓰는지 한 번에 보입니다.
+
+```bash
+ddoc examples tour                     # 투어 목록
+ddoc examples tour weather --lang ko   # ./ddoc-tour-weather 에서 실행
+ddoc examples tour weather --pause     # 단계마다 Enter 를 기다림 (발표·데모용)
+./run.sh demo                          # 저장소에서: 같은 투어를 outputs/demo/ 에
+```
+
+투어는 [레시피](recipe.md) 한 장입니다. 같은 파일에서 경로만 바꾸면 내 데이터의 파이프라인이 됩니다
+([아래](#내-데이터로)).
+
+## 여섯 단계
+
+| 단계 | 명령 | 보는 것 |
+|---|---|---|
+| 받기 | `ddoc fetch` · 예제는 `ddoc examples generate` | 비교할 두 데이터 (기준·현재) |
+| 미리 보기 | `ddoc probe` | 어떤 데이터인지, 누가 판정하는지, 비교할 열과 빼는 열, BLIND 여부 |
+| 살펴보기 | `ddoc analyze eda --report` | 데이터 하나의 크기·열 종류·기간·품질 소견 |
+| 판정 | `ddoc diff --report` | 한 줄 판정, 가장 변한 열, 판독, 먼저 확인할 것, 진단서 |
+| 공유 | `diff --report note.md` · `when` | DRIFT 일 때만 PR·이슈에 붙일 진단서 (CI 라면 멈추거나 알림) |
+| 이어 쓰기 | `ddoc recipe run` · `ddoc serve` | 같은 흐름을 스크립트·CI·GUI 에서 |
+
+## weather — 장마가 시작된 기상관측소
+
+실제 가정용 기상관측소의 10분 기록([weather_station](../../zoo/weather_station/))입니다. ddoc 만 있으면 됩니다.
+7단계, 몇 초 걸립니다.
+
+1. **데이터 받기** — 장마 전 2주(기준)와 장마가 시작된 2주(현재)를 `ref.csv`, `cur.csv` 로 꺼냅니다.
+2. **판정 전에 미리 보기** — `ddoc probe` 가 비교할 열 11개와 빼는 열을 알려 줍니다. 시간 열은 기간 표시에만
+   쓰고, 늘어나기만 하는 누적 강우 열 5개는 비교에서 뺍니다.
+3. **현재 데이터 살펴보기** — `ddoc analyze eda` 가 크기·열 종류·기간과 품질 소견을 몇 줄로 보여 주고 `profile.html` 을 씁니다.
+4. **판정하고 진단서 만들기** — 핵심 단계입니다.
+
+   ```
+   ⚠ DRIFT — 심각도: 높음 · 점수 0.1782 (기준 0.15)
+      가장 변한 속성: dew_point_c 0.909 · humidity 0.276 · pressure_inhg 0.237
+      ⤷ 진단서: note.html
+      ⤷ 판독: 이동·수축형 · 수준 이동형 · 이동·확산형
+      ⤷ 비교 제외 — 시간이 갈수록 늘어나기만 하는 누적 열: rain_event_mm, …
+      ⤷ 'dew_point_c'의 산포가 좁아졌습니다. 값이 잘렸거나 기본값으로 채워졌는지, …
+   ```
+
+5. **DRIFT 일 때만: PR·이슈에 붙일 진단서** — `when: '${steps.judge.verdict} == "DRIFT"'` 인 단계라 앞
+   단계의 판정이 DRIFT 일 때만 `note.md` 를 씁니다.
+6. **두 번째 이야기** — 같은 관측소의 5월 후반과 6월 전반. 6월 1일에 연간 강우 누적값이 0 으로 돌아갔습니다.
+7. **OK 에도 근거가 있습니다** — 누적 열을 빼고 남은 날씨 열로 판정해 OK, 근거는 `reset.html` 에 남습니다.
+
+마지막에 실행한 단계 수와 만든 파일(`profile.html` · `note.html` · `note.md` · `reset.html`)을 보여 줍니다.
+
+## 내 데이터로
+
+```bash
+ddoc examples tour weather --save check.yaml
+ddoc recipe run check.yaml --narrate --var example= --var ref=기준.csv --var cur=현재.csv
+```
+
+`example` 을 비우면 예제 데이터를 받는 단계와 두 번째 이야기가 건너뛰어지고(`when`), 미리 보기 · 살펴보기 ·
+판정 · 공유가 내 파일로 실행됩니다. 파일을 열어 단계를 지우거나 더해도 됩니다(받기 자리에 `fetch` 등).
+
+- `--narrate` 없이 실행하면 단계마다 JSON envelope 을 `.ddoc-recipe-out/` 에 남깁니다. 스크립트와 CI 용입니다
+  (`--json` 이면 결과 전체를 JSON 한 덩어리로).
+- 판정은 실패가 아닙니다. DRIFT·BLIND 여도 레시피는 이어지고, 판정은 `${steps.<id>.verdict}` 로 다음 단계에
+  넘어갑니다. CI 에서 DRIFT 로 작업을 멈추려면 `ddoc diff` 를 직접 쓰거나([CI 게이트](../../../../examples/ci-gate/))
+  `ddoc recipe run --json` 의 결과에서 판정을 읽습니다.
+
+## 투어 파일
+
+투어는 `ddoc/examples/tours/<이름>.yaml` 에 있습니다. 보통 레시피에 두 가지가 더 있습니다.
+
+- 단계의 `title` · `note` — `{en: …, ko: …}`. `--narrate` 로 실행할 때 단계 머리에 나옵니다.
+- 맨 위의 `tour:` — 목록에 나오는 제목·소개·필요한 것, 그리고 내 데이터로 돌릴 때의 `--var` 안내(`own`).
+  레시피 실행기는 이 부분을 읽지 않습니다.

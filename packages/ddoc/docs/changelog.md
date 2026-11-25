@@ -28,6 +28,12 @@
 - ✨ 누적·순번 열(일·월·연 누적 강우, 누적 횟수, 순번)은 날짜 열처럼 비교에서 빼고 이름을 적음 — 시간 열이 있을 때
 - ✨ 실측 예제 데이터: 가정용 기상관측소 기록. Drift Zoo [weather_station](../zoo/weather_station/), 진단 화면 예제 사례 2개,
   `examples generate timeseries`
+- ✨ [투어](tutorial/tours.md) — `ddoc examples tour weather`: 실제 데이터로 받기 → 미리 보기 → 살펴보기 → 판정·진단서 →
+  DRIFT 일 때만 공유까지, 단계마다 이유·명령·그 명령의 출력. 레시피 한 장이라 `--save` 로 내 데이터의 파이프라인이 됨.
+  `./run.sh demo` 가 이 투어로
+- ✨ 레시피에 `diff`·`probe` 단계(판정은 실패가 아님), `${steps.<id>.verdict}`·`returncode`, 단계의 `title`·`note`,
+  `recipe run --narrate`·`--var`. `examples generate weather` (실측 기상 기록, 이야기 이름으로)
+- 🎨 `analyze eda` 의 화면 출력이 결과 JSON 전체 대신 몇 줄 요약 (크기·열 종류·기간·품질 소견). 전체는 `--json`·`--report`
 - ✨ 이동·수축형 판독 — 평균이 옮겨가면서 폭이 좁아진 열 (한계값 쪽으로 몰림, 좁은 집단만 남음). 장마의 이슬점처럼
   가장 크게 변한 열이 어느 유형에도 들지 않던 빈칸을 메움
 - 🐛 기준을 넘은 속성이 8개를 넘으면 진단서가 만들어지지 않던 문제, 진단서 실패를 알리지 않던 문제, timeseries

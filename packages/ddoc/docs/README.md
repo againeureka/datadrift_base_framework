@@ -8,6 +8,7 @@
 
 ## 튜토리얼
 
+- **[투어로 배우기](tutorial/tours.md)** — 명령 하나로 실제 데이터의 파이프라인 전체를 한 단계씩 (`ddoc examples tour`)
 - **[toy 데이터](tutorial/toy-data.md)** — modality 별 예제 데이터와 dataset layout
 - **[detector cookbook](tutorial/detectors.md)** — `--detector` 선택과 severity 임계값
 - **[레시피](tutorial/recipe.md)** — 여러 단계를 YAML 하나로
