@@ -352,3 +352,52 @@ def test_diff_leaves_nothing_in_the_working_directory(tmp_path, monkeypatch):
     monkeypatch.chdir(work)
     runner.invoke(app, ["diff", str(data), str(data), "--json"])
     assert list(work.iterdir()) == []
+
+
+def test_looking_for_a_cache_leaves_no_trace(tmp_path, monkeypatch):
+    """The core cache is made on the first write, and only for real data
+    hashes; comparing plain paths has none."""
+    from ddoc.core.cache_service import CacheService
+
+    monkeypatch.chdir(tmp_path)
+    cache = CacheService()
+    assert cache.load_analysis_cache(snapshot_id="__path__", data_hash="", cache_type="attributes_text") is None
+    assert cache.list_caches() == {"success": True, "caches": [], "count": 0}
+    assert cache.save_analysis_cache("__path__", "", "attributes_text", {"a": 1})["skipped"]
+    assert list(tmp_path.iterdir()) == []
+    assert cache.save_analysis_cache("s1", "abc123", "attributes_text", {"a": 1})["success"]
+    assert cache.load_analysis_cache(data_hash="abc123", cache_type="attributes_text") == {"a": 1}
+
+
+def test_profile_of_a_csv_leaves_nothing_behind(tmp_path, monkeypatch):
+    """Plugins that find nothing of their kind in a CSV may still write an
+    analysis folder; the built-in profile takes over and it goes."""
+    from ddoc.examples import factories
+
+    _, cur = factories.make_pair_weather(tmp_path / "data", scenario="monsoon")
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.chdir(work)
+    res = runner.invoke(app, ["analyze", "eda", "--data-path", str(cur), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert list(work.iterdir()) == []
+
+
+def test_values_from_a_plugin_are_read_like_csv_columns():
+    """A plugin that hands over what it measured per item gets summaries
+    and evidence built exactly as for a CSV column."""
+    from ddoc.cli.commands.diff import attribute_evidence
+
+    ref = [10.0 + (i % 7) for i in range(60)]
+    summaries, dists = attribute_evidence({
+        "sharpness": {"ref": ref, "cur": [3.0 + (i % 3) * 0.5 for i in range(60)]},
+        "level": {"ref": [1, 2, 3] * 20, "cur": [2, 3, 4] * 20},     # few integers: a bar each
+        "empty": {"ref": [], "cur": [1.0]},
+        "same": {"ref": [5.0] * 10, "cur": [5.0] * 10},
+    })
+    assert set(summaries) == {"sharpness", "level", "same"}
+    s = summaries["sharpness"]
+    assert s["kind"] == "numeric" and s["n"] == {"ref": 60, "cur": 60} and s["mean"]["cur"] < s["mean"]["ref"]
+    assert sum(dists["sharpness"]["ref"].values()) == 60
+    assert summaries["level"]["discrete"] and dists["level"]["cur"] == {"1": 0, "2": 20, "3": 20, "4": 20}
+    assert "same" not in dists                                      # nothing to draw

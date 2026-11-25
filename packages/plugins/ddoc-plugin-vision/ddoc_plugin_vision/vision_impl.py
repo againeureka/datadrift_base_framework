@@ -674,9 +674,12 @@ class DDOCVisionPlugin:
         }
         
         attribute_drifts = {}
+        attribute_values = {}  # per image, for ddoc's reading and evidence
         for metric_name, (key, fallback) in metric_extractors.items():
             ref_values = extract_metric(baseline_attr, key, fallback)
             cur_values = extract_metric(current_attr, key, fallback)
+            attribute_values[metric_name] = {"ref": [float(v) for v in ref_values],
+                                             "cur": [float(v) for v in cur_values]}
             
             if ref_values and cur_values:
                 # Use PSI for drift detection (more stable than KL for distributions)
@@ -692,6 +695,7 @@ class DDOCVisionPlugin:
         
         # Store all attribute drifts
         drift_metrics['attribute_drifts'] = attribute_drifts
+        drift_metrics['attribute_values'] = attribute_values
         # Overall attribute drift (average of all metrics)
         drift_metrics['attribute_drift_overall'] = np.mean(list(attribute_drifts.values())) if attribute_drifts else 0.0
         

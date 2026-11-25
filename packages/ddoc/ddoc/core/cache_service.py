@@ -22,12 +22,18 @@ class CacheService:
         self.data_dir = self.cache_dir / "data"
         self.index_db = self.cache_dir / "index.db"
         self.workspace_state_file = self.cache_dir / "workspace_state.json"
-        
-        # Ensure directories exist
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Initialize SQLite index
-        self._init_index()
+        # Nothing is created until something is written: looking for a
+        # cache (as `ddoc diff` does on plain paths) leaves no trace.
+
+    def _ensure(self) -> None:
+        """Make the cache folder and its index, on the first write."""
+        if not self.index_db.exists():
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            self._init_index()
+
+    def _connect(self) -> sqlite3.Connection:
+        self._ensure()
+        return sqlite3.connect(self.index_db)
     
     def _init_index(self):
         """Initialize SQLite index database"""
@@ -79,6 +85,7 @@ class CacheService:
     
     def _update_workspace_state(self, data_hash: str):
         """Update workspace state tracking"""
+        self._ensure()
         with open(self.workspace_state_file, 'w') as f:
             json.dump({
                 "current_data_hash": data_hash,
@@ -157,6 +164,9 @@ class CacheService:
         Returns:
             Result dictionary
         """
+        if not data_hash:
+            # comparing plain paths has no data hash to key a cache by
+            return {"success": False, "skipped": True, "error": "no data hash: nothing cached"}
         try:
             data_dir = self.get_data_hash_dir(data_hash)
             data_dir.mkdir(parents=True, exist_ok=True)
@@ -321,7 +331,7 @@ class CacheService:
 
     def _save_snapshot_mapping(self, snapshot_id: str, data_hash: str):
         """Save snapshot to data hash mapping (SQLite only)"""
-        conn = sqlite3.connect(self.index_db)
+        conn = self._connect()
         cursor = conn.cursor()
         cursor.execute("""
             INSERT OR REPLACE INTO snapshot_mapping 
@@ -333,7 +343,9 @@ class CacheService:
     
     def _get_data_hash_by_snapshot(self, snapshot_id: str) -> Optional[str]:
         """Get data hash for a snapshot ID (from SQLite)"""
-        conn = sqlite3.connect(self.index_db)
+        if not self.index_db.exists():
+            return None
+        conn = self._connect()
         cursor = conn.cursor()
         cursor.execute("SELECT data_hash FROM snapshot_mapping WHERE snapshot_id = ?", (snapshot_id,))
         result = cursor.fetchone()
@@ -375,7 +387,7 @@ class CacheService:
                     copied_files.append(cache_file.name)
             
             # Update index
-            conn = sqlite3.connect(self.index_db)
+            conn = self._connect()
             cursor = conn.cursor()
             
             # Get cache types from source (support namespaced types)
@@ -434,7 +446,9 @@ class CacheService:
     
     def find_snapshots_by_data_hash(self, data_hash: str) -> List[str]:
         """Find all snapshots with the same data hash"""
-        conn = sqlite3.connect(self.index_db)
+        if not self.index_db.exists():
+            return []
+        conn = self._connect()
         cursor = conn.cursor()
         cursor.execute("SELECT snapshot_id FROM snapshot_mapping WHERE data_hash = ?", (data_hash,))
         results = cursor.fetchall()
@@ -444,7 +458,7 @@ class CacheService:
     
     def _update_index(self, data_hash: str, cache_type: str):
         """Update SQLite index"""
-        conn = sqlite3.connect(self.index_db)
+        conn = self._connect()
         cursor = conn.cursor()
         
         # Check existing cache types
@@ -490,6 +504,8 @@ class CacheService:
         file_metadata: Dict[str, FileMetadata]
     ) -> Dict[str, Any]:
         """Save file-level metadata for incremental analysis"""
+        if not data_hash:
+            return {"success": False, "skipped": True, "error": "no data hash: nothing cached"}
         try:
             data_dir = self.get_data_hash_dir(data_hash)
             data_dir.mkdir(parents=True, exist_ok=True)
@@ -604,10 +620,10 @@ class CacheService:
         if snapshot_id and not data_hash:
             data_hash = self._get_data_hash_by_snapshot(snapshot_id)
         
-        if not data_hash:
+        if not data_hash or not self.index_db.exists():
             return {"error": "No cache found"}
         
-        conn = sqlite3.connect(self.index_db)
+        conn = self._connect()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM data_cache WHERE data_hash = ?", (data_hash,))
         result = cursor.fetchone()
@@ -753,9 +769,11 @@ class CacheService:
         """List all caches"""
         try:
             caches = []
-            
+            if not self.index_db.exists():
+                return {"success": True, "caches": [], "count": 0}
+
             # Get from SQLite index
-            conn = sqlite3.connect(self.index_db)
+            conn = self._connect()
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM data_cache")
             results = cursor.fetchall()

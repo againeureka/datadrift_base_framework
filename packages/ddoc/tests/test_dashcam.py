@@ -118,6 +118,10 @@ def test_a_planted_blur_stands_far_above_the_noise(tmp_path, monkeypatch):
     assert same["verdict"] == "OK" and blur["verdict"] == "DRIFT"
     assert blur["overall_score"] > 5 * same["overall_score"]
     assert {a for a, _ in blur["top_attributes"][:3]} & {"sharpness", "gaussian_noise_level", "dynamic_range"}
+    # the plugin hands over its values per image, so attributes get a reading too
+    narrow = [c for c in blur["diagnosis"]["archetypes"] if c["code"] == "shift_and_narrow" and c["match"] == "match"]
+    assert narrow and "sharpness" in narrow[0]["attrs"]
+    assert "attribute_values" not in blur.get("raw", {})
 
 
 def test_zoo_make_writes_a_story_and_starts_clean(tmp_path):
@@ -139,3 +143,15 @@ def test_image_cases_get_the_verdict_they_promise(case, tmp_path, monkeypatch):
     assert _diff(ref, cur, *extra)["verdict"] == case.verdict
     for lang in ("en", "ko"):
         assert all(case.text[lang][k] for k in ("title", "story", "look"))
+
+
+@vision
+def test_comparing_images_leaves_the_folders_and_the_working_directory_clean(tmp_path, monkeypatch):
+    ref, cur = factories.make_pair_dashcam(tmp_path / "d", scenario="blurry-lens")
+    before = {p: sorted(x.name for x in p.iterdir()) for p in (ref, cur)}
+    work = tmp_path / "work"
+    work.mkdir()
+    monkeypatch.chdir(work)
+    _diff(ref, cur)
+    assert {p: sorted(x.name for x in p.iterdir()) for p in (ref, cur)} == before
+    assert list(work.iterdir()) == []

@@ -11,6 +11,7 @@ When no plugin handles the path and it is CSV, the built-in profiler
 (:mod:`ddoc.profile`) describes it instead — the same fallback ``ddoc
 diff`` has for comparing CSVs.
 """
+import shutil
 import sys
 
 import typer
@@ -78,6 +79,8 @@ def analyze_eda_command(
         rprint(f"[cyan]📊 {t('eda.cli.title', lang)}[/cyan] — {data_path}")
     emit_progress(0.2, "plugin_call", "invoking eda_run hook",
                   enabled=ndjson_progress)
+    out_dir = Path("analysis") / f"path_{Path(data_path).name}"
+    made = [d for d in (out_dir.parent, out_dir) if not d.exists()]  # to tidy if no plugin's result is used
     try:
         with _SilencePluginIO(json_out=json_out, quiet=quiet):
             hook_results, hook_errors = call_hook_isolated(
@@ -85,7 +88,7 @@ def analyze_eda_command(
                 snapshot_id="__path__",
                 data_path=data_path,
                 data_hash="",
-                output_path=f"analysis/path_{Path(data_path).name}",
+                output_path=str(out_dir),
                 invalidate_cache=invalidate_cache,
             )
     except Exception as e:
@@ -104,6 +107,9 @@ def analyze_eda_command(
     hook_results = [r for r in hook_results or []
                     if r is not None and not (isinstance(r, dict) and r.get("files_analyzed") == 0)]
     if not hook_results:
+        # what the plugins wrote while finding nothing is not a result
+        for d in reversed(made):
+            shutil.rmtree(d, ignore_errors=True)
         builtin = _builtin_profile(Path(data_path), sample_rows=sample_rows, max_rows=max_rows)
         if builtin is not None:
             hook_results = [builtin]

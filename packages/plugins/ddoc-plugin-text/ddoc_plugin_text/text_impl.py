@@ -838,9 +838,12 @@ class DOCTextPlugin:
                           'special_char_ratio', 'stopword_ratio', 'vocab_diversity', 'readability']
         
         attribute_drifts = {}
+        attribute_values = {}  # per text, for ddoc's reading and evidence
         for attr_name in attribute_names:
             ref_values = [a.get(attr_name, 0) for a in baseline_attr.values()]
             cur_values = [a.get(attr_name, 0) for a in current_attr.values()]
+            attribute_values[attr_name] = {"ref": [float(v) for v in ref_values],
+                                           "cur": [float(v) for v in cur_values]}
             
             if ref_values and cur_values:
                 try:
@@ -860,6 +863,7 @@ class DOCTextPlugin:
                     attribute_drifts[attr_name] = 0.0
         
         drift_metrics['attribute_drifts'] = attribute_drifts
+        drift_metrics['attribute_values'] = attribute_values
         drift_metrics['attribute_drift_overall'] = np.mean(list(attribute_drifts.values())) if attribute_drifts else 0.0
         
         # Embedding drift — 3-metric ensemble

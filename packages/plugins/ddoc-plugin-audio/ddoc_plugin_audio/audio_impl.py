@@ -253,10 +253,13 @@ class DOCAudioPlugin:
         # Calculate drift for each metric
         metric_names = ['rms_energy_mean', 'zcr_mean', 'spectral_centroid_mean']
         drift_scores = []
-        
+        attribute_values = {}  # per file, for ddoc's reading and evidence
+
         for metric in metric_names:
             ref_values = [a.get(metric, 0) for a in baseline_attr.values() if metric in a]
             cur_values = [a.get(metric, 0) for a in current_attr.values() if metric in a]
+            attribute_values[metric] = {"ref": [float(v) for v in ref_values],
+                                        "cur": [float(v) for v in cur_values]}
             
             if ref_values and cur_values:
                 from scipy.stats import wasserstein_distance
@@ -264,6 +267,7 @@ class DOCAudioPlugin:
                 drift_scores.append(drift)
         
         drift_metrics['overall_score'] = float(np.mean(drift_scores)) if drift_scores else 0.0
+        drift_metrics['attribute_values'] = attribute_values
 
         metrics_file = output_path / 'metrics.json'
         with open(metrics_file, 'w') as f:

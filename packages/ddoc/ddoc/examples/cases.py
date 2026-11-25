@@ -180,10 +180,10 @@ CASES: List[Case] = [
     Case("blurry-lens", "◌", "DRIFT", {
         "en": {"title": "A smudged lens, planted on real frames",
                "story": "The same stretch of the drive, frames three seconds apart; the current ones blurred as by a smudged or fogged lens.",
-               "look": "Sharpness, noise and dynamic range move far more than anything else, while the scenery stayed the same."},
+               "look": "Sharpness, noise and dynamic range move far more than anything else, while the scenery stayed the same. Sharpness reads as a shift with narrower spread: the blurred frames bunch up at low sharpness."},
         "ko": {"title": "실제 프레임에 심은 렌즈 흐림",
                "story": "주행의 같은 구간에서 3초씩 어긋난 프레임. 현재 쪽은 렌즈에 얼룩이나 김이 서린 것처럼 흐리게 했습니다.",
-               "look": "선명도·잡음·명암 범위가 다른 무엇보다 크게 움직입니다. 풍경은 그대로입니다."}},
+               "look": "선명도·잡음·명암 범위가 다른 무엇보다 크게 움직입니다. 풍경은 그대로입니다. 선명도는 이동·수축형으로 읽힙니다. 흐린 프레임들이 낮은 선명도 근처로 몰렸기 때문입니다."}},
          folders=_dashcam("blurry-lens"), needs="vision"),
 ]
 BY_ID = {c.id: c for c in CASES}

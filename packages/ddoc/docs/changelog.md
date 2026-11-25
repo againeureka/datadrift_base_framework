@@ -35,6 +35,10 @@
   [dashcam](../zoo/dashcam/), 투어 `ddoc examples tour dashcam`, 진단 화면 예제 사례 3개, `examples generate dashcam`
 - 🐛 vision 플러그인이 있으면 `analyze eda` 가 CSV 대신 빈 이미지 분석 결과를 내던 문제, 레시피의 플러그인 설치
   안내가 PyPI 이름이던 문제
+- 🐛 플러그인으로 비교하면 실행한 폴더에 `.ddoc/`·`analysis/`, 이미지 폴더 안에 `cache/` 가 남던 문제 — 캐시는
+  실제로 저장할 때만 만들고, 데이터 해시가 없는 경로 비교에서는 저장하지 않음
+- ✨ 이미지·텍스트·오디오도 속성 판독과 분포 그래프 — 플러그인이 항목마다 잰 값을 넘기면 CSV 의 수치 열과 같은
+  방식으로 읽음 (점수는 플러그인 것 그대로)
 - ✨ 레시피에 `diff`·`probe` 단계(판정은 실패가 아님), `${steps.<id>.verdict}`·`returncode`, 단계의 `title`·`note`,
   `recipe run --narrate`·`--var`. `examples generate weather` (실측 기상 기록, 이야기 이름으로)
 - 🎨 `analyze eda` 의 화면 출력이 결과 JSON 전체 대신 몇 줄 요약 (크기·열 종류·기간·품질 소견). 전체는 `--json`·`--report`

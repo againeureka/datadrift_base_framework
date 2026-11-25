@@ -30,9 +30,9 @@ class CacheManager:
         if not dataset_directory:
             raise ValueError("dataset_directory는 필수입니다. 전역 캐시는 지원하지 않습니다.")
         
-        # 데이터셋별 캐시 디렉토리
+        # 데이터셋별 캐시 디렉토리. 저장할 때만 만든다: 캐시를 찾기만 하는
+        # 비교(ddoc diff)는 사용자의 데이터 폴더에 흔적을 남기지 않는다.
         self.cache_dir = Path(dataset_directory) / 'cache'
-        self.cache_dir.mkdir(exist_ok=True, parents=True)
         
         # 캐시 설정
         self.cache_expiry_days = int(os.getenv('DATADRIFT_CACHE_EXPIRY_DAYS', '30'))
@@ -167,6 +167,7 @@ class CacheManager:
         
         try:
             print(f"💾 캐시 저장 중: {cache_key}")
+            self.cache_dir.mkdir(exist_ok=True, parents=True)
             
             # 컨텐츠를 pickle로 저장
             with open(cache_path, 'wb') as f:

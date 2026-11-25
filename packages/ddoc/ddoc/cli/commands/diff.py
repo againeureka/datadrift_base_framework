@@ -398,6 +398,66 @@ def _profile(frame, files: List[str], time_cols: Dict[str, Any], sample_rows: in
     return out
 
 
+def _numeric_column(r, c, base: Dict[str, Any], bins: int = 20
+                    ) -> Tuple[float, Dict[str, Any], Optional[Dict[str, Dict[str, int]]]]:
+    """One numeric attribute (two series without gaps): its JS divergence on a
+    shared-range histogram, its summary for the diagnosis, and the ref/cur
+    counts shown as evidence (None when every value is the same)."""
+    import numpy as np
+
+    lo, hi = float(min(r.min(), c.min())), float(max(r.max(), c.max()))
+    summary = {"kind": "numeric", **base, **_numeric_summary(r, c)}
+    if hi == lo:
+        return 0.0, summary, None
+    whole = bool((r % 1 == 0).all() and (c % 1 == 0).all())
+    if whole and hi - lo + 1 <= bins:
+        # Few distinct integers (counts, ratings, levels): one bar per
+        # value. Each integer would already sit in its own bin, so the
+        # score is the same as the histogram's; only the labels differ.
+        values = range(int(lo), int(hi) + 1)
+        rvc, cvc = r.value_counts(), c.value_counts()
+        rh = [int(rvc.get(v, 0)) for v in values]
+        ch = [int(cvc.get(v, 0)) for v in values]
+        summary["discrete"] = True
+        return _js_divergence(dict(enumerate(rh)), dict(enumerate(ch))), summary, {
+            "ref": {str(v): n for v, n, m in zip(values, rh, ch) if n or m},
+            "cur": {str(v): m for v, n, m in zip(values, rh, ch) if n or m},
+        }
+    edges = np.linspace(lo, hi, bins + 1)
+    rh, _ = np.histogram(r, bins=edges)
+    ch, _ = np.histogram(c, bins=edges)
+    labels = [f"{edges[i]:.4g}–{edges[i + 1]:.4g}" for i in range(len(edges) - 1)]
+    return _js_divergence(dict(enumerate(rh.tolist())), dict(enumerate(ch.tolist()))), summary, {
+        "ref": {labels[i]: int(rh[i]) for i in range(len(labels)) if rh[i] or ch[i]},
+        "cur": {labels[i]: int(ch[i]) for i in range(len(labels)) if rh[i] or ch[i]},
+    }
+
+
+def attribute_evidence(values: Dict[str, Dict[str, List[float]]], bins: int = 20
+                       ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Summaries and ref/cur distributions from a plugin's measured values
+    per item (``{attribute: {"ref": [...], "cur": [...]}}``, e.g. the
+    brightness of every image). They are read exactly as CSV columns are,
+    so the pattern reading and the report's graphs work for any plugin
+    that hands its values over; the plugin's own scores stay the verdict's."""
+    import pandas as pd
+
+    summaries: Dict[str, Any] = {}
+    distributions: Dict[str, Any] = {}
+    for name, sides in values.items():
+        if not isinstance(sides, dict):
+            continue
+        r = pd.to_numeric(pd.Series(sides.get("ref") or [], dtype=object), errors="coerce").dropna()
+        c = pd.to_numeric(pd.Series(sides.get("cur") or [], dtype=object), errors="coerce").dropna()
+        if r.empty or c.empty:
+            continue
+        _, summaries[name], dist = _numeric_column(
+            r.astype(float), c.astype(float), {"n": {"ref": int(len(r)), "cur": int(len(c))}}, bins)
+        if dist is not None:
+            distributions[name] = dist
+    return summaries, distributions
+
+
 def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
              sample_rows: int = 0, max_rows: int = MAX_ROWS) -> Dict[str, Any]:
     """Column-wise drift between two CSV datasets.
@@ -444,9 +504,6 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
         },
     }
 
-    def _fmt_edge(x: float) -> str:
-        return f"{x:.4g}"
-
     attribute_drifts: Dict[str, float] = {}
     distributions: Dict[str, Dict[str, Dict[str, float]]] = {}
     summaries: Dict[str, Dict[str, Any]] = {}
@@ -460,40 +517,9 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
         if r.empty and c.empty:
             continue
         if pd.api.types.is_numeric_dtype(r) and pd.api.types.is_numeric_dtype(c):
-            lo = float(min(r.min(), c.min()))
-            hi = float(max(r.max(), c.max()))
-            summaries[col] = {"kind": "numeric", **base, **_numeric_summary(r, c)}
-            if hi == lo:
-                attribute_drifts[col] = 0.0
-                continue
-            whole = bool((r % 1 == 0).all() and (c % 1 == 0).all())
-            if whole and hi - lo + 1 <= bins:
-                # Few distinct integers (counts, ratings, levels): one bar per
-                # value. Each integer would already sit in its own bin, so the
-                # score is the same as the histogram's; only the labels differ.
-                values = range(int(lo), int(hi) + 1)
-                rvc, cvc = r.value_counts(), c.value_counts()
-                rh = [int(rvc.get(v, 0)) for v in values]
-                ch = [int(cvc.get(v, 0)) for v in values]
-                attribute_drifts[col] = _js_divergence(dict(enumerate(rh)), dict(enumerate(ch)))
-                summaries[col]["discrete"] = True
-                distributions[col] = {
-                    "ref": {str(v): n for v, n, m in zip(values, rh, ch) if n or m},
-                    "cur": {str(v): m for v, n, m in zip(values, rh, ch) if n or m},
-                }
-                continue
-            edges = np.linspace(lo, hi, bins + 1)
-            rh, _ = np.histogram(r, bins=edges)
-            ch, _ = np.histogram(c, bins=edges)
-            attribute_drifts[col] = _js_divergence(
-                dict(enumerate(rh.tolist())), dict(enumerate(ch.tolist()))
-            )
-            labels = [f"{_fmt_edge(edges[i])}–{_fmt_edge(edges[i+1])}"
-                      for i in range(len(edges) - 1)]
-            distributions[col] = {
-                "ref": {labels[i]: int(rh[i]) for i in range(len(labels)) if rh[i] or ch[i]},
-                "cur": {labels[i]: int(ch[i]) for i in range(len(labels)) if rh[i] or ch[i]},
-            }
+            attribute_drifts[col], summaries[col], dist = _numeric_column(r, c, base, bins)
+            if dist is not None:
+                distributions[col] = dist
         else:
             rvc = r.astype(str).value_counts()
             cvc = c.astype(str).value_counts()
@@ -801,6 +827,14 @@ def diff_command(
             ref=ref_s, cur=cur_s, json_out=json_out, lang=lang, modality=kind,
             hints=hints, report=report, issuer=issuer,
         )
+
+    # A plugin that hands over its measured values per item gets the same
+    # summaries and evidence as CSV columns (the scores stay its own).
+    if engine == "plugin" and isinstance(result.get("attribute_values"), dict):
+        found, dists = attribute_evidence(result.pop("attribute_values"))
+        result["summaries"] = {**found, **(result.get("summaries") or {})}
+        if dists and not isinstance(result.get("distributions"), dict):
+            result["distributions"] = dists
 
     verdict, severity, top = compute_verdict(
         result, threshold=threshold, attr_threshold=attr_threshold,
