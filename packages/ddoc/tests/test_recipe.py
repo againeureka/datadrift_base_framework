@@ -220,8 +220,8 @@ def test_recipe_e2e_timeseries(tmp_path):
     steps = {s["id"]: s for s in result["steps"]}
 
     # gen_pair created ref/ and cur/.
-    assert (tmp_path / "data" / "ref" / "toy_ts").exists()
-    assert (tmp_path / "data" / "cur" / "toy_ts").exists()
+    assert (tmp_path / "data" / "ref" / "weather").exists()
+    assert (tmp_path / "data" / "cur" / "weather").exists()
 
     # drift produced an envelope and we auto-persisted it.
     drift_step = steps["drift"]

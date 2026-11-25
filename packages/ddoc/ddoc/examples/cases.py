@@ -4,7 +4,9 @@ Each case writes a baseline and a current CSV and says what happened and
 what the verdict should be, so a first-time user can press one button and
 see a real problem being diagnosed. They ship inside the package (the
 Drift Zoo's make.py scripts live in the repository only) and carry a date
-column, so the report also shows the periods compared.
+column, so the report also shows the periods compared. The first two are
+real: windows of a home weather station's log (:mod:`ddoc.examples.weather`);
+the rest are generated stories, each with one planted change.
 
     from ddoc.examples import cases
     ref, cur = cases.build("price-regime", out_dir)
@@ -14,9 +16,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 
 import numpy as np
+
+from . import weather
 
 Rows = List[str]
 
@@ -29,10 +33,16 @@ class Case:
     text: Dict[str, Dict[str, str]]  # lang → title, story, look (what to look at in the result)
     header: str
     make: Callable[[np.random.Generator], Tuple[Rows, Rows]]
+    real: bool = False             # measured data rather than a generated story
 
 
 def _days(start: date, n: int) -> List[str]:
     return [(start + timedelta(days=i)).isoformat() for i in range(n)]
+
+
+def _weather(story: str) -> Callable[[np.random.Generator], Tuple[Rows, Rows]]:
+    (r0, r1), (c0, c1) = weather.STORIES[story]
+    return lambda rng: (weather.window(r0, r1), weather.window(c0, c1))
 
 
 def _price_regime(rng) -> Tuple[Rows, Rows]:
@@ -92,6 +102,22 @@ def _weekday_rhythm(rng) -> Tuple[Rows, Rows]:
 
 
 CASES: List[Case] = [
+    Case("monsoon", "☂", "DRIFT", {
+        "en": {"title": "A weather station as the rainy season sets in",
+               "story": "Ten-minute readings from a real home weather station, the last two weeks of June against the first two of July. From about 5 July, humid and rainy days set in.",
+               "look": "Dew point and humidity step up: not a fault but a new season. The verdict is DRIFT and the job is a new baseline. The rain totals only grow, so they are set aside."},
+        "ko": {"title": "장마가 시작된 기상관측소",
+               "story": "실제 가정용 기상관측소의 10분 기록, 6월 말 2주와 7월 초 2주. 7월 5일 무렵부터 습하고 비 오는 날이 이어졌습니다.",
+               "look": "이슬점과 습도가 한 단계 올라섰습니다. 고장이 아니라 계절이 바뀐 것이라 판정은 DRIFT, 할 일은 기준 데이터 갱신입니다. 늘어나기만 하는 누적 강우 열은 비교에서 빠집니다."}},
+         ",".join(weather.header()), _weather("monsoon"), real=True),
+    Case("yearly-reset", "↺", "OK", {
+        "en": {"title": "The day a yearly rain total started over",
+               "story": "The same station, the second half of May against the first half of June. On 1 June the station reset its yearly rain total from 1,294 mm to 0.",
+               "look": "Compared as levels, that one column would make it DRIFT. ddoc finds the totals that only grow, sets them aside and says why; the weather itself reads OK."},
+        "ko": {"title": "연간 강우 누적값이 초기화된 날",
+               "story": "같은 관측소, 5월 후반 2주와 6월 전반 2주. 6월 1일에 관측소의 연간 강우 누적값이 1,294mm에서 0으로 초기화되었습니다.",
+               "look": "누적값을 수준으로 비교하면 이 열 하나로 DRIFT가 됩니다. ddoc은 늘어나기만 하는 누적 열을 찾아 비교에서 빼고 이유를 적습니다. 날씨 자체는 OK입니다."}},
+         ",".join(weather.header()), _weather("yearly-reset"), real=True),
     Case("price-regime", "↗", "DRIFT", {
         "en": {"title": "A shop whose prices and channels moved",
                "story": "Daily sales, March against July. Unit prices stepped up and sales moved from the store to online and the app.",
@@ -139,6 +165,6 @@ def build(case_id: str, out_dir: Path, *, seed: int = 5) -> Tuple[Path, Path]:
     return ref, cur
 
 
-def to_dict(case: Case, lang: str) -> Dict[str, str]:
+def to_dict(case: Case, lang: str) -> Dict[str, Any]:
     text = case.text.get(lang) or case.text["en"]
-    return {"id": case.id, "icon": case.icon, "verdict": case.verdict, **text}
+    return {"id": case.id, "icon": case.icon, "verdict": case.verdict, "real": case.real, **text}

@@ -188,13 +188,14 @@ def test_when_conditional_skips_when_false(client: TestClient, tmp_path: Path):
     data_root = tmp_path / "data"
     workspace = tmp_path / "wsp"
     # Recipe runs drift then conditionally renders a report only if
-    # overall_score > 100 (which our toy never reaches → step skipped).
+    # overall_score > 100 (the categorical example scores about 0.11, a
+    # 0–1 score, so the step is skipped).
     yaml_text = textwrap.dedent(f"""
         workspace: {workspace}
         steps:
           - id: gen
             run: examples.generate
-            with: {{ modality: timeseries, out: {data_root}, scenario: shifted }}
+            with: {{ modality: categorical, out: {data_root}, scenario: shifted }}
           - id: drift
             run: analyze.drift
             with:

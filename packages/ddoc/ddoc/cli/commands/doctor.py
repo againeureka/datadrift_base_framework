@@ -152,17 +152,20 @@ def _describe(path: Path) -> Dict[str, Any]:
 
 
 def _csv_pair(ref_files: List[str], cur_files: List[str]) -> Dict[str, Any]:
-    from .diff import _as_datetime, _load_csv_sampled
+    from .diff import _as_datetime, _load_csv_sampled, _running_columns
 
     # a sample is enough to find the columns and their kinds; the row counts are the totals
     (ref, ref_total), (cur, cur_total) = _load_csv_sampled(ref_files, 20_000), _load_csv_sampled(cur_files, 20_000)
-    time_ref = {c for c in ref.columns if _as_datetime(ref[c]) is not None}
-    time_cur = {c for c in cur.columns if _as_datetime(cur[c]) is not None}
+    time_ref = {c: p for c in ref.columns if (p := _as_datetime(ref[c])) is not None}
+    time_cur = {c: p for c in cur.columns if (p := _as_datetime(cur[c])) is not None}
     time = [str(c) for c in ref.columns if c in time_ref and c in time_cur]
+    shared = [c for c in ref.columns if c in cur.columns and str(c) not in time]
+    running = [str(c) for c in _running_columns(ref, cur, shared, time_ref, time_cur)]
     return {
         "rows": {"ref": ref_total, "cur": cur_total},
-        "compared": [str(c) for c in ref.columns if c in cur.columns and str(c) not in time],
+        "compared": [str(c) for c in shared if str(c) not in running],
         "time": time,
+        "running": running,
         "only_ref": [str(c) for c in ref.columns if c not in cur.columns],
         "only_cur": [str(c) for c in cur.columns if c not in ref.columns],
     }
@@ -237,7 +240,7 @@ def probe_command(
         if pair:
             rprint("  " + t("probe.csv_pair", lang, ref=f"{pair['rows']['ref']:,}", cur=f"{pair['rows']['cur']:,}",
                             compared=len(pair["compared"])))
-            for key in ("only_ref", "only_cur", "time"):
+            for key in ("only_ref", "only_cur", "time", "running"):
                 if pair[key]:
                     rprint("    · " + t(f"subject.{key}", lang, columns=", ".join(pair[key])))
         if result["blind"]:

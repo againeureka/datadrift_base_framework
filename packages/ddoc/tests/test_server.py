@@ -133,8 +133,8 @@ def test_examples_generate_e2e(client: TestClient, tmp_path: Path):
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["status"] == "ok"
-    assert (out / "ref" / "toy_ts" / "data.csv").exists()
-    assert (out / "cur" / "toy_ts" / "data.csv").exists()
+    assert (out / "ref" / "weather" / "data.csv").exists()
+    assert (out / "cur" / "weather" / "data.csv").exists()
 
 
 # ── Analyze drift (path mode) ───────────────────────────────────────

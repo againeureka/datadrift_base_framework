@@ -43,37 +43,30 @@ def _write_yaml(path: Path, fields: Dict[str, Any]) -> None:
 def make_toy_timeseries(
     out_dir: str | Path,
     *,
-    n: int = 200,
-    mean: float = 0.0,
-    std: float = 1.0,
-    seed: int = 42,
-    dataset_name: str = "toy_ts",
+    start: str = "2026-06-21",
+    end: str = "2026-07-05",
+    dataset_name: str = "weather",
 ) -> Path:
-    """Write a tiny timeseries dataset (CSV + ddoc.yaml) under
-    ``<out_dir>/<dataset_name>/``.
+    """Write a timeseries dataset (CSV + ddoc.yaml) under
+    ``<out_dir>/<dataset_name>/``: the days ``[start, end)`` of a real home
+    weather station's log (:mod:`ddoc.examples.weather`), ten-minute steps.
 
-    Schema: ``timestamp,x,y`` where ``x ~ N(mean, std)`` and
-    ``y ~ N(0, 1)``. Returns the dataset directory.
+    Schema: ``time`` plus the station's measurements (temperature,
+    humidity, dew point, wind, pressure, light, UV, rain in the last
+    hour). Its running rain totals are left out: they only grow, so they
+    would differ between any two periods. Returns the dataset directory.
     """
-    rng = random.Random(seed)
-    base = Path(out_dir)
-    dataset_dir = base / dataset_name
-    dataset_dir.mkdir(parents=True, exist_ok=True)
+    from . import weather
 
-    csv_path = dataset_dir / "data.csv"
-    with open(csv_path, "w", newline="") as fh:
-        w = csv.writer(fh)
-        w.writerow(["timestamp", "x", "y"])
-        for i in range(n):
-            w.writerow([i, rng.gauss(mean, std), rng.gauss(0.0, 1.0)])
-
+    dataset_dir = Path(out_dir) / dataset_name
+    weather.write_window(dataset_dir / "data.csv", start, end, weather.MEASUREMENTS)
     _write_yaml(
         dataset_dir / "ddoc.yaml",
         {
             "modality": "timeseries",
             "csv_file": "data.csv",
-            "timestamp_column": "timestamp",
-            "numeric_columns": ["x", "y"],
+            "timestamp_column": "time",
+            "numeric_columns": list(weather.MEASUREMENTS),
         },
     )
     return dataset_dir
@@ -290,19 +283,24 @@ _CUR_DIR = "cur"
 
 
 def make_pair_timeseries(out_dir: str | Path, *, scenario: str = "shifted") -> Tuple[Path, Path]:
-    """Return ``(ref_dir, cur_dir)`` for a timeseries drift scenario.
+    """Return ``(ref_dir, cur_dir)`` for a timeseries drift scenario, cut
+    from a real weather station's log.
 
-    ``scenario="shifted"``: ref ~ N(0, 1), cur ~ N(1.5, 1) — clear drift.
-    ``scenario="identical"``: ref and cur both ~ N(0, 1) with same seed
-    — drift score should be near-zero (sanity check).
+    ``scenario="shifted"``: the two weeks before the rainy season against
+    the two weeks after it set in — dew point and humidity step up.
+    ``scenario="identical"``: the same two weeks on both sides — drift
+    score should be near-zero (sanity check).
     """
+    from .weather import STORIES
+
     base = Path(out_dir)
+    (r0, r1), (c0, c1) = STORIES["monsoon"]
     if scenario == "shifted":
-        ref = make_toy_timeseries(base / _REF_DIR, mean=0.0, seed=42)
-        cur = make_toy_timeseries(base / _CUR_DIR, mean=1.5, seed=43)
+        make_toy_timeseries(base / _REF_DIR, start=r0, end=r1)
+        make_toy_timeseries(base / _CUR_DIR, start=c0, end=c1)
     elif scenario == "identical":
-        ref = make_toy_timeseries(base / _REF_DIR, mean=0.0, seed=42)
-        cur = make_toy_timeseries(base / _CUR_DIR, mean=0.0, seed=42)
+        make_toy_timeseries(base / _REF_DIR, start=r0, end=r1)
+        make_toy_timeseries(base / _CUR_DIR, start=r0, end=r1)
     else:
         raise ValueError(f"unsupported scenario: {scenario!r}")
     return base / _REF_DIR, base / _CUR_DIR

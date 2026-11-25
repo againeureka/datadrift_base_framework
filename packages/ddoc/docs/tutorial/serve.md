@@ -52,7 +52,7 @@ curl -s http://localhost:8765/commands | jq '.tree.subcommands | keys'
 # 1. 합성 데이터 페어 생성
 curl -s -X POST http://localhost:8765/examples/generate \
   -H 'Content-Type: application/json' \
-  -d '{"modality":"timeseries","out":"/tmp/demo","scenario":"shifted"}' | jq
+  -d '{"modality":"categorical","out":"/tmp/demo","scenario":"shifted"}' | jq
 
 # 2. drift 측정
 curl -s -X POST http://localhost:8765/analyze/drift \
@@ -62,7 +62,7 @@ curl -s -X POST http://localhost:8765/analyze/drift \
     "data_path_cur": "/tmp/demo/cur",
     "quiet": true
   }' | jq
-# → {"modality":"timeseries","overall_score":0.282,...}
+# → {"modality":"categorical","overall_score":0.1111,...}
 ```
 
 ### Streaming 진행 (SSE)
@@ -85,7 +85,7 @@ curl -N -X POST http://localhost:8765/analyze/drift/stream \
 # event: progress
 # data: {"progress":1.0,"stage":"complete",...}
 # event: result
-# data: {"modality":"timeseries","overall_score":0.282,...}
+# data: {"modality":"categorical","overall_score":0.1111,...}
 ```
 
 ### 진단 (`ddoc diff`)
@@ -214,7 +214,7 @@ HTML · PDF · Markdown 으로 저장할 수 있고, 같은 일을 하는 CLI �
 
 | 주소 | 동작 |
 |---|---|
-| `/?case=price-regime` | 예제 사례를 바로 진단 (`sensor-decay`, `unit-change`, `weekday-rhythm`) |
+| `/?case=monsoon` | 예제 사례를 바로 진단. 실측 기상 기록 `monsoon`, `yearly-reset` 과 만든 사례 `price-regime`, `sensor-decay`, `unit-change`, `weekday-rhythm` |
 | `/?ref=<경로>&cur=<경로>` | 두 칸을 채움. `&run=1` 을 붙이면 바로 진단 |
 | `/?lang=ko` | 한국어 화면 (위쪽 막대의 버튼으로도 전환) |
 | `/#advanced` | 고급 도구 |

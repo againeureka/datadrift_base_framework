@@ -14,6 +14,7 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 | [`regime_shift/`](regime_shift/) | 영구 레짐 전환 | **DRIFT** (high) | 어느 날부터 세상이 바뀌었고 되돌아오지 않는다 — 가격대·채널 구성이 통째로 이동 |
 | [`creeping_degradation/`](creeping_degradation/) | 점진 열화 | **DRIFT** | 하루하루는 멀쩡해 보이는데 한 달 전과 비교하면 센서가 죽어가고 있다 |
 | [`rhythm_not_drift/`](rhythm_not_drift/) | 주기 리듬 (함정) | **OK** | 월요일과 화요일은 다르게 *보이지만* 드리프트가 아니다 — 탐지기는 아니라고 말할 줄도 알아야 한다 |
+| [`weather_station/`](weather_station/) | **실측 데이터** | **DRIFT** · OK | 가정용 기상관측소의 실제 기록. 장마가 시작되자 이슬점과 습도가 올라섰다(DRIFT). 연간 강우 누적값이 초기화된 날은 누적 열을 빼면 날씨가 그대로다(OK) |
 
 진단서는 측정값을 미리 정리해 둔 드리프트 유형에 대어 보고(유형 판독), 케이스마다
 이야기에 맞는 유형이 나오는지도 회귀 테스트로 고정합니다.
@@ -23,6 +24,7 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 | `regime_shift` | 레짐 전환형 · 이동·확산형 · 구성비 이동형 |
 | `creeping_degradation` | 이동·확산형 |
 | `rhythm_not_drift` | 안정형 |
+| `weather_station` (장마) | 수준 이동형 · 이동·확산형 — 가장 크게 변한 이슬점은 빠짐 ([이유](weather_station/#판독이-놓친-것)) |
 
 `regime_shift` 진단서의 유형 판독 (`ddoc diff data/ref.csv data/cur.csv --lang ko --report note.html`):
 
@@ -37,7 +39,7 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 비교하는 [`sensitivity.py`](sensitivity.py) 의 결과는 [판정 민감도](../docs/sensitivity.md)에 있습니다.
 
 <!-- generated:zoo-eval — scripts/docs.py build -->
-케이스 19개 중 19개가 기대한 판독과 정확히 일치합니다 (빠진 유형도, 더 나온 유형도 없음). 유형 17가지 중 16가지를 드릴로 확인하며, 임베딩 분리형은 이미지·텍스트 플러그인이 필요해 드릴에서 뺐습니다.
+케이스 20개 중 20개가 기대한 판독과 정확히 일치합니다 (빠진 유형도, 더 나온 유형도 없음). 유형 17가지 중 16가지를 드릴로 확인하며, 임베딩 분리형은 이미지·텍스트 플러그인이 필요해 드릴에서 뺐습니다.
 
 | 케이스 | 심은 변화 | 판정 (최대 속성 점수) | 판독 | 결과 |
 |---|---|---|---|---|
@@ -60,6 +62,7 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 | [regime_shift](regime_shift/) | 이야기 케이스 | DRIFT (1.000) | 레짐 전환형 · 이동·확산형 (price) · 구성비 이동형 (channel) | ✓ |
 | [creeping_degradation](creeping_degradation/) | 이야기 케이스 | DRIFT (0.336) | 이동·확산형 (reading) | ✓ |
 | [rhythm_not_drift](rhythm_not_drift/) | 이야기 케이스 | OK (0.010) | 안정형 | ✓ |
+| [weather_station](weather_station/) | 이야기 케이스 | DRIFT (0.909) | 수준 이동형 (humidity, rain_hourly_mm, temp_c) · 이동·확산형 (feels_like_c, pressure_inhg) | ✓ |
 
 **판정 민감도.** 변화를 심은 속성 드릴 8개(`shift-and-spread`, `level-shift`, `spread-change`, `tail-outliers`, `missing-surge`, `new-category`, `vanished-category`, `mix-shift`)가 판정은 OK 입니다. 판독은 변화를 정확히 짚고(잠복 변화형으로도 표시) 있지만, 분포 점수(Jensen–Shannon 발산)가 단일 속성 기준 0.25 에 닿지 않습니다. 판정 기준과 점수 방식은 따로 정할 문제라 드릴은 판정을 확인하지 않고 그대로 보여줍니다. 후보 방식의 비교는 [판정 민감도](../docs/sensitivity.md)에 있습니다.
 <!-- /generated:zoo-eval -->

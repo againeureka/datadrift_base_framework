@@ -36,10 +36,11 @@
       'card.missing': 'Nothing found at this path.', 'card.unknown': 'No CSV, image, text or audio files here.',
       'kind.csv': 'CSV', 'kind.vision': 'Images', 'kind.text': 'Text', 'kind.audio': 'Audio',
       'kind.categorical': 'Distributions', 'kind.unknown': 'Unknown',
-      'type.numeric': 'number', 'type.categorical': 'category', 'type.datetime': 'date',
+      'type.numeric': 'number', 'type.categorical': 'category', 'type.datetime': 'date', 'type.running': 'running total',
       'pre.checking': 'Checking the pair…',
       'pre.ok': 'Ready to diagnose', 'pre.compared': '{n} columns will be compared',
       'pre.time': 'date column {cols} gives the period only',
+      'pre.running': 'running totals {cols} only grow over time and are not compared',
       'pre.only_ref': 'only in the baseline: {cols}', 'pre.only_cur': 'only in the current data: {cols}',
       'pre.blind': 'This pair cannot be judged',
       'run': 'Diagnose', 'run.busy': 'Diagnosing… {s}s', 'run.need': 'Choose both sides first',
@@ -47,8 +48,8 @@
       'opt.embed': 'Compare embeddings too (images and text; slower)',
       'opt.threshold': 'Threshold, overall', 'opt.attr': 'Threshold, one column',
       'cases.title': 'Or start from an example',
-      'cases.lead': 'Small stories with a known answer. One click builds the data and diagnoses it.',
-      'cases.run': 'Diagnose this case', 'cases.expect': 'expected',
+      'cases.lead': 'Stories with a known answer, two of them from a real weather station. One click builds the data and diagnoses it.',
+      'cases.run': 'Diagnose this case', 'cases.expect': 'expected', 'cases.real': 'real data',
       'recent.title': 'Recent', 'recent.clear': 'Clear',
       'res.new': 'New diagnosis', 'res.severity': 'severity', 'res.score': 'Score', 'res.threshold': 'threshold',
       'res.what': 'What changed', 'res.patterns': 'Pattern reading', 'res.columns': 'By column',
@@ -59,7 +60,9 @@
       'res.cli': 'Copy the command', 'res.copied': 'Copied', 'res.saving': 'Preparing…',
       'res.no_patterns': 'No written-up pattern matches these measurements.',
       'res.more_columns': '{n} more columns are in the report.',
-      'res.case': 'Example', 'res.case.look': 'What to notice',
+      'res.case': 'Example', 'res.case.real': 'Example, real data', 'res.case.look': 'What to notice',
+      'res.aside': 'Not compared', 'res.aside.time': 'period column {cols}',
+      'res.aside.running': 'running totals that only grow: {cols}',
       'status.pass': 'pass', 'status.caution': 'caution', 'status.fail': 'fail',
       'fs.title': 'Browse the server', 'fs.roots': 'Data folders', 'fs.up': 'Up',
       'fs.use_folder': 'Use this folder', 'fs.cancel': 'Cancel', 'fs.empty': 'This folder is empty.',
@@ -86,10 +89,11 @@
       'card.missing': '이 경로에서 아무것도 찾지 못했습니다.', 'card.unknown': 'CSV·이미지·텍스트·오디오 파일이 없습니다.',
       'kind.csv': 'CSV', 'kind.vision': '이미지', 'kind.text': '텍스트', 'kind.audio': '오디오',
       'kind.categorical': '분포', 'kind.unknown': '알 수 없음',
-      'type.numeric': '숫자', 'type.categorical': '범주', 'type.datetime': '날짜',
+      'type.numeric': '숫자', 'type.categorical': '범주', 'type.datetime': '날짜', 'type.running': '누적값',
       'pre.checking': '두 데이터를 확인하는 중…',
       'pre.ok': '진단할 수 있습니다', 'pre.compared': '열 {n}개를 비교합니다',
       'pre.time': '날짜 열 {cols} 은 기간 표시에만 씁니다',
+      'pre.running': '누적값 열 {cols} 은 늘어나기만 해서 비교하지 않습니다',
       'pre.only_ref': '기준에만 있는 열: {cols}', 'pre.only_cur': '현재에만 있는 열: {cols}',
       'pre.blind': '이 두 데이터는 판정할 수 없습니다',
       'run': '진단하기', 'run.busy': '진단하는 중… {s}초', 'run.need': '두 데이터를 먼저 넣으세요',
@@ -97,8 +101,8 @@
       'opt.embed': '임베딩도 비교 (이미지·텍스트, 느림)',
       'opt.threshold': '전체 기준', 'opt.attr': '단일 열 기준',
       'cases.title': '또는 예제로 시작하기',
-      'cases.lead': '정답이 있는 작은 사례입니다. 누르면 데이터를 만들어 바로 진단합니다.',
-      'cases.run': '이 사례 진단하기', 'cases.expect': '기대 판정',
+      'cases.lead': '정답이 있는 사례입니다. 둘은 실제 기상관측소 기록입니다. 누르면 데이터를 만들어 바로 진단합니다.',
+      'cases.run': '이 사례 진단하기', 'cases.expect': '기대 판정', 'cases.real': '실측 데이터',
       'recent.title': '최근 진단', 'recent.clear': '지우기',
       'res.new': '새 진단', 'res.severity': '심각도', 'res.score': '점수', 'res.threshold': '기준',
       'res.what': '무엇이 달라졌나', 'res.patterns': '유형 판독', 'res.columns': '열별 결과',
@@ -109,7 +113,9 @@
       'res.cli': '명령 복사', 'res.copied': '복사됨', 'res.saving': '만드는 중…',
       'res.no_patterns': '정리해 둔 유형 가운데 이 측정값에 해당하는 것이 없습니다.',
       'res.more_columns': '나머지 {n}개 열은 진단서에 있습니다.',
-      'res.case': '예제', 'res.case.look': '눈여겨볼 점',
+      'res.case': '예제', 'res.case.real': '실측 예제', 'res.case.look': '눈여겨볼 점',
+      'res.aside': '비교 제외', 'res.aside.time': '기간 열 {cols}',
+      'res.aside.running': '늘어나기만 하는 누적 열 {cols}',
       'status.pass': '적합', 'status.caution': '주의', 'status.fail': '부적합',
       'fs.title': '서버에서 찾기', 'fs.roots': '데이터 폴더', 'fs.up': '위로',
       'fs.use_folder': '이 폴더 사용', 'fs.cancel': '취소', 'fs.empty': '빈 폴더입니다.',
@@ -457,6 +463,7 @@
       bits.push(t('pre.compared', { n: p.csv.compared.length }) + ': ' + p.csv.compared.slice(0, 8).join(', ')
         + (p.csv.compared.length > 8 ? ' …' : ''));
       if (p.csv.time.length) bits.push(t('pre.time', { cols: p.csv.time.join(', ') }));
+      if ((p.csv.running || []).length) bits.push(t('pre.running', { cols: p.csv.running.join(', ') }));
       if (p.csv.only_ref.length) bits.push(t('pre.only_ref', { cols: p.csv.only_ref.join(', ') }));
       if (p.csv.only_cur.length) bits.push(t('pre.only_cur', { cols: p.csv.only_cur.join(', ') }));
     } else if (p.route) bits.push(p.route);
@@ -500,6 +507,7 @@
         h('h2', {}, t('cases.title')), h('p', { class: 'muted' }, t('cases.lead')),
         h('div', { class: 'case-grid' }, S.cases.map((c) => h('article', { class: 'case' },
           h('div', { class: 'case-top' }, h('span', { class: 'glyph' }, c.icon),
+            c.real ? h('span', { class: 'real' }, t('cases.real')) : null,
             h('span', { class: 'expect' }, t('cases.expect') + ' ', verdictBadge(c.verdict))),
           h('h3', {}, c.title), h('p', {}, c.story),
           h('button', { class: 'wb-btn', type: 'button', disabled: S.running, onclick: () => runCase(c) }, t('cases.run')))))) : null,
@@ -573,10 +581,18 @@
         (v.warnings || []).map((x) => h('p', { class: 'v-warn' }, '⚠ ' + x))));
 
     const caseNote = S.activeCase ? h('aside', { class: 'case-note' },
-      h('b', {}, `${t('res.case')}: ${S.activeCase.title}`), h('span', {}, S.activeCase.story),
+      h('b', {}, `${t(S.activeCase.real ? 'res.case.real' : 'res.case')}: ${S.activeCase.title}`), h('span', {}, S.activeCase.story),
       h('span', {}, h('i', {}, t('res.case.look') + ' — '), S.activeCase.look)) : null;
 
     const compared = h('section', { class: 'compared' }, sideSummary('ref', v), icon('arrow', 20), sideSummary('cur', v));
+    // columns set aside, under the report's mark for "not compared" (hatching)
+    const cols0 = v.columns || {};
+    const asideBits = [
+      (cols0.time || []).length ? t('res.aside.time', { cols: cols0.time.join(', ') }) : null,
+      (cols0.running || []).length ? t('res.aside.running', { cols: cols0.running.join(', ') }) : null,
+    ].filter(Boolean);
+    const aside = asideBits.length ? h('p', { class: 'aside' }, h('i', { class: 'hatch' }),
+      h('b', {}, t('res.aside')), ' ' + asideBits.join(' · ')) : null;
 
     const cards = h('div', { class: 'cards' },
       h('h3', {}, t('res.patterns')),
@@ -627,7 +643,7 @@
     return h('div', { class: 'wb-result' },
       h('div', { class: 'res-top' },
         h('button', { class: 'wb-btn ghost', type: 'button', onclick: () => { S.result = null; render(); } }, icon('back', 16), ' ' + t('res.new'))),
-      band, caseNote, compared,
+      band, caseNote, compared, aside,
       v.verdict === 'BLIND' ? null : h('section', { class: 'what' }, h('h2', {}, t('res.what')), h('div', { class: 'what-grid' }, cards, cols)),
       checks, report);
   }

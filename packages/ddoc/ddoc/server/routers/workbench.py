@@ -196,7 +196,7 @@ async def upload_file(session_id: str, side: str, name: str, request: Request) -
 
 
 @router.get("/cases")
-def list_cases(lang: Optional[str] = None) -> List[Dict[str, str]]:
+def list_cases(lang: Optional[str] = None) -> List[Dict[str, Any]]:
     from ddoc.examples import cases
     from ddoc.i18n import resolve_lang
 

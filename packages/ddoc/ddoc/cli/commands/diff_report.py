@@ -804,7 +804,7 @@ def _subject(payload: Dict[str, Any], profile: Optional[Dict[str, Any]],
         rows.append((t("subject.columns", lang), chips(ref_p), chips(cur_p)))
 
         match = [("✓", t("subject.compared", lang, count=len(cols.get("compared") or [])))]
-        for key, mark in (("only_ref", "−"), ("only_cur", "+"), ("time", "·")):
+        for key, mark in (("only_ref", "−"), ("only_cur", "+"), ("time", "·"), ("running", "·")):
             if cols.get(key):
                 match.append((mark, t(f"subject.{key}", lang, columns=", ".join(cols[key]))))
         out_after += (f"<ul class='match' aria-label='{_e(t('subject.match', lang))}'>" + "".join(
@@ -967,7 +967,8 @@ def _diagram(scores: List[Tuple[str, float]], diagnosis: Dict[str, Any],
                  for c in (profile.get(side) or {}).get("columns") or []}
         off = {**{c: "only_ref" for c in cols.get("only_ref") or []},
                **{c: "only_cur" for c in cols.get("only_cur") or []},
-               **{c: "time" for c in cols.get("time") or []}}
+               **{c: "time" for c in cols.get("time") or []},
+               **{c: "running" for c in cols.get("running") or []}}
         order = [c["name"] for c in (profile.get("ref") or {}).get("columns") or []]
         order += [c for c in cols.get("only_cur") or [] if c not in order]
         parts = [(c, types.get(c, ""), off.get(c)) for c in order]

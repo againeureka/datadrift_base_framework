@@ -102,6 +102,7 @@ ddoc = [
   "fonts/NanumGothicCoding-Regular.ttf",
   "config/config.json",
   "scenarios.conf",
+  "examples/data/*.csv.gz",
   "templates/*.html",
   "server/static/*.html",
   "server/static/*.js",

@@ -31,7 +31,7 @@ import re
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import typer
 from rich import print as rprint
@@ -148,6 +148,11 @@ def _numeric_summary(r, c) -> Dict[str, Any]:
             ("min", x.min()), ("max", x.max()))}
     rs, cs = stats(r), stats(c)
     out: Dict[str, Any] = {k: {"ref": rs[k], "cur": cs[k]} for k in rs}
+    if not r.empty:
+        # Most common baseline value: a current side stuck on it (0 rain in a
+        # dry week) reads differently from one stuck on a value never seen.
+        top = r.value_counts()
+        out["mode_ref"] = {"value": round(float(top.index[0]), 6), "share": _rate(top.iloc[0], len(r))}
     if not r.empty and not c.empty:
         outside = ((c < rs["min"]) | (c > rs["max"])).sum()
         out["outside_ref_range"] = _rate(outside, len(c))
@@ -279,6 +284,64 @@ def _as_datetime(series):
     return parsed if parsed.notna().mean() >= 0.9 else None
 
 
+# Running totals and sequences: in time order they only grow, apart from
+# resets (a drop to a quarter or less: a daily, monthly or yearly total
+# starting over). Two periods then always differ, like their timestamps, so
+# they are named and set aside rather than scored. A rolling sum (rain in the
+# last hour) falls back step by step and stays compared, as do cyclic columns
+# (hour of day), which climb to the same peak before every reset. Without a
+# time column the file order says nothing about time (a file sorted by price
+# would make price look like a total), so nothing is set aside.
+_RUNNING_MIN_ROWS = 20
+_RUNNING_MIN_DISTINCT = 10     # on at least one side
+_RUNNING_RESET = 0.25          # a drop to this share of the value or less starts over
+_RUNNING_DIP_SHARE = 0.02      # other decreases allowed, as a share of the rises
+
+
+def _running_kind(values) -> Optional[str]:
+    """``"grows"`` / ``"flat"`` / ``"few"`` for a time-ordered numeric array
+    that only grows apart from resets; None for anything else."""
+    import numpy as np
+
+    v = values[~np.isnan(values)]
+    if len(v) < _RUNNING_MIN_ROWS or v.min() < 0:
+        return None
+    step = np.diff(v)
+    down = step < 0
+    before, after = v[:-1][down], v[1:][down]
+    reset = after <= _RUNNING_RESET * before
+    if int((~reset).sum()) > _RUNNING_DIP_SHARE * int((step > 0).sum()):
+        return None
+    peaks = before[reset]
+    if len(peaks) >= 2 and (peaks >= 0.95 * peaks.max()).sum() >= max(2, len(peaks) / 2):
+        return None
+    distinct = len(np.unique(v))
+    return "flat" if distinct == 1 else "grows" if distinct >= _RUNNING_MIN_DISTINCT else "few"
+
+
+def _running_columns(ref, cur, columns, ref_time, cur_time) -> List[str]:
+    """Columns of ``columns`` that are running totals or sequences on both
+    sides, growing on at least one (a dry fortnight leaves a rain total flat)."""
+    import pandas as pd
+
+    if not ref_time or not cur_time:
+        return []
+
+    def ordered(frame, times):
+        parsed = next(iter(times.values()))
+        return frame.loc[parsed.dropna().sort_values(kind="stable").index]
+
+    r, c = ordered(ref, ref_time), ordered(cur, cur_time)
+    out = []
+    for col in columns:
+        if not (pd.api.types.is_numeric_dtype(r[col]) and pd.api.types.is_numeric_dtype(c[col])):
+            continue
+        kinds = {_running_kind(r[col].to_numpy(dtype=float)), _running_kind(c[col].to_numpy(dtype=float))}
+        if None not in kinds and "grows" in kinds:
+            out.append(col)
+    return out
+
+
 def _period(parsed) -> Optional[Dict[str, str]]:
     parsed = parsed.dropna()
     if parsed.empty:
@@ -313,11 +376,13 @@ def _sample(frame, n: int) -> Dict[str, Any]:
 
 
 def _profile(frame, files: List[str], time_cols: Dict[str, Any], sample_rows: int,
-             total_rows: Optional[int] = None) -> Dict[str, Any]:
+             total_rows: Optional[int] = None, running: Iterable[str] = ()) -> Dict[str, Any]:
+    running = set(running)
     out: Dict[str, Any] = {
         "files": len(files),
         "rows": int(len(frame)),
-        "columns": [{"name": str(c), "type": "datetime" if c in time_cols else _column_type(frame[c])}
+        "columns": [{"name": str(c), "type": "datetime" if c in time_cols
+                     else "running" if c in running else _column_type(frame[c])}
                     for c in frame.columns],
         "period": None,
     }
@@ -361,16 +426,19 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
     cur_time = {c: p for c in cur.columns if (p := _as_datetime(cur[c])) is not None}
     time_cols = [c for c in ref.columns if c in ref_time and c in cur_time]
     shared = [c for c in ref.columns if c in cur.columns and c not in time_cols]
+    running = _running_columns(ref, cur, shared, ref_time, cur_time)
+    shared = [c for c in shared if c not in running]
     if not shared:
         raise ValueError(
             f"no shared columns between ref {list(ref.columns)} and cur {list(cur.columns)}"
         )
     profile = {
-        "ref": _profile(ref, ref_files, ref_time, sample_rows, ref_total),
-        "cur": _profile(cur, cur_files, cur_time, sample_rows, cur_total),
+        "ref": _profile(ref, ref_files, ref_time, sample_rows, ref_total, running),
+        "cur": _profile(cur, cur_files, cur_time, sample_rows, cur_total, running),
         "columns": {
             "compared": [str(c) for c in shared],
             "time": [str(c) for c in time_cols],
+            "running": [str(c) for c in running],
             "only_ref": [str(c) for c in ref.columns if c not in cur.columns],
             "only_cur": [str(c) for c in cur.columns if c not in ref.columns],
         },
@@ -752,6 +820,9 @@ def diff_command(
         titles = []
     if titles:
         hints.append(t("reading.headline", lang) + " " + " · ".join(titles))
+    running = (((result.get("profile") or {}).get("columns") or {}).get("running")) or []
+    if running:
+        hints.append(t("hint.running_set_aside", lang, columns=", ".join(running)))
     if verdict == "DRIFT":
         hints += dx.check_texts(diagnosis, lang)[:3]
         if report is None:

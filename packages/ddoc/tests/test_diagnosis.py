@@ -276,7 +276,7 @@ def test_profile_names_period_and_one_sided_columns(tmp_path):
     prof = result["profile"]
     assert prof["ref"]["period"] == {"column": "order_date", "start": "2026-01-01", "end": "2026-01-28"}
     assert prof["cur"]["period"]["start"] == "2026-07-01"
-    assert prof["columns"] == {"compared": ["price", "channel"], "time": ["order_date"],
+    assert prof["columns"] == {"compared": ["price", "channel"], "time": ["order_date"], "running": [],
                                "only_ref": [], "only_cur": ["coupon"]}
     # two periods always differ in their timestamps: not scored
     assert "order_date" not in result["attribute_drifts"]

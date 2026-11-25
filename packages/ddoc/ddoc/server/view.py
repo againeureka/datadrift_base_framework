@@ -76,7 +76,7 @@ def diff_view(payload: Dict[str, Any], lang: str) -> Dict[str, Any]:
         "cards": cards,
         "attributes": attributes, "attributes_total": len(scores),
         "sides": {"ref": _side((profile or {}).get("ref")), "cur": _side((profile or {}).get("cur"))},
-        "columns": {k: columns.get(k) or [] for k in ("compared", "time", "only_ref", "only_cur")},
+        "columns": {k: columns.get(k) or [] for k in ("compared", "time", "running", "only_ref", "only_cur")},
         "checks": dx.check_texts(diagnosis, lang)[:5],
         "warnings": [dx.warning_text(w, lang) for w in diagnosis.get("warnings") or []],
         "hints": [h for h in payload.get("hints") or [] if isinstance(h, str)],

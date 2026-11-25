@@ -3,7 +3,8 @@
 ddoc 를 처음 만지는 사용자가 본인 데이터 없이도 **drift 가 어떻게
 계산되고 어떤 envelope 으로 떨어지는지** 5 분 안에 직접 확인할 수
 있도록 5 modality (timeseries / audio / text / vision / categorical) 의
-합성 toy 데이터셋을 generator 로 제공합니다.
+예제 데이터셋을 generator 로 제공합니다. timeseries 는 실제 기상관측소 기록이고, 나머지는 합성
+데이터입니다.
 
 같은 generator 를 pytest 회귀 (`tests/test_plugin_drift_e2e.py`) 도
 사용 — 즉 사용자가 `ddoc examples generate` 로 만드는 데이터는 ddoc
@@ -17,7 +18,7 @@ ddoc examples list
 
 | modality | data shape | shifted scenario |
 |---|---|---|
-| `timeseries` | CSV `timestamp,x,y` (200 rows) | x ~ N(0,1) → x ~ N(1.5,1) |
+| `timeseries` | CSV `time` + 기상 측정값 11열 — 실제 가정용 기상관측소의 10분 기록 2주 (2,016행) | 장마 전 2주 → 장마가 시작된 2주 (이슬점·습도 상승) |
 | `audio` | mono WAV, 8 kHz, 1 초 | 440 Hz → 880 Hz (octave) |
 | `text` | CSV `id,text` (20 rows) | 짧은 단어 → 긴 문장 |
 | `vision` | 40 × 96×96 PNG (밝은 배경에 색·크기가 제각각인 도형) | 어둡게, 푸른 톤 (카메라·조명이 바뀐 경우) |
@@ -30,7 +31,7 @@ ddoc examples list
 ## 5분 quick start
 
 ```bash
-# 1. timeseries toy 데이터 생성 (drift 시나리오)
+# 1. timeseries 예제 데이터 생성 (drift 시나리오)
 ddoc examples generate timeseries --out /tmp/ex --scenario shifted
 
 # 2. drift 측정
@@ -42,15 +43,24 @@ ddoc analyze drift \
 
 출력 (envelope):
 ```json
-{
-  "modality": "timeseries",
-  "timestamp": "20260508_092052",
-  "overall_score": 0.307
-}
+{"modality": "timeseries", "timestamp": "20261125_225058", "overall_score": 9403007.749453789}
 ```
 
-`overall_score = 0.307` — 분포가 이동했음을 ddoc 가 정량화한 결과.
-`identical` scenario 로 다시 돌리면 score ≈ 0 으로 떨어집니다.
+`identical` scenario 로 다시 돌리면 score 는 0 입니다. 점수가 이렇게 큰 것은 timeseries 플러그인이 열의 원래
+단위로 평균·분산·왜도·첨도의 차이를 더하기 때문입니다. 일사량(lux)처럼 값이 큰 열의 분산 차이가 점수를
+좌우하므로, 이 숫자는 0–1 점수가 아니고 다른 플러그인과 비교할 수도 없습니다([지금 상태](../status.md)의
+알려진 한계).
+
+같은 CSV 를 `ddoc diff` 로 비교하면 0–1 점수, 판정, 가장 변한 열과 판독을 볼 수 있습니다:
+
+```bash
+ddoc diff /tmp/ex/ref/weather/data.csv /tmp/ex/cur/weather/data.csv --lang ko
+# ⚠ DRIFT — 심각도: 높음 · 점수 0.1782 (기준 0.15)
+#    가장 변한 속성: dew_point_c 0.909 · humidity 0.276 · pressure_inhg 0.237
+```
+
+데이터와 다른 기간의 이야기(연간 누적값 초기화, 계절 등)는 Drift Zoo 의
+[weather_station](../../zoo/weather_station/) 에 있습니다.
 
 ## 다른 modality
 

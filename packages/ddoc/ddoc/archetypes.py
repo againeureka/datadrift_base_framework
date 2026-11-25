@@ -61,7 +61,7 @@ def _measure(summary: Dict[str, Any], dists: Optional[Dict[str, Any]]) -> Dict[s
         mean, std = summary.get("mean") or {}, summary.get("std") or {}
         mr, mc, sr, sc = mean.get("ref"), mean.get("cur"), std.get("ref"), std.get("cur")
         m.update(mean_ref=mr, mean_cur=mc, std_ref=sr, std_cur=sc,
-                 out=summary.get("outside_ref_range") or 0.0)
+                 out=summary.get("outside_ref_range") or 0.0, mode_ref=summary.get("mode_ref"))
         if mr is not None and mc is not None:
             m["shift"] = abs(mc - mr) / sr if sr else (0.0 if mc == mr else math.inf)
         if sr and sc is not None:
@@ -135,7 +135,13 @@ def _attr_cards(name: str, m: Dict[str, Any]) -> List[Dict[str, Any]]:
                     ratio=ratio, spread=spread, factor=_nearest_factor(ratio))
                 explained |= {"level_shift", "spread_change", "shift_and_spread", "tail_outliers"}
         if m.get("std_ref") and m.get("std_cur") == 0:
-            add("stuck_values", "match", value=m.get("mean_cur"), share=1.0)
+            # Stuck on the baseline's own most common value (0 rain in a dry
+            # week) is often a quiet period, not a stalled sensor: say so.
+            mode = m.get("mode_ref") or {}
+            usual = (mode.get("value") is not None and m.get("mean_cur") is not None
+                     and math.isclose(mode["value"], m["mean_cur"], rel_tol=1e-6, abs_tol=1e-9))
+            add("stuck_values", "match", value=m.get("mean_cur"), share=1.0,
+                **({"ref_share": mode["share"]} if usual else {}))
             explained |= {"level_shift", "spread_change", "shift_and_spread", "tail_outliers"}
         shift, dist, out_share = m.get("shift") or 0.0, m.get("spread_dist") or 1.0, m.get("out", 0.0)
         # Outliers in the tails: the middle of the data stayed (median and
@@ -383,16 +389,18 @@ CATALOG: Dict[str, Dict[str, Dict[str, Any]]] = {
     "stuck_values": {
         "en": {"title": "Stuck values",
                "meaning": "The values are nearly fixed to one.",
-               "causes": ["A stalled sensor or device", "Missing values filled with a default", "A bug in collection"],
+               "causes": ["A stalled sensor or device", "Missing values filled with a default", "A bug in collection",
+                          "A quiet period, when the value is the column's usual one (no rain that week, no sales that day)"],
                "actions": ["Check whether the fixed value is a default (0, -1, empty string, …)", "Check the collection logs for the period"],
                "caveat": "A change that looks small may mean the information is gone.",
-               "signal": "{attr}: {value} holds {share} of the current data"},
+               "signal": "{attr}: {value} holds {share} of the current data{usual}"},
         "ko": {"title": "고착형",
                "meaning": "값이 거의 하나로 고정되었습니다.",
-               "causes": ["센서·장비 멈춤", "결측을 기본값으로 채움", "수집 로직 오류"],
+               "causes": ["센서·장비 멈춤", "결측을 기본값으로 채움", "수집 로직 오류",
+                          "평소에도 흔한 값이라면 조용한 기간 (비가 오지 않은 주, 거래가 없는 날)"],
                "actions": ["고정된 값이 기본값(0, -1, 빈 문자열 등)인지 확인", "해당 기간의 수집 로그 확인"],
                "caveat": "변화가 작아 보여도 정보가 사라진 상태일 수 있습니다.",
-               "signal": "{attr}: 현재 데이터의 {share} 가 {value}"},
+               "signal": "{attr}: 현재 데이터의 {share} 가 {value}{usual}"},
     },
     "shift_and_spread": {
         "en": {"title": "Shift with wider spread",
@@ -510,9 +518,11 @@ CATALOG: Dict[str, Dict[str, Dict[str, Any]]] = {
 
 _FRAGMENTS = {
     "en": {"factor": " (close to ×{factor})", "variants": " — possible spelling variant: {pairs}",
-           "none": "—", "period": "Period: {ref} → {cur}"},
+           "none": "—", "period": "Period: {ref} → {cur}",
+           "usual": " — also the baseline's most common value ({share})"},
     "ko": {"factor": " (×{factor} 에 가까움)", "variants": " — 표기 변형 의심: {pairs}",
-           "none": "—", "period": "기간: {ref} → {cur}"},
+           "none": "—", "period": "기간: {ref} → {cur}",
+           "usual": " — 기준에서도 가장 흔한 값 ({share})"},
 }
 
 
@@ -536,6 +546,8 @@ def _signal_fields(code: str, s: Dict[str, Any], lang: str) -> Dict[str, Any]:
     for key in ("only_ref", "only_cur"):
         if key in s:
             out[key] = ", ".join(s[key]) or f["none"]
+    if code == "stuck_values":
+        out["usual"] = f["usual"].format(share=_p(s["ref_share"])) if s.get("ref_share") else ""
     if code == "unit_change":
         out["ratio"], out["spread"] = f"{s['ratio']:.3g}", f"{s['spread']:.3g}"
         fac = s.get("factor")

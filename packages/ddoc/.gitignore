@@ -9,6 +9,8 @@
 **/build
 **/outputs
 **/data
+# the real weather-station series ships inside the package
+!ddoc/examples/data/
 **/*.egg-info
 **/.ipynb_checkpoints
 **/__pycache__

@@ -162,4 +162,8 @@ STORIES: Dict[str, Dict[str, Optional[List[str]]]] = {
     "regime_shift": {"regime_shift": None, "shift_and_spread": ["price"], "mix_shift": ["channel"]},
     "creeping_degradation": {"shift_and_spread": ["reading"]},
     "rhythm_not_drift": {"stable": None},
+    # real data: the rainy season. Dew point, the column that moved most, shifts
+    # while its spread narrows; no pattern covers that shape yet, so it is absent.
+    "weather_station": {"level_shift": ["humidity", "rain_hourly_mm", "temp_c"],
+                        "shift_and_spread": ["feels_like_c", "pressure_inhg"]},
 }

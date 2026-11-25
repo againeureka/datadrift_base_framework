@@ -235,6 +235,10 @@ The same list is in the GUI under "Advanced tools → Scenarios" and in the [che
   [verdict sensitivity](../sensitivity.md) (Korean).
 - **Date and time columns are not compared**; they only give the period. Formats without a four-digit
   year (`7/1`, ...) are not recognised as dates — check with `ddoc probe`.
+- **Running totals are not compared either.** With a time column, a column that only grows over time
+  and drops only when it starts over (rain this month, a lifetime count, a sequence number) would
+  differ between any two periods; it is named on the console and in the report and set aside. To
+  compare the increments, add a differenced column.
 - **Large CSVs are compared through a uniform random sample** of 200,000 rows per side; `--max-rows 0`
   reads everything.
 
