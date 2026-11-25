@@ -59,12 +59,16 @@ class DOCTimeSeriesPlugin:
         if series_clean.empty:
             return {}
         
+        variance = float(series_clean.var())
         metrics = {
             'mean': float(series_clean.mean()),
-            'variance': float(series_clean.var()),
-            'skewness': float(stats.skew(series_clean)),
-            'kurtosis': float(stats.kurtosis(series_clean))
+            'variance': variance,
         }
+        # Shape is undefined for a constant series (a fortnight without
+        # rain): leave skewness and kurtosis out rather than write NaN.
+        if variance > 0:
+            metrics['skewness'] = float(stats.skew(series_clean))
+            metrics['kurtosis'] = float(stats.kurtosis(series_clean))
         
         # Trend, seasonality, residual (if enough data)
         if len(series_clean) >= 24:  # Minimum for decomposition
@@ -302,7 +306,8 @@ class DOCTimeSeriesPlugin:
             for metric in ['mean', 'variance', 'skewness', 'kurtosis']:
                 if metric in baseline and metric in current:
                     diff = abs(baseline[metric] - current[metric])
-                    drift_scores.append(diff)
+                    if np.isfinite(diff):   # older caches may hold NaN shapes
+                        drift_scores.append(diff)
         
         drift_metrics['overall_score'] = float(np.mean(drift_scores)) if drift_scores else 0.0
 
