@@ -104,6 +104,15 @@ def test_csv_numeric_shift_produces_range_mean_and_spread_patterns(tmp_path):
     # one sentence per kind of check: range and mean collapse into a value-shift check
     texts = dx.check_texts(d, "en")
     assert sum("values of 'price' moved" in x for x in texts) == 1
+    assert any("spread of 'price' grew" in x for x in texts)
+
+
+def test_spread_check_follows_the_direction():
+    # a narrower spread is not mixed sources or noise: clipping, filling, a group left out
+    narrower = {"code": "spread_change", "attr": "x", "ref": 2.0, "cur": 1.0}
+    assert "narrowed" in dx.check_text(narrower, "en") and "mixed" not in dx.check_text(narrower, "en")
+    assert "좁아졌습니다" in dx.check_text(narrower, "ko")
+    assert "커졌습니다" in dx.check_text({**narrower, "ref": 1.0, "cur": 2.0}, "ko")
 
 
 def test_csv_missing_rate_change(tmp_path):

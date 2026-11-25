@@ -155,6 +155,9 @@ DRILLS: List[Drill] = [
     Drill("mix-shift", "같은 값들의 비중이 70/30 → 40/60",
           lambda r: _categorical({"store": 0.7, "online": 0.3}, {"store": 0.4, "online": 0.6}, r),
           {"mix_shift": ["kind"]}),
+    # (appended: a drill's seed is its position, so the ones above keep their data)
+    Drill("shift-and-narrow", "평균 +1σ, 산포 ×0.5",
+          lambda r: _numeric(r.normal(50, 5, N), r.normal(55, 2.5, N), r), {"shift_and_narrow": ["x"]}),
 ]
 
 # The Drift Zoo stories, read the same way (see each make.py).
@@ -162,8 +165,9 @@ STORIES: Dict[str, Dict[str, Optional[List[str]]]] = {
     "regime_shift": {"regime_shift": None, "shift_and_spread": ["price"], "mix_shift": ["channel"]},
     "creeping_degradation": {"shift_and_spread": ["reading"]},
     "rhythm_not_drift": {"stable": None},
-    # real data: the rainy season. Dew point, the column that moved most, shifts
-    # while its spread narrows; no pattern covers that shape yet, so it is absent.
-    "weather_station": {"level_shift": ["humidity", "rain_hourly_mm", "temp_c"],
+    # real data: the rainy season. Dew point, the column that moved most, rises
+    # and narrows as the air nears saturation.
+    "weather_station": {"shift_and_narrow": ["dew_point_c"],
+                        "level_shift": ["humidity", "rain_hourly_mm", "temp_c"],
                         "shift_and_spread": ["feels_like_c", "pressure_inhg"]},
 }

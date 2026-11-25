@@ -24,7 +24,7 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 | `regime_shift` | 레짐 전환형 · 이동·확산형 · 구성비 이동형 |
 | `creeping_degradation` | 이동·확산형 |
 | `rhythm_not_drift` | 안정형 |
-| `weather_station` (장마) | 수준 이동형 · 이동·확산형 — 가장 크게 변한 이슬점은 빠짐 ([이유](weather_station/#판독이-놓친-것)) |
+| `weather_station` (장마) | 이동·수축형 · 수준 이동형 · 이동·확산형 |
 
 `regime_shift` 진단서의 유형 판독 (`ddoc diff data/ref.csv data/cur.csv --lang ko --report note.html`):
 
@@ -39,7 +39,7 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 비교하는 [`sensitivity.py`](sensitivity.py) 의 결과는 [판정 민감도](../docs/sensitivity.md)에 있습니다.
 
 <!-- generated:zoo-eval — scripts/docs.py build -->
-케이스 20개 중 20개가 기대한 판독과 정확히 일치합니다 (빠진 유형도, 더 나온 유형도 없음). 유형 17가지 중 16가지를 드릴로 확인하며, 임베딩 분리형은 이미지·텍스트 플러그인이 필요해 드릴에서 뺐습니다.
+케이스 21개 중 21개가 기대한 판독과 정확히 일치합니다 (빠진 유형도, 더 나온 유형도 없음). 유형 18가지 중 17가지를 드릴로 확인하며, 임베딩 분리형은 이미지·텍스트 플러그인이 필요해 드릴에서 뺐습니다.
 
 | 케이스 | 심은 변화 | 판정 (최대 속성 점수) | 판독 | 결과 |
 |---|---|---|---|---|
@@ -59,10 +59,11 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 | `new-category` | 새 값 app 이 20% 로 등장 | OK (0.106) | 잠복 변화형 · 새 범주 유입형 (kind) | ✓ |
 | `vanished-category` | 값 app (20%) 이 사라짐 | OK (0.108) | 잠복 변화형 · 범주 소멸형 (kind) | ✓ |
 | `mix-shift` | 같은 값들의 비중이 70/30 → 40/60 | OK (0.055) | 잠복 변화형 · 구성비 이동형 (kind) | ✓ |
+| `shift-and-narrow` | 평균 +1σ, 산포 ×0.5 | DRIFT (0.310) | 국소 이동형 · 이동·수축형 (x) | ✓ |
 | [regime_shift](regime_shift/) | 이야기 케이스 | DRIFT (1.000) | 레짐 전환형 · 이동·확산형 (price) · 구성비 이동형 (channel) | ✓ |
 | [creeping_degradation](creeping_degradation/) | 이야기 케이스 | DRIFT (0.336) | 이동·확산형 (reading) | ✓ |
 | [rhythm_not_drift](rhythm_not_drift/) | 이야기 케이스 | OK (0.010) | 안정형 | ✓ |
-| [weather_station](weather_station/) | 이야기 케이스 | DRIFT (0.909) | 수준 이동형 (humidity, rain_hourly_mm, temp_c) · 이동·확산형 (feels_like_c, pressure_inhg) | ✓ |
+| [weather_station](weather_station/) | 이야기 케이스 | DRIFT (0.909) | 이동·수축형 (dew_point_c) · 수준 이동형 (humidity, rain_hourly_mm, temp_c) · 이동·확산형 (feels_like_c, pressure_inhg) | ✓ |
 
 **판정 민감도.** 변화를 심은 속성 드릴 8개(`shift-and-spread`, `level-shift`, `spread-change`, `tail-outliers`, `missing-surge`, `new-category`, `vanished-category`, `mix-shift`)가 판정은 OK 입니다. 판독은 변화를 정확히 짚고(잠복 변화형으로도 표시) 있지만, 분포 점수(Jensen–Shannon 발산)가 단일 속성 기준 0.25 에 닿지 않습니다. 판정 기준과 점수 방식은 따로 정할 문제라 드릴은 판정을 확인하지 않고 그대로 보여줍니다. 후보 방식의 비교는 [판정 민감도](../docs/sensitivity.md)에 있습니다.
 <!-- /generated:zoo-eval -->

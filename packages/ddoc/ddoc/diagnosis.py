@@ -417,7 +417,8 @@ def check_text(check: Dict[str, Any], lang: str) -> str:
     if code in ("out_of_range", "mean_shift"):
         return t("check.value_shift", lang, attr=attr)
     if code == "spread_change":
-        return t("check.spread_change", lang, attr=attr)
+        narrower = check.get("cur") is not None and check.get("ref") and check["cur"] < check["ref"]
+        return t("check.spread_narrower" if narrower else "check.spread_change", lang, attr=attr)
     if code == "column_dropped":
         return t("check.column_dropped", lang, columns=", ".join(check.get("columns") or []))
     if code == "missing_change":

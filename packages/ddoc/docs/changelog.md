@@ -28,13 +28,15 @@
 - ✨ 누적·순번 열(일·월·연 누적 강우, 누적 횟수, 순번)은 날짜 열처럼 비교에서 빼고 이름을 적음 — 시간 열이 있을 때
 - ✨ 실측 예제 데이터: 가정용 기상관측소 기록. Drift Zoo [weather_station](../zoo/weather_station/), 진단 화면 예제 사례 2개,
   `examples generate timeseries`
+- ✨ 이동·수축형 판독 — 평균이 옮겨가면서 폭이 좁아진 열 (한계값 쪽으로 몰림, 좁은 집단만 남음). 장마의 이슬점처럼
+  가장 크게 변한 열이 어느 유형에도 들지 않던 빈칸을 메움
 - 🐛 기준을 넘은 속성이 8개를 넘으면 진단서가 만들어지지 않던 문제, 진단서 실패를 알리지 않던 문제, timeseries
   플러그인의 NaN 점수
 - 🎨 진단서·프로필 보고서·진단 화면의 강조 표시를 왼쪽 굵은 띠 대신 판독 낫표 「 」(유형 카드·판정)와 여백 ※(주의)로.
   표지마다 뜻이 하나 ([개념](tutorial/concepts.md#5-진단서와-진단))
 - ✨ `ddoc serve` (REST + GUI), `recipe`, `report`, `export`, `fetch`, `examples` 명령
 - ✨ 한글 리포트 (`--lang ko` / `DDOC_LANG=ko`)
-- ✨ 검사 보고서 형식의 진단서: 발행처·문서 번호, 요약 대시보드, 속성별 그래프, 데이터 특징, 패턴별 점검 항목 (`--json` 의 `diagnosis`), 화면 테마(자동·주간·야간)와 인쇄 버튼, 검사 대상 섹션, 유형 판독(17가지 드리프트 유형 카드), 임베딩 지도(`--with-embeddings`), 데이터 도면, 계통별 검사표, `--sample-rows`
+- ✨ 검사 보고서 형식의 진단서: 발행처·문서 번호, 요약 대시보드, 속성별 그래프, 데이터 특징, 패턴별 점검 항목 (`--json` 의 `diagnosis`), 화면 테마(자동·주간·야간)와 인쇄 버튼, 검사 대상 섹션, 유형 판독(18가지 드리프트 유형 카드), 임베딩 지도(`--with-embeddings`), 데이터 도면, 계통별 검사표, `--sample-rows`
 - 🗑️ `init` / `add` / `snapshot`, 스냅샷 모드, `exp` / `train`, `ingest`, `vis`, v1 legacy 명령 제거
 - 🗑️ yolo / vis / nlp / reference-engine / keti-temporal 플러그인, 관련 hookspec 과 extras 제거 (hookspec 2.0.0)
 - 🔒 `ddoc serve` 를 키 없이 띄우면 이 컴퓨터만 상대 (낯선 `Host` 와 다른 사이트의 변경 요청은 403,

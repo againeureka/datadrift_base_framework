@@ -57,8 +57,8 @@ def test_zoo_regime_shift_report_evidence(tmp_path):
     ("creeping_degradation", {"shift_and_spread"}),
     # a daily rhythm is not drift
     ("rhythm_not_drift", {"stable"}),
-    # the rainy season: dew point and humidity step up
-    ("weather_station", {"level_shift", "shift_and_spread"}),
+    # the rainy season: dew point rises and narrows, humidity steps up
+    ("weather_station", {"shift_and_narrow", "level_shift", "shift_and_spread"}),
 ])
 def test_zoo_case_reads_as_its_story(tmp_path, case, expected):
     ref, cur = _make(case, tmp_path)

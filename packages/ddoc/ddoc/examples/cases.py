@@ -105,10 +105,10 @@ CASES: List[Case] = [
     Case("monsoon", "☂", "DRIFT", {
         "en": {"title": "A weather station as the rainy season sets in",
                "story": "Ten-minute readings from a real home weather station, the last two weeks of June against the first two of July. From about 5 July, humid and rainy days set in.",
-               "look": "Dew point and humidity step up: not a fault but a new season. The verdict is DRIFT and the job is a new baseline. The rain totals only grow, so they are set aside."},
+               "look": "Dew point and humidity step up, dew point also narrowing (shift with narrower spread): not a fault but a new season. The verdict is DRIFT and the job is a new baseline. The rain totals only grow, so they are set aside."},
         "ko": {"title": "장마가 시작된 기상관측소",
                "story": "실제 가정용 기상관측소의 10분 기록, 6월 말 2주와 7월 초 2주. 7월 5일 무렵부터 습하고 비 오는 날이 이어졌습니다.",
-               "look": "이슬점과 습도가 한 단계 올라섰습니다. 고장이 아니라 계절이 바뀐 것이라 판정은 DRIFT, 할 일은 기준 데이터 갱신입니다. 늘어나기만 하는 누적 강우 열은 비교에서 빠집니다."}},
+               "look": "이슬점과 습도가 한 단계 올라섰고, 이슬점은 폭까지 좁아졌습니다(이동·수축형). 고장이 아니라 계절이 바뀐 것이라 판정은 DRIFT, 할 일은 기준 데이터 갱신입니다. 늘어나기만 하는 누적 강우 열은 비교에서 빠집니다."}},
          ",".join(weather.header()), _weather("monsoon"), real=True),
     Case("yearly-reset", "↺", "OK", {
         "en": {"title": "The day a yearly rain total started over",

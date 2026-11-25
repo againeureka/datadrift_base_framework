@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import random
+import re
 import string
 
 import pytest
@@ -70,6 +71,22 @@ def test_level_shift_and_spread_change_and_tail_outliers(tmp_path):
     assert "shift_and_spread" not in by  # neither a wider spread nor spikes alone is a move
 
 
+def test_shift_with_narrower_spread(tmp_path):
+    # moved and narrowed (×0.5, and ×0.75 where the spread alone would be "about the
+    # same"), against narrowed in place
+    header = "narrow,mild,squeeze,id"
+    ref = list(zip(_gauss(50, 5), _gauss(50, 5), _gauss(50, 5), range(N)))
+    cur = list(zip(_gauss(55, 2.5), _gauss(55, 3.75), _gauss(50, 2.5), range(N)))
+    _, cards = _read(tmp_path, header, ref, cur)
+    by = {c["code"]: set(c["attrs"]) for c in cards if c["match"] == "match" and "attrs" in c}
+    assert by["shift_and_narrow"] == {"narrow", "mild"}
+    assert by["spread_change"] == {"squeeze"}
+    assert not {"level_shift", "shift_and_spread"} & set(by)
+    card = next(c for c in cards if c["code"] == "shift_and_narrow")
+    line = ar.card_text(card, "ko")["signals"][0]
+    assert re.fullmatch(r"narrow: 평균 [\d.]+ → [\d.]+ \([\d.]+σ\), 표준편차 [\d.]+ → [\d.]+ \(×0\.\d\d\)", line)
+
+
 def test_stuck_values_numeric_and_categorical(tmp_path):
     ref = [[x, rng.choice("AB")] for x in _gauss(10, 2)]
     cur = [[7.0, "A" if i % 50 else "B"] for i in range(N)]
@@ -136,7 +153,6 @@ def test_near_is_an_early_signal_not_a_match(tmp_path):
 
 @pytest.mark.parametrize("code", sorted(ar.CATALOG))
 def test_catalog_entries_agree_across_languages(code):
-    import re
     en, ko = ar.CATALOG[code]["en"], ar.CATALOG[code]["ko"]
     assert set(en) == set(ko)
     assert set(re.findall(r"{(\w+)}", en["signal"])) == set(re.findall(r"{(\w+)}", ko["signal"]))

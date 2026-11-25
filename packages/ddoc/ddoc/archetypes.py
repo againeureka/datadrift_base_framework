@@ -31,7 +31,7 @@ EMBED_SEPARATION = 0.5     # embedding neighbour mixing ≤ 0.5 (1 − mixing �
 UNIT_RATIO = 2.0           # mean moved by at least ×2 (or ÷2) ...
 UNIT_COHERENCE = 0.2       # ... and the std by the same factor (|ln(mean/std ratio)| ≤ 0.2)
 BULK_STEADY = 1.25         # the middle half kept its width within ×1.25
-SPREAD_WITH_SHIFT = 1.25   # spread growth that counts when the values also moved
+SPREAD_WITH_SHIFT = 1.25   # a spread change (wider or narrower) that counts when the values also moved
 STUCK_SHARE = 0.95         # one value holds ≥ 95 % of the current data ...
 STUCK_REF_SHARE = 0.8      # ... where the baseline's top value held ≤ 80 %
 _FACTORS = (10, 100, 1000, 60, 3600, 24)
@@ -39,8 +39,9 @@ _FACTORS = (10, 100, 1000, 60, 3600, 24)
 
 DATA_CODES = ("schema_change", "small_sample", "embedding_shift", "regime_shift", "local_shift",
               "hidden_change", "stable")
-ATTR_CODES = ("unit_change", "stuck_values", "shift_and_spread", "level_shift", "spread_change",
-              "tail_outliers", "missing_surge", "new_category", "vanished_category", "mix_shift")
+ATTR_CODES = ("unit_change", "stuck_values", "shift_and_spread", "shift_and_narrow", "level_shift",
+              "spread_change", "tail_outliers", "missing_surge", "new_category", "vanished_category",
+              "mix_shift")
 
 
 # ── Measuring ─────────────────────────────────────────────────────────
@@ -115,6 +116,10 @@ def _nearest_factor(ratio: float) -> Optional[float]:
     return None
 
 
+# the general numeric patterns a specific reading explains away
+_GENERAL = frozenset({"level_shift", "spread_change", "shift_and_spread", "shift_and_narrow", "tail_outliers"})
+
+
 def _attr_cards(name: str, m: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Archetypes for one attribute, most specific first; a specific
     match (unit change, degradation) hides the general ones it explains."""
@@ -133,7 +138,7 @@ def _attr_cards(name: str, m: Dict[str, Any]) -> List[Dict[str, Any]]:
             if coherent and big >= UNIT_RATIO:
                 add("unit_change", "match", mean_ref=m["mean_ref"], mean_cur=m["mean_cur"],
                     ratio=ratio, spread=spread, factor=_nearest_factor(ratio))
-                explained |= {"level_shift", "spread_change", "shift_and_spread", "tail_outliers"}
+                explained |= _GENERAL
         if m.get("std_ref") and m.get("std_cur") == 0:
             # Stuck on the baseline's own most common value (0 rain in a dry
             # week) is often a quiet period, not a stalled sensor: say so.
@@ -142,7 +147,7 @@ def _attr_cards(name: str, m: Dict[str, Any]) -> List[Dict[str, Any]]:
                      and math.isclose(mode["value"], m["mean_cur"], rel_tol=1e-6, abs_tol=1e-9))
             add("stuck_values", "match", value=m.get("mean_cur"), share=1.0,
                 **({"ref_share": mode["share"]} if usual else {}))
-            explained |= {"level_shift", "spread_change", "shift_and_spread", "tail_outliers"}
+            explained |= _GENERAL
         shift, dist, out_share = m.get("shift") or 0.0, m.get("spread_dist") or 1.0, m.get("out", 0.0)
         # Outliers in the tails: the middle of the data stayed (median and
         # interquartile width), yet values beyond the baseline range showed
@@ -154,17 +159,22 @@ def _attr_cards(name: str, m: Dict[str, Any]) -> List[Dict[str, Any]]:
             st = _status([(out_share, OUT_OF_RANGE)])
             add("tail_outliers", st, out=out_share)
             if st == "match":
-                explained |= {"level_shift", "spread_change", "shift_and_spread"}
+                explained |= {"level_shift", "spread_change", "shift_and_spread", "shift_and_narrow"}
         grew = (spread or 1.0) > 1
-        if grew:
-            # two signals backing each other: a lower bar for the spread.
-            # (Values outside the baseline range do not count as a move:
-            # a wider spread produces them by itself.)
+        narrowed = spread is not None and spread < 1
+        if grew or narrowed:
+            # Moved and changed width: two signals backing each other, so a
+            # lower bar for the width, the same either way. (Values outside
+            # the baseline range do not count as a move: a wider spread
+            # produces them by itself.)
             st = _status([(dist, SPREAD_WITH_SHIFT), (shift, MEAN_SHIFT_STD)])
-            if st:
+            if st and grew:
                 add("shift_and_spread", st, shift=shift, spread=spread, out=out_share)
-                if st == "match":
-                    explained |= {"level_shift", "spread_change", "tail_outliers"}
+            elif st:
+                add("shift_and_narrow", st, mean_ref=m.get("mean_ref"), mean_cur=m.get("mean_cur"),
+                    std_ref=m.get("std_ref"), std_cur=m.get("std_cur"), shift=shift, spread=spread)
+            if st == "match":
+                explained |= {"level_shift", "spread_change", "tail_outliers"}
         calm_spread = dist < SPREAD_RATIO
         if calm_spread:
             add("level_shift", _status([(shift, MEAN_SHIFT_STD)]),
@@ -416,6 +426,20 @@ CATALOG: Dict[str, Dict[str, Dict[str, Any]]] = {
                "caveat": "'값이 올랐다'로만 읽지 마세요. 데이터의 일관성 자체가 떨어졌을 수 있습니다.",
                "signal": "{attr}: 평균 {shift}σ 이동, 산포 ×{spread}, 기준 범위 밖 {out}"},
     },
+    "shift_and_narrow": {
+        "en": {"title": "Shift with narrower spread",
+               "meaning": "The values moved to one side and gathered closer together. Common when values pile up against a limit or a target, and when only a narrow part of a once varied population is left.",
+               "causes": ["Values pressing against a limit (humidity near saturation, a full queue, a price cap)", "A filter or a change of source that leaves a narrower group", "Control to a new target (a process or thermostat setpoint)", "Data that mixed several sources now coming from one"],
+               "actions": ["Check whether the values gather at a measuring limit, a setpoint or a cap", "Find the part of the baseline's range that is now empty: which group dropped out", "Compare the period with changes to filters, extraction conditions or setpoints"],
+               "caveat": "Do not read narrower as \"more stable\": only part of the range the baseline covered may be left.",
+               "signal": "{attr}: mean {mean_ref} → {mean_cur} ({shift}σ), std {std_ref} → {std_cur} (×{spread})"},
+        "ko": {"title": "이동·수축형",
+               "meaning": "값이 한쪽으로 옮겨가면서 좁게 모였습니다. 값이 한계나 목표값 쪽으로 몰릴 때, 여러 성격이 섞여 있던 데이터 중 좁은 일부만 남았을 때 흔한 모습입니다.",
+               "causes": ["한계값 쪽으로 몰림 (포화에 가까운 습도, 가득 찬 대기열, 가격 상한)", "필터나 출처 변경으로 좁은 집단만 남음", "새 목표값에 맞춘 제어 (공정·온도 설정값)", "여러 출처가 섞이던 데이터가 한 출처로 줄어듦"],
+               "actions": ["값이 모인 곳이 측정 한계·설정값·상한과 맞는지 확인", "기준 범위 중 지금 비어 있는 쪽을 찾아 어떤 집단이 빠졌는지 확인", "필터·추출 조건·설정값의 변경 이력과 기간 대조"],
+               "caveat": "좁아졌다고 '더 안정됐다'로 읽지 마세요. 기준이 다루던 범위 중 일부만 남았을 수 있습니다.",
+               "signal": "{attr}: 평균 {mean_ref} → {mean_cur} ({shift}σ), 표준편차 {std_ref} → {std_cur} (×{spread})"},
+    },
     "level_shift": {
         "en": {"title": "Level shift",
                "meaning": "The distribution kept its shape but moved as a whole.",
@@ -604,6 +628,8 @@ WHEN: Dict[str, Dict[str, str]] = {
                      "ko": "현재 값이 거의 하나 (수치형은 산포 0, 범주형은 한 값이 {stuck} 이상 — 기준에서는 최빈값이 {stuck_ref} 이하)"},
     "shift_and_spread": {"en": "mean moved {shift} or more and the spread grew ×{spread_shift} or more",
                          "ko": "평균이 {shift} 이상 이동하고 산포도 {spread_shift}배 이상 커짐"},
+    "shift_and_narrow": {"en": "mean moved {shift} or more and the spread shrank to 1/{spread_shift} or less",
+                         "ko": "평균이 {shift} 이상 이동하고 산포는 1/{spread_shift} 이하로 좁아짐"},
     "level_shift": {"en": "mean moved {shift} or more; spread within ×{spread}",
                     "ko": "평균이 {shift} 이상 이동, 산포는 {spread}배 미만으로 비슷"},
     "spread_change": {"en": "mean moved less than {shift}; spread changed ×{spread} or more (or ÷{spread})",
