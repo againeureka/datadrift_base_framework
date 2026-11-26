@@ -24,6 +24,7 @@
 ## 레퍼런스
 
 - **[지금 상태](status.md)** — 무엇이 되고, 일부만 되고, 남았나 (확인한 방법과 함께)
+- **[evidently 플러그인 점수 반전 — 확인 보고](reports/evidently-plugin-scores.md)** — 원 저장소 `main` 에 있는 버그의 영향 범위, 재현, 수정
 - **[판정 민감도](sensitivity.md)** — 점수 방식 후보별 판정·오경보·검출 한계 비교 (결정 전)
 - **[용어](glossary.md)** — 판정, 유형 판독, 이웃 섞임 등
 - **[치트시트](cheatsheet.md)** — 상황별로 그대로 칠 명령 (`ddoc scenarios`, `./run.sh menu`)

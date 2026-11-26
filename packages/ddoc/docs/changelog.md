@@ -21,7 +21,7 @@
   "잡음 범위 안" 줄로 보여 줌. Markdown 진단서에 판정 근거 절. 결과 JSON 의 `diagnosis.noise` 와 요약의 `distance`
 - ⚖️ **evidently 도 같은 척도** — `ddoc diff --detector evidently:*` 의 판정을 같은 CSV 의 내장 비교기 점수로 내리고
   Evidently 의 열별 검정은 `details`·`plugin_scores` 에 남김. 거리 검정(Wasserstein·Jensen–Shannon)의 값을 p값으로
-  읽어 크게 바뀐 열이 0점이 되던 플러그인 버그 수정
+  읽어 크게 바뀐 열이 0점이 되던 플러그인 버그 수정 ([확인 보고](reports/evidently-plugin-scores.md))
 - ✨ `ddoc diff` 한 줄 판정 (OK / DRIFT / BLIND), `--report` HTML 진단서, Drift Zoo, GitHub Action
 - ⚡ 큰 CSV 는 쪽마다 균등 무작위 표본(기본 20만 행, `--max-rows`)으로 비교·프로필, 진단서에 표시
 - ✨ 임베딩 지도에 열어 볼 항목(기준·현재의 대표 항목, 기준과 가장 다른 현재 항목)을 파일 이름으로
