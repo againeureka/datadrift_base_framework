@@ -23,6 +23,12 @@ and measures three things:
 3. the smallest change each rule catches in 90 % of runs, in plain units
    (σ of a mean shift, spread ratio, %p of a mix shift, ...).
 
+A fourth part checks rows in time order, where neighbours resemble each
+other: the noise test counting rows one by one against counting them by
+the day (:func:`ddoc.scoring.time_blocks`), on generated ten-minute
+series whose days resemble the days before them to a chosen degree, and
+on the real weather station's stories.
+
     python zoo/sensitivity.py           # Markdown tables (docs/sensitivity.md)
 
 Every comparison goes through the built-in comparator (`csv_diff`) on CSV
@@ -49,7 +55,9 @@ sys.path.insert(0, str(HERE.parent))
 from drills import DRILLS  # noqa: E402
 
 from ddoc import archetypes as ar  # noqa: E402
-from ddoc.cli.commands.diff import csv_diff  # noqa: E402
+from ddoc import scoring  # noqa: E402
+from ddoc.cli.commands.diff import compute_verdict, csv_diff  # noqa: E402
+from ddoc.examples import weather  # noqa: E402
 from ddoc.scoring import ALPHA, g_test_p, js_divergence  # noqa: E402
 
 BINS = 20
@@ -278,6 +286,75 @@ def detection(rules: List[Rule], n: int, tmp: Path) -> Dict[str, Dict[str, Optio
 # ── Output ──────────────────────────────────────────────────────────────
 
 
+# ── Rows in time order ─────────────────────────────────────────────────
+
+TS_DAYS = 14
+TS_REPS = 100
+TS_RHO = (0.0, 0.3, 0.5, 0.7)     # how much a day's weather resembles the day before
+TS_SHIFTS = (0.0, 1.0, 2.0)       # the current period's level, in σ of the daily level
+
+
+def _ten_minute_days(rng, rho: float, shift: float, start: str) -> pd.DataFrame:
+    """``TS_DAYS`` days of ten-minute readings: a daily cycle, each day's
+    own level (σ = 2, correlated ``rho`` with the day before), and a
+    wobble that carries over from one reading to the next."""
+    level = rng.normal(0, 2)
+    values = []
+    for day in range(TS_DAYS):
+        if day:
+            level = rho * level + rng.normal(0, 2 * math.sqrt(1 - rho * rho))
+        wobble = 0.0
+        for step in range(144):
+            wobble = 0.95 * wobble + rng.normal(0, 0.3)
+            values.append(level + 2 * shift + 4 * math.sin(2 * math.pi * step / 144) + wobble)
+    times = pd.date_range(start, periods=len(values), freq="10min")
+    return pd.DataFrame({"time": times.strftime("%Y-%m-%d %H:%M"), "reading": np.round(values, 2)})
+
+
+class _RowsOneByOne:
+    """The noise test as before: every row on its own, time or not."""
+
+    def __enter__(self):
+        self.saved, scoring.time_blocks = scoring.time_blocks, lambda *_: None
+
+    def __exit__(self, *_):
+        scoring.time_blocks = self.saved
+
+
+def _verdict(ref_csv: Path, cur_csv: Path) -> Tuple[str, Dict[str, Any]]:
+    payload = csv_diff([str(ref_csv)], [str(cur_csv)])
+    verdict = compute_verdict(payload, threshold=0.15, attr_threshold=0.25,
+                              evidence=payload["distributions"])[0]
+    return verdict, payload
+
+
+def time_series(tmp: Path) -> Tuple[Dict[Tuple[float, float], Tuple[float, float]], List[Dict[str, Any]]]:
+    """DRIFT rates (rows one by one, by the day) on generated series, and
+    the weather station's stories both ways."""
+    rng = np.random.default_rng(31)
+    rates = {}
+    for rho in TS_RHO:
+        for shift in TS_SHIFTS:
+            hits = [0, 0]
+            for _ in range(TS_REPS):
+                _ten_minute_days(rng, rho, 0.0, "2026-06-01").to_csv(tmp / "ref.csv", index=False)
+                _ten_minute_days(rng, rho, shift, "2026-07-01").to_csv(tmp / "cur.csv", index=False)
+                with _RowsOneByOne():
+                    hits[0] += _verdict(tmp / "ref.csv", tmp / "cur.csv")[0] == "DRIFT"
+                hits[1] += _verdict(tmp / "ref.csv", tmp / "cur.csv")[0] == "DRIFT"
+            rates[(rho, shift)] = (hits[0] / TS_REPS, hits[1] / TS_REPS)
+    stories = []
+    for story in weather.STORIES:
+        ref, cur = weather.write_pair(story, tmp / story)
+        with _RowsOneByOne():
+            before, plain = _verdict(ref, cur)
+        after, payload = _verdict(ref, cur)
+        stories.append({"story": story, "before": (before, plain["overall_score"]),
+                        "after": (after, payload["overall_score"]),
+                        "kept": sorted(k for k, v in payload["attribute_drifts"].items() if v > 0)})
+    return rates, stories
+
+
 def _pct(x: float) -> str:
     return "0" if x == 0 else ("<0.1%" if x < 0.001 else f"{x * 100:.1f}%")
 
@@ -339,6 +416,24 @@ def markdown() -> str:
                 "—" if det[1000][name][r.key] is None else f"{det[1000][name][r.key]:g}{unit}" for r in SWEEP) + " |")
         sweep_agree = [sum(r.verdict(row["cols"]) == row["expect"] for row in rows) for r in SWEEP]
         lines.append("| 드릴·이야기 일치 | " + " | ".join(f"{a}/{len(rows)}" for a in sweep_agree) + " |")
+
+        rates, stories = time_series(tmp)
+        lines += ["", "### 5. 시간 순서 기록", "",
+                  f"쪽마다 {TS_DAYS}일의 10분 간격 기록(하루 주기 + 날마다 다른 수준 + 이웃 값끼리 닮은 흔들림)을 "
+                  f"{TS_REPS}번 비교했습니다. ρ 는 하루의 수준이 전날과 닮은 정도(상관), 이동은 현재 기간의 수준을 "
+                  "날마다의 수준 표준편차 단위로 올린 것입니다. 칸은 DRIFT 로 판정된 비율, 행 단위 → 하루 단위. "
+                  "이동 0 의 DRIFT 는 모두 오경보입니다.", "",
+                  "| 하루끼리 닮은 정도 | " + " | ".join("변화 없음" if s == 0 else f"수준 +{s:g}σ" for s in TS_SHIFTS)
+                  + " |", "|---|" + "---|" * len(TS_SHIFTS)]
+        for rho in TS_RHO:
+            lines.append(f"| ρ = {rho:g} | " + " | ".join(
+                f"{_pct(rates[(rho, s)][0])} → {_pct(rates[(rho, s)][1])}" for s in TS_SHIFTS) + " |")
+        lines += ["", "실측 기상관측소의 이야기([weather_station](../zoo/weather_station/)), 판정(점수):", "",
+                  "| 이야기 | 행 단위 | 하루 단위 (현행) | 점수가 남은 열 |", "|---|---|---|---|"]
+        for row in stories:
+            (b, bs), (a, as_) = row["before"], row["after"]
+            lines.append(f"| `{row['story']}` | {b} ({bs:.3f}) | {a} ({as_:.3f}) | "
+                         + (", ".join(row["kept"]) or "—") + " |")
     return "\n".join(lines)
 
 

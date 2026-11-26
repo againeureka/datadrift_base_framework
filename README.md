@@ -39,8 +39,9 @@ Three ways to use it:
 - **One scale for every kind of data.** Each attribute — a CSV column, a property
   measured on every image, text or clip, the counts of a category, the embedding
   map — gets the same score: the Jensen–Shannon distance, 0 when sampling noise
-  explains the difference. The same thresholds hold everywhere, and small samples
-  do not raise alarms on noise ([why](packages/ddoc/docs/sensitivity.md), Korean).
+  explains the difference. The same thresholds hold everywhere, small samples do
+  not raise alarms on noise, and readings in time order are weighed by the day,
+  not row by row ([why](packages/ddoc/docs/sensitivity.md), Korean).
 - **Recipes.** A YAML DSL (`ddoc recipe run <file>`) chains fetch → analyze →
   report → export steps with variable substitution, so an entire drift-check
   pipeline is a reviewable text file.

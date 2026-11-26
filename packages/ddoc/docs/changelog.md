@@ -12,6 +12,9 @@
   잰 값(vision·text·audio·timeseries), categorical 개수, 임베딩 지도(`embedding_separation`)를 모두 같은 0–1
   척도로 매김. 드릴·이야기 21/21(이전 11/21), 같은 분포 30행 표의 오경보 97% → 1.5%. 점수 숫자가 커지고
   (발산 0.06 → 거리 0.25) 잠복 변화형의 뜻이 "조건은 채웠지만 잡음 범위 안"으로 바뀜 ([판정 민감도](sensitivity.md))
+- ⚖️ **시간 순서 기록은 하루 단위로 잡음 검정** — 시간 열(timeseries 플러그인은 `timestamp_column`)이 있으면 행을
+  날짜로 묶어 두 기간의 차이가 날마다의 차이를 넘는지 봄(2차 Rao–Scott 보정). 같은 날씨의 두 기간을 행 단위로는
+  71–95% DRIFT 로 판정했고, 하루 단위로는 0–14%. 실측 기상 기록의 연간 초기화·나흘 대 나흘은 OK, 장마·계절은 DRIFT
 - ✨ `ddoc diff` 한 줄 판정 (OK / DRIFT / BLIND), `--report` HTML 진단서, Drift Zoo, GitHub Action
 - ⚡ 큰 CSV 는 쪽마다 균등 무작위 표본(기본 20만 행, `--max-rows`)으로 비교·프로필, 진단서에 표시
 - ✨ 임베딩 지도에 열어 볼 항목(기준·현재의 대표 항목, 기준과 가장 다른 현재 항목)을 파일 이름으로

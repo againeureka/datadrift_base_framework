@@ -374,15 +374,32 @@ def _profile(frame, files: List[str], time_cols: Dict[str, Any], sample_rows: in
     return out
 
 
-def _numeric_column(r, c, base: Dict[str, Any], bins: int = 20
+def _noise_score(rh, ch, cells: Optional[Tuple[Any, Any]], blocks: Optional[Tuple[Any, Any]],
+                 k: int, summary: Dict[str, Any]) -> float:
+    """Score two count vectors over ``k`` bins and put the noise test's p
+    in ``summary`` (``noise_p``). With ``blocks`` (each row's block label,
+    see :func:`ddoc.scoring.time_blocks`) and ``cells`` (each row's bin),
+    the test counts the blocks, and the design effect rides along."""
+    from ...scoring import block_counts, score, score_blocks
+
+    if blocks is None or cells is None:
+        value, summary["noise_p"] = score(list(rh), list(ch))
+        return value
+    value, summary["noise_p"], effect = score_blocks(block_counts(blocks[0], cells[0], k),
+                                                     block_counts(blocks[1], cells[1], k))
+    summary["design_effect"] = round(effect, 1)
+    return value
+
+
+def _numeric_column(r, c, base: Dict[str, Any], bins: int = 20,
+                    blocks: Optional[Tuple[Any, Any]] = None,
                     ) -> Tuple[float, Dict[str, Any], Optional[Dict[str, Dict[str, int]]]]:
     """One numeric attribute (two series without gaps): its score on a
     shared-range histogram (see :mod:`ddoc.scoring`), its summary for the
     diagnosis (with the noise test's p as ``noise_p``), and the ref/cur
-    counts shown as evidence (None when every value is the same)."""
+    counts shown as evidence (None when every value is the same).
+    ``blocks``: each value's block label, for rows in time order."""
     import numpy as np
-
-    from ...scoring import score
 
     lo, hi = float(min(r.min(), c.min())), float(max(r.max(), c.max()))
     summary = {"kind": "numeric", **base, **_numeric_summary(r, c)}
@@ -399,7 +416,8 @@ def _numeric_column(r, c, base: Dict[str, Any], bins: int = 20
         rh = [int(rvc.get(v, 0)) for v in values]
         ch = [int(cvc.get(v, 0)) for v in values]
         summary["discrete"] = True
-        value, summary["noise_p"] = score(rh, ch)
+        cells = ((r.to_numpy() - lo).astype(int), (c.to_numpy() - lo).astype(int))
+        value = _noise_score(rh, ch, cells, blocks, len(rh), summary)
         return value, summary, {
             "ref": {str(v): n for v, n, m in zip(values, rh, ch) if n or m},
             "cur": {str(v): m for v, n, m in zip(values, rh, ch) if n or m},
@@ -408,7 +426,10 @@ def _numeric_column(r, c, base: Dict[str, Any], bins: int = 20
     rh, _ = np.histogram(r, bins=edges)
     ch, _ = np.histogram(c, bins=edges)
     labels = [f"{edges[i]:.4g}–{edges[i + 1]:.4g}" for i in range(len(edges) - 1)]
-    value, summary["noise_p"] = score(rh.tolist(), ch.tolist())
+    # the bin of each value, as np.histogram counts it ([a, b), the last closed)
+    cells = tuple(np.minimum(np.searchsorted(edges, x.to_numpy(), side="right") - 1, bins - 1)
+                  for x in (r, c))
+    value = _noise_score(rh.tolist(), ch.tolist(), cells, blocks, bins, summary)
     return value, summary, {
         "ref": {labels[i]: int(rh[i]) for i in range(len(labels)) if rh[i] or ch[i]},
         "cur": {labels[i]: int(ch[i]) for i in range(len(labels)) if rh[i] or ch[i]},
@@ -420,8 +441,13 @@ def attribute_evidence(values: Dict[str, Dict[str, List[float]]], bins: int = 20
     """Summaries, ref/cur distributions and scores from a plugin's measured
     values per item (``{attribute: {"ref": [...], "cur": [...]}}``, e.g.
     the brightness of every image). They are read and scored exactly as
-    CSV columns are, so every kind of data is judged on the same scale."""
+    CSV columns are, so every kind of data is judged on the same scale.
+    Values in time order may bring their times (``"ref_time"``,
+    ``"cur_time"``: lists as long as the values); the noise test then
+    groups them as it groups a CSV's rows (``noise_blocks``)."""
     import pandas as pd
+
+    from ...scoring import time_blocks
 
     summaries: Dict[str, Any] = {}
     distributions: Dict[str, Any] = {}
@@ -429,12 +455,21 @@ def attribute_evidence(values: Dict[str, Dict[str, List[float]]], bins: int = 20
     for name, sides in values.items():
         if not isinstance(sides, dict):
             continue
-        r = pd.to_numeric(pd.Series(sides.get("ref") or [], dtype=object), errors="coerce").dropna()
-        c = pd.to_numeric(pd.Series(sides.get("cur") or [], dtype=object), errors="coerce").dropna()
+        r = pd.to_numeric(pd.Series(sides.get("ref") or [], dtype=object), errors="coerce")
+        c = pd.to_numeric(pd.Series(sides.get("cur") or [], dtype=object), errors="coerce")
+        keep_r, keep_c = r.notna().to_numpy(), c.notna().to_numpy()
+        r, c = r[keep_r], c[keep_c]
         if r.empty or c.empty:
             continue
+        times = sides.get("ref_time"), sides.get("cur_time")
+        grouped = (time_blocks(pd.Series(times[0])[keep_r], pd.Series(times[1])[keep_c])
+                   if all(isinstance(t, list) for t in times)
+                   and (len(times[0]), len(times[1])) == (len(keep_r), len(keep_c)) else None)
         scores[name], summaries[name], dist = _numeric_column(
-            r.astype(float), c.astype(float), {"n": {"ref": int(len(r)), "cur": int(len(c))}}, bins)
+            r.astype(float), c.astype(float), {"n": {"ref": int(len(r)), "cur": int(len(c))}}, bins,
+            blocks=grouped[:2] if grouped else None)
+        if grouped:
+            summaries[name]["noise_blocks"] = grouped[2]
         if dist is not None:
             distributions[name] = dist
     return summaries, distributions, scores
@@ -459,7 +494,10 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
     types, the period covered (from a date/time column), which columns
     exist on one side only, and — when ``sample_rows`` > 0 — the first
     rows of each side. Date/time columns give the period and are not
-    compared: two periods always differ in their timestamps.
+    compared: two periods always differ in their timestamps. With a
+    date/time column, the noise tests count blocks of rows close in time
+    (``profile["noise_blocks"]``, :func:`ddoc.scoring.time_blocks`) and
+    each summary gets the ``design_effect``.
     """
     import numpy as np
     import pandas as pd
@@ -472,6 +510,8 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
     shared = [c for c in ref.columns if c in cur.columns and c not in time_cols]
     running = _running_columns(ref, cur, shared, ref_time, cur_time)
     shared = [c for c in shared if c not in running]
+    from ...scoring import time_blocks
+
     if not shared:
         raise ValueError(
             f"no shared columns between ref {list(ref.columns)} and cur {list(cur.columns)}"
@@ -488,33 +528,49 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
         },
     }
 
+    # Rows in time order resemble their neighbours: the noise test counts
+    # blocks of them (days, or stretches of a short period), not rows.
+    grouped = None
+    if time_cols:
+        grouped = time_blocks(ref_time[time_cols[0]].reindex(ref.index),
+                              cur_time[time_cols[0]].reindex(cur.index))
+    if grouped:
+        profile["noise_blocks"] = {"column": str(time_cols[0]), **grouped[2]}
+
     attribute_drifts: Dict[str, float] = {}
     distributions: Dict[str, Dict[str, Dict[str, float]]] = {}
     summaries: Dict[str, Dict[str, Any]] = {}
-    from ...scoring import g_test_p, score
+    from ...scoring import block_counts, blocked_p, g_test_p
 
     for col in shared:
-        r, c = ref[col].dropna(), cur[col].dropna()
+        present = ref[col].notna().to_numpy(), cur[col].notna().to_numpy()
+        r, c = ref[col][present[0]], cur[col][present[1]]
         gaps = (len(ref) - len(r), len(cur) - len(c))
+        blocks = (grouped[0][present[0]], grouped[1][present[1]]) if grouped else None
         base = {
             "n": {"ref": int(len(ref)), "cur": int(len(cur))},
             "missing": {"ref": _rate(gaps[0], len(ref)), "cur": _rate(gaps[1], len(cur))},
             # missing values tested on their own: they never show in the value distribution
-            "missing_p": g_test_p([gaps[0], len(r)], [gaps[1], len(c)]),
+            "missing_p": (blocked_p(block_counts(grouped[0], present[0], 2),
+                                    block_counts(grouped[1], present[1], 2))[0] if grouped
+                          else g_test_p([gaps[0], len(r)], [gaps[1], len(c)])),
         }
         if r.empty and c.empty:
             continue
         if pd.api.types.is_numeric_dtype(r) and pd.api.types.is_numeric_dtype(c):
-            attribute_drifts[col], summaries[col], dist = _numeric_column(r, c, base, bins)
+            attribute_drifts[col], summaries[col], dist = _numeric_column(r, c, base, bins, blocks)
             if dist is not None:
                 distributions[col] = dist
         else:
-            rvc = r.astype(str).value_counts()
-            cvc = c.astype(str).value_counts()
+            rs, cs = r.astype(str), c.astype(str)
+            rvc, cvc = rs.value_counts(), cs.value_counts()
             keys = list(dict.fromkeys([*rvc.index, *cvc.index]))
-            attribute_drifts[col], noise_p = score([rvc.get(k, 0) for k in keys], [cvc.get(k, 0) for k in keys])
-            summaries[col] = {"kind": "categorical", **base, "noise_p": noise_p,
-                              **_category_changes(rvc.to_dict(), cvc.to_dict())}
+            code = {k: i for i, k in enumerate(keys)}
+            summaries[col] = {"kind": "categorical", **base}
+            attribute_drifts[col] = _noise_score(
+                [rvc.get(k, 0) for k in keys], [cvc.get(k, 0) for k in keys],
+                (rs.map(code).to_numpy(), cs.map(code).to_numpy()), blocks, len(keys), summaries[col])
+            summaries[col].update(_category_changes(rvc.to_dict(), cvc.to_dict()))
             # Evidence: top categories by combined mass + an "(other)" bucket.
             top = list((rvc.add(cvc, fill_value=0)).sort_values(ascending=False).index[:8])
             def _bucket(vc) -> Dict[str, float]:

@@ -118,8 +118,10 @@ class DOCTimeSeriesPlugin:
         }
     
     def _column_values(self, data_path) -> Dict[str, Any]:
-        """``{<dataset>/<col>: [values...]}`` for the numeric columns of the
-        ``ddoc.yaml``-declared timeseries datasets under ``data_path``."""
+        """``{<dataset>/<col>: {"values": [...], "times": [...]}}`` for the
+        numeric columns of the ``ddoc.yaml``-declared timeseries datasets
+        under ``data_path``; ``times`` are the rows' timestamps as text
+        (None if they do not parse), so ddoc can tell rows close in time."""
         out: Dict[str, Any] = {}
         input_path = Path(data_path)
         if not input_path.is_dir():
@@ -134,10 +136,20 @@ class DOCTimeSeriesPlugin:
                 df = pd.read_csv(item / config['csv_file'])
             except Exception:
                 continue
+            stamps = None
+            if config['timestamp_column'] in df.columns:
+                parsed = pd.to_datetime(df[config['timestamp_column']], errors="coerce")
+                if parsed.notna().any():
+                    stamps = parsed
             for col in config.get('numeric_columns', []):
                 if col in df.columns:
-                    values = pd.to_numeric(df[col], errors="coerce").dropna()
-                    out[f"{item.name}/{col}"] = [float(v) for v in values]
+                    values = pd.to_numeric(df[col], errors="coerce")
+                    keep = values.notna()
+                    out[f"{item.name}/{col}"] = {
+                        "values": [float(v) for v in values[keep]],
+                        "times": (None if stamps is None else
+                                  [t.isoformat() if pd.notna(t) else None for t in stamps[keep]]),
+                    }
         return out
 
     def _compute_attributes_from_path(self, data_path) -> Dict[str, Any]:
@@ -343,10 +355,14 @@ class DOCTimeSeriesPlugin:
         if data_path_ref and data_path_cur:
             ref_values = self._column_values(data_path_ref)
             cur_values = self._column_values(data_path_cur)
-            drift_metrics['attribute_values'] = {
-                key: {"ref": ref_values[key], "cur": cur_values[key]}
-                for key in ref_values if key in cur_values
-            }
+            drift_metrics['attribute_values'] = {}
+            for key in ref_values:
+                if key not in cur_values:
+                    continue
+                pair = {"ref": ref_values[key]["values"], "cur": cur_values[key]["values"]}
+                if ref_values[key]["times"] is not None and cur_values[key]["times"] is not None:
+                    pair.update(ref_time=ref_values[key]["times"], cur_time=cur_values[key]["times"])
+                drift_metrics['attribute_values'][key] = pair
 
         return drift_metrics
 

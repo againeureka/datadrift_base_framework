@@ -124,13 +124,13 @@ CASES: List[Case] = [
                "story": "실제 가정용 기상관측소의 10분 기록, 6월 말 2주와 7월 초 2주. 7월 5일 무렵부터 습하고 비 오는 날이 이어졌습니다.",
                "look": "이슬점과 습도가 한 단계 올라섰고, 이슬점은 폭까지 좁아졌습니다(이동·수축형). 고장이 아니라 계절이 바뀐 것이라 판정은 DRIFT, 할 일은 기준 데이터 갱신입니다. 늘어나기만 하는 누적 강우 열은 비교에서 빠집니다."}},
          ",".join(weather.header()), _weather("monsoon"), real=True),
-    Case("yearly-reset", "↺", "DRIFT", {
+    Case("yearly-reset", "↺", "OK", {
         "en": {"title": "The day a yearly rain total started over",
                "story": "The same station, the second half of May against the first half of June. On 1 June the station reset its yearly rain total from 1,294 mm to 0.",
-               "look": "Compared as levels, the reset totals would top the list with a full 1.0, a device setting hiding the weather. ddoc sets aside the totals that only grow and says why; what is left is the weather, whose dew point and pressure did move a little into June."},
+               "look": "Compared as levels, the reset totals would top the list with a full 1.0 and call it DRIFT, a device setting hiding the weather. ddoc sets aside the totals that only grow and says why. The weather left reads OK: dew point and pressure moved a little into June, but no more than one day differs from the next."},
         "ko": {"title": "연간 강우 누적값이 초기화된 날",
                "story": "같은 관측소, 5월 후반 2주와 6월 전반 2주. 6월 1일에 관측소의 연간 강우 누적값이 1,294mm에서 0으로 초기화되었습니다.",
-               "look": "누적값을 수준으로 비교하면 초기화된 열들이 1.0으로 맨 위에 올라 기기 설정이 날씨를 가립니다. ddoc은 늘어나기만 하는 누적 열을 빼고 이유를 적습니다. 남은 것은 날씨이고, 6월로 넘어가며 이슬점과 기압이 조금 움직였습니다."}},
+               "look": "누적값을 수준으로 비교하면 초기화된 열들이 1.0으로 맨 위에 올라 DRIFT가 됩니다. 기기 설정이 날씨를 가리는 것입니다. ddoc은 늘어나기만 하는 누적 열을 빼고 이유를 적습니다. 남은 날씨는 OK입니다. 6월로 넘어가며 이슬점과 기압이 조금 움직였지만, 하루하루가 서로 다른 정도를 넘지 않습니다."}},
          ",".join(weather.header()), _weather("yearly-reset"), real=True),
     Case("price-regime", "↗", "DRIFT", {
         "en": {"title": "A shop whose prices and channels moved",

@@ -9,7 +9,7 @@
     python make.py season          # 늦봄과 한여름
     python make.py next-days       # 나흘과 그다음 나흘
 
-기대 판정: monsoon DRIFT · yearly-reset OK · season DRIFT · next-days DRIFT
+기대 판정: monsoon DRIFT · yearly-reset OK · season DRIFT · next-days OK
 """
 from __future__ import annotations
 

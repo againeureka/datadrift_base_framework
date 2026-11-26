@@ -417,3 +417,66 @@ def test_values_from_a_plugin_are_read_like_csv_columns():
     assert "same" not in dists                                      # nothing to draw
     # scored like CSV columns: a clear move scores, no difference scores 0
     assert scores["sharpness"] == pytest.approx(1.0) and scores["same"] == 0.0
+
+
+def _ten_minute_log(path, days, start, level_of_day):
+    """``days`` days of ten-minute readings: each day its own level (and a
+    daily cycle), so rows of one day resemble each other."""
+    import math
+    from datetime import datetime, timedelta
+
+    rows = ["time,reading,kind"]
+    t0 = datetime.fromisoformat(start)
+    for d in range(days):
+        for step in range(144):
+            t = t0 + timedelta(days=d, minutes=10 * step)
+            value = level_of_day(d) + 3 * math.sin(2 * math.pi * step / 144)
+            kind = "wet" if (d + step // 72) % 3 == 0 else "dry"
+            rows.append(f"{t:%Y-%m-%d %H:%M},{value:.2f},{kind}")
+    path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return str(path)
+
+
+def test_rows_in_time_order_are_tested_by_the_day(tmp_path):
+    """Two fortnights of the same weather: each day has its own level, so
+    rows one by one would call them different; by the day they are not."""
+    import random
+
+    rng = random.Random(4)
+    levels = [rng.gauss(0, 2) for _ in range(28)]
+    ref = _ten_minute_log(tmp_path / "ref.csv", 14, "2026-06-01", lambda d: levels[d])
+    cur = _ten_minute_log(tmp_path / "cur.csv", 14, "2026-06-15", lambda d: levels[14 + d])
+    payload = csv_diff([ref], [cur])
+    assert payload["profile"]["noise_blocks"] == {
+        "column": "time", "ref": {"unit": "day", "blocks": 14}, "cur": {"unit": "day", "blocks": 14}}
+    reading = payload["summaries"]["reading"]
+    assert payload["attribute_drifts"]["reading"] == 0.0 and reading["design_effect"] > 5
+    assert payload["summaries"]["kind"]["kind"] == "categorical" and "design_effect" in payload["summaries"]["kind"]
+    # the same rows without their times: every row counted on its own
+    for name in ("ref.csv", "cur.csv"):
+        lines = (tmp_path / name).read_text(encoding="utf-8").splitlines()
+        (tmp_path / f"plain-{name}").write_text(
+            "\n".join(",".join(line.split(",")[1:]) for line in lines) + "\n", encoding="utf-8")
+    plain = csv_diff([str(tmp_path / "plain-ref.csv")], [str(tmp_path / "plain-cur.csv")])
+    assert "noise_blocks" not in plain["profile"] and "design_effect" not in plain["summaries"]["reading"]
+    assert plain["attribute_drifts"]["reading"] > 0.15     # beyond noise, row by row
+    # a change bigger than the days' own swings still shows
+    moved = _ten_minute_log(tmp_path / "moved.csv", 14, "2026-06-15", lambda d: levels[14 + d] + 8)
+    assert csv_diff([ref], [moved])["attribute_drifts"]["reading"] > 0.5
+
+
+def test_plugin_values_with_times_are_tested_by_the_day():
+    from ddoc.cli.commands.diff import attribute_evidence
+
+    times = [f"2026-06-{1 + i // 24:02d}T{i % 24:02d}:00" for i in range(24 * 6)]
+    day = [i // 24 for i in range(24 * 6)]
+    values = {"x": {"ref": [float(d % 3) + 0.01 * i for i, d in enumerate(day)],
+                    "cur": [float((d + 1) % 3) + 0.01 * i for i, d in enumerate(day)],
+                    "ref_time": times, "cur_time": times}}
+    summaries, _, _ = attribute_evidence(values)
+    assert summaries["x"]["noise_blocks"]["ref"] == {"unit": "day", "blocks": 6}
+    assert summaries["x"]["design_effect"] > 1
+    # times that do not line up with the values are ignored
+    values["x"]["cur_time"] = times[:-1]
+    summaries, _, _ = attribute_evidence(values)
+    assert "noise_blocks" not in summaries["x"]

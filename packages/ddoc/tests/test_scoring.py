@@ -63,3 +63,78 @@ def test_embedding_separation_is_tested_on_neighbour_counts():
     assert scoring.separation({"mixing": 0.1, "few_points": True,
                                "neighbours": {"ref": 1, "total": 50, "expected": 0.5}}) is None
     assert scoring.separation({"mixing": 0.5}) is None        # an older map without counts
+
+
+def test_f_tail_agrees_with_scipy():
+    stats = pytest.importorskip("scipy.stats")
+    for x, d1, d2 in [(0.5, 1, 1), (3.0, 2.5, 7.3), (12.0, 6.2, 80.0), (40.0, 19, 4000.0),
+                      (1.0, 30, 30), (2.0, 0.7, 5e5)]:
+        assert scoring.f_sf(x, d1, d2) == pytest.approx(stats.f.sf(x, d1, d2), rel=1e-9, abs=1e-14)
+    # beyond a million the F is read as a scaled χ²: off by about 1/d2
+    assert scoring.f_sf(2.0, 0.7, 1e7) == pytest.approx(stats.f.sf(2.0, 0.7, 1e7), rel=1e-6)
+    assert scoring.f_sf(0.0, 3, 9) == 1.0
+
+
+def _days(rng, n_days, shift=0.0):
+    """Ten-minute readings: each day its own weather, each reading close to the last."""
+    out = []
+    for _ in range(n_days):
+        level, wobble = rng.normal(0, 2) + shift, 0.0
+        for step in range(144):
+            wobble = 0.95 * wobble + rng.normal(0, 0.3)
+            out.append(level + 4 * math.sin(2 * math.pi * step / 144) + wobble)
+    return np.array(out)
+
+
+def _per_day(values, edges):
+    cells = np.minimum(np.searchsorted(edges, values, side="right") - 1, len(edges) - 2)
+    return scoring.block_counts(np.arange(len(values)) // 144, cells, len(edges) - 1)
+
+
+def test_rows_close_in_time_are_counted_by_the_block():
+    rng = np.random.default_rng(8)
+    alarms_plain = alarms_blocked = 0
+    for _ in range(40):
+        ref, cur = _days(rng, 14), _days(rng, 14)
+        edges = np.linspace(min(ref.min(), cur.min()), max(ref.max(), cur.max()), 21)
+        R, C = _per_day(ref, edges), _per_day(cur, edges)
+        alarms_plain += scoring.g_test_p(R.sum(0), C.sum(0)) < scoring.ALPHA
+        p, effect = scoring.blocked_p(R, C)
+        alarms_blocked += p < scoring.ALPHA
+        assert p >= scoring.g_test_p(R.sum(0), C.sum(0))      # never more lenient
+        assert effect > 1
+    # the same weather on both sides: rows one by one call nearly every pair different
+    assert alarms_plain >= 38 and alarms_blocked <= 1
+    # a change bigger than the days' own swings still shows
+    ref, cur = _days(rng, 14), _days(rng, 14, shift=8.0)
+    edges = np.linspace(min(ref.min(), cur.min()), max(ref.max(), cur.max()), 21)
+    value, p, effect = scoring.score_blocks(_per_day(ref, edges), _per_day(cur, edges))
+    assert p < scoring.ALPHA and value > 0.5
+
+
+def test_independent_rows_in_blocks_keep_the_plain_test():
+    rng = np.random.default_rng(9)
+    ref, cur = rng.integers(0, 5, 2000), rng.integers(0, 5, 2000)
+    R = scoring.block_counts(np.arange(2000) // 100, ref, 5)
+    C = scoring.block_counts(np.arange(2000) // 100, cur, 5)
+    p, effect = scoring.blocked_p(R, C)
+    assert effect == pytest.approx(1.0, abs=0.35)
+    assert p == pytest.approx(scoring.g_test_p(R.sum(0), C.sum(0)), rel=0.6)
+    # one block on a side: nothing to estimate the spread from
+    assert scoring.blocked_p(R.sum(0, keepdims=True), C)[0] == scoring.g_test_p(R.sum(0), C.sum(0))
+
+
+def test_time_blocks_are_days_or_equal_stretches():
+    pd = pytest.importorskip("pandas")
+    days = pd.date_range("2026-06-01", periods=14 * 144, freq="10min")
+    hours = pd.date_range("2026-06-01", periods=12 * 6, freq="10min")       # twelve hours
+    ref, cur, info = scoring.time_blocks(pd.Series(days), pd.Series(hours))
+    assert info["ref"] == {"unit": "day", "blocks": 14}
+    assert info["cur"] == {"unit": "stretch", "blocks": scoring.STRETCHES, "seconds": 7100}
+    assert len(set(ref)) == 14 and len(set(cur)) == scoring.STRETCHES
+    # text works too; a row without a time is a block of its own
+    labels = scoring.time_blocks(["2026-06-01 00:00", None, "2026-06-03 00:00", "2026-06-05 00:00"],
+                                 [str(t) for t in days[:500]])[0]
+    assert labels[1] == -1 and len(set(labels)) == 4
+    # a side that spans no time cannot be cut
+    assert scoring.time_blocks(["2026-06-01"] * 5, [str(t) for t in days[:500]]) is None

@@ -69,10 +69,11 @@ def test_zoo_case_reads_as_its_story(tmp_path, case, expected):
 
 @pytest.mark.parametrize("story,verdict,top", [
     ("monsoon", "DRIFT", "dew_point_c"),
-    # the reset total is set aside; what is left is the weather, which moved a little
-    ("yearly-reset", "DRIFT", "dew_point_c"),
+    # the reset totals are set aside; the weather left moved no more than day to day
+    ("yearly-reset", "OK", None),
     ("season", "DRIFT", "dew_point_c"),
-    ("next-days", "DRIFT", "pressure_inhg"),  # weather moves on a scale of days
+    # four days against the next four: too few days to tell a change from the weather
+    ("next-days", "OK", None),
 ])
 def test_weather_station_stories(tmp_path, story, verdict, top):
     ref, cur = _make("weather_station", tmp_path, story)
@@ -80,6 +81,8 @@ def test_weather_station_stories(tmp_path, story, verdict, top):
     assert payload["verdict"] == verdict
     if top:
         assert payload["top_attributes"][0][0] == top
+    # ten-minute readings are counted by the day
+    assert payload["raw"]["profile"]["noise_blocks"]["ref"]["unit"] == "day"
     running = payload["raw"]["profile"]["columns"]["running"]
     rain_totals = ["rain_event_mm", "rain_daily_mm", "rain_weekly_mm", "rain_monthly_mm", "rain_yearly_mm"]
     # in four dry days the totals barely move, so nothing gives them away

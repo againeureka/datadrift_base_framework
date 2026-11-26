@@ -175,7 +175,8 @@ STORIES: Dict[str, Dict[str, Optional[List[str]]]] = {
     "rhythm_not_drift": {"stable": None},
     # real data: the rainy season. Dew point, the column that moved most, rises
     # and narrows as the air nears saturation; most of the weather moved with it.
+    # Pressure and hourly rain moved too, but no more than from day to day.
     "weather_station": {"regime_shift": None, "shift_and_narrow": ["dew_point_c"],
-                        "level_shift": ["humidity", "rain_hourly_mm", "temp_c"],
-                        "shift_and_spread": ["feels_like_c", "pressure_inhg"]},
+                        "level_shift": ["humidity", "temp_c"],
+                        "shift_and_spread": ["feels_like_c"]},
 }
