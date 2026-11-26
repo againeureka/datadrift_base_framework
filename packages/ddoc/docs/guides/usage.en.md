@@ -60,6 +60,7 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 |---|---|
 | First line | Verdict and severity. The score is the mean of the column scores |
 | Most changed attributes | Score per column: the JS distance between the baseline and current distributions (0 = same, 1 = no overlap). A difference sampling noise explains scores 0, and columns at 0 are left off the line ([verdict sensitivity](../sensitivity.md), Korean) |
+| Within noise | Columns that score 0 but would have reached the threshold (0.15) beyond noise, with that distance. None in this example. The report says of every 0 whether it is "within noise" or the "same distribution" |
 | Reading | The measurements matched against drift patterns written up in advance ([glossary](../glossary.md), Korean) |
 | ⤷ hints | What to check first, per pattern |
 | Exit code | `0` OK · `1` DRIFT · `2` BLIND — 1 in this example |

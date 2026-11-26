@@ -126,6 +126,8 @@ svg text { font-family: inherit; fill: var(--ink-2); font-size: 13px; }
 svg .tick-lbl { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 svg .val-lbl { fill: var(--ink); font-size: 13px; font-variant-numeric: tabular-nums; }
 svg .halo { paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+svg .val-lbl.halo { stroke-width: 6px; }
+svg .val-lbl.quiet { fill: var(--ink-2); }
 td.nw { white-space: nowrap; font-variant-numeric: tabular-nums; }
 svg .hit { fill: transparent; cursor: default; outline: none; }
 svg .hit:hover, svg .hit:focus { fill: var(--ink); fill-opacity: .04; }
@@ -412,9 +414,12 @@ def _legend(lang: str) -> str:
 
 
 def _score_chart(scores: List[Tuple[str, float]], threshold: float, attr_threshold: float,
-                 lang: str) -> str:
+                 lang: str, notes: Optional[Dict[str, Dict[str, Any]]] = None) -> str:
     """Ranked horizontal bars with the two thresholds as reference lines.
-    Attributes at or over the threshold carry the accent; the rest are gray."""
+    Attributes at or over the threshold carry the accent; the rest are gray.
+    An attribute that differs only within noise scores 0; a dashed outline
+    shows the distance it would have scored, and its label says why."""
+    notes = notes or {}
     W, label_w, right_pad, row, bar = 720, 200, 60, 32, 14
     top = 40
     H = top + row * len(scores) + 8
@@ -443,8 +448,19 @@ def _score_chart(scores: List[Tuple[str, float]], threshold: float, attr_thresho
         path = _rounded_bar(x0, cy, sx(score), bar)
         if path:
             out.append(f"<path d='{path}' fill='{color}'/>")
-        out.append(f"<text x='{sx(score) + 8:.1f}' y='{y + row / 2 + 4:.1f}' class='val-lbl'>{score:.3f}</text>")
-        tip = f"{score:.3f}\n{name} · {t(state, lang)}"
+        note = notes.get(name) if score == 0 else None
+        why = dx.noise_text(note, lang)
+        end = sx(score)
+        if note and note.get("state") == "within_noise" and note.get("distance"):
+            end = sx(note["distance"])
+            out.append(f"<rect x='{x0:.1f}' y='{cy:.1f}' width='{max(end - x0, 1):.1f}' height='{bar}' rx='3' "
+                       f"fill='none' stroke='var(--ref)' stroke-width='1.2' stroke-dasharray='4 3'/>")
+        label = f"{score:.3f}" + (f" · {t('chart.within_noise', lang, distance=note['distance'])}"
+                                  if note and note.get("state") == "within_noise" and note.get("distance")
+                                  else f" · {why}" if why else "")
+        quiet = " quiet" if score == 0 and why else ""
+        out.append(f"<text x='{end + 8:.1f}' y='{y + row / 2 + 4:.1f}' class='val-lbl halo{quiet}'>{_e(label)}</text>")
+        tip = f"{score:.3f}\n{name} · {why or t(state, lang)}"
         out.append(f"<rect class='hit' x='0' y='{y}' width='{W}' height='{row}' tabindex='0' "
                    f"data-tip='{_e(tip)}'><title>{_e(name)}: {score:.3f}</title></rect>")
     out.append("</svg>")
@@ -664,15 +680,23 @@ def _tiles(verdict: str, severity: str, score: Optional[float], threshold: float
     return f"<div class='tiles'>{verdict_tile}{score_tile}{over_tile}{samples_tile}</div>"
 
 
+def _status_text(score: float, note: Optional[Dict[str, Any]], threshold: float,
+                 attr_threshold: float, lang: str) -> str:
+    """Where a score stands; for a 0, why (within noise, or the same)."""
+    why = dx.noise_text(note, lang) if score == 0 else None
+    return why or t("status.over_attr" if score >= attr_threshold else
+                    "status.over" if score >= threshold else "status.under", lang)
+
+
 def _pod(name: str, score: float, attr: Dict[str, Any], dists: Optional[Dict[str, Any]],
-         threshold: float, attr_threshold: float, lang: str) -> str:
+         threshold: float, attr_threshold: float, lang: str,
+         note: Optional[Dict[str, Any]] = None) -> str:
     summary = attr.get("summary") or {}
     kind = summary.get("kind")
-    state = ("status.over_attr" if score >= attr_threshold
-             else "status.over" if score >= threshold else "status.under")
     head = (f"<div class='hd'><h3>{_e(name)}</h3><span class='kind'>"
             f"{_e(t('kind.' + kind, lang) if kind else '')}{' · ' if kind else ''}"
-            f"{_e(t('chart.score', lang))} {score:.3f} · {_e(t(state, lang))}</span></div>")
+            f"{_e(t('chart.score', lang))} {score:.3f} · "
+            f"{_e(_status_text(score, note or attr.get('noise'), threshold, attr_threshold, lang))}</span></div>")
     body = []
     line = dx.summary_text(summary, lang)
     if line:
@@ -764,9 +788,12 @@ def _ico(token: str, icon: str, small: bool = False) -> str:
 
 
 def _subject(payload: Dict[str, Any], profile: Optional[Dict[str, Any]],
-             samples: Optional[Dict[str, int]], scores: List[Tuple[str, float]], lang: str) -> str:
+             samples: Optional[Dict[str, int]], scores: List[Tuple[str, float]], lang: str,
+             blocks: Optional[Dict[str, Any]] = None) -> str:
     """What was compared: both sides side by side, the column match and,
-    when asked for, the first rows of each side."""
+    when asked for, the first rows of each side; and how the noise test
+    counted rows in time order (``blocks``)."""
+    grouped = dx.blocks_text(blocks, lang)
     head = (f"<p class='lead'>{_e(t('subject.lead', lang))}</p><table class='info subj'><thead><tr><th></th>"
             f"<th class='side'>{_e(t('chart.ref', lang))}</th><th class='side'>{_e(t('chart.cur', lang))}</th>"
             f"</tr></thead><tbody>")
@@ -807,6 +834,8 @@ def _subject(payload: Dict[str, Any], profile: Optional[Dict[str, Any]],
         for key, mark in (("only_ref", "−"), ("only_cur", "+"), ("time", "·"), ("running", "·")):
             if cols.get(key):
                 match.append((mark, t(f"subject.{key}", lang, columns=", ".join(cols[key]))))
+        if grouped:
+            match.append(("·", grouped))
         out_after += (f"<ul class='match' aria-label='{_e(t('subject.match', lang))}'>" + "".join(
             f"<li><span class='mk'>{_e(m)}</span>{_e(x)}</li>" for m, x in match) + "</ul>")
 
@@ -830,6 +859,8 @@ def _subject(payload: Dict[str, Any], profile: Optional[Dict[str, Any]],
         if scores:
             names = ", ".join(k for k, _ in scores[:20]) + (" …" if len(scores) > 20 else "")
             rows.append((t("subject.attributes", lang), _e(names), None))
+        if grouped:
+            out_after += (f"<ul class='match'><li><span class='mk'>·</span>{_e(grouped)}</li></ul>")
     body = "".join(f"<tr><th>{_e(k)}</th><td>{a}</td><td>{b}</td></tr>" if b is not None
                    else f"<tr><th>{_e(k)}</th><td colspan='2'>{a}</td></tr>" for k, a, b in rows)
     return head + body + "</tbody></table>" + out_after
@@ -1215,8 +1246,11 @@ def build_consultation_html(
         attr_threshold=attr_threshold, result=raw, evidence=dists,
         reason=payload.get("reason"),
     )
+    notes: Dict[str, Dict[str, Any]] = diagnosis.get("noise") or {}
+    # by score; among the zeros, what moved within noise first
     scores = sorted(((k, float(v)) for k, v in (raw.get("attribute_drifts") or dict(top)).items()
-                     if isinstance(v, (int, float))), key=lambda kv: kv[1], reverse=True)
+                     if isinstance(v, (int, float))),
+                    key=lambda kv: (kv[1], (notes.get(kv[0]) or {}).get("distance") or 0.0), reverse=True)
     version = _ddoc_version()
     token, icon = _status(verdict, severity)
     doc_title = title or t("doc.title", lang)
@@ -1257,7 +1291,10 @@ def build_consultation_html(
     # 1. What was compared.
     profile = raw.get("profile") if isinstance(raw.get("profile"), dict) else None
     parts.append(section("sec.subject"))
-    parts.append(_subject(payload, profile, diagnosis.get("samples"), scores, lang))
+    blocks = (profile or {}).get("noise_blocks") or next(
+        (sm["noise_blocks"] for sm in (raw.get("summaries") or {}).values()
+         if isinstance(sm, dict) and sm.get("noise_blocks")), None)
+    parts.append(_subject(payload, profile, diagnosis.get("samples"), scores, lang, blocks))
 
     # 2. Summary.
     parts.append(section("sec.summary"))
@@ -1283,7 +1320,8 @@ def build_consultation_html(
             attr = by_name.get(k)
             if attr is None and summaries.get(k):
                 attr = {"summary": summaries[k], "patterns": dx.patterns(summaries[k])}
-            html_ = _pod(k, dict(scores)[k], attr or {}, dists.get(k), threshold, attr_threshold, lang)
+            html_ = _pod(k, dict(scores)[k], attr or {}, dists.get(k), threshold, attr_threshold, lang,
+                         notes.get(k))
             if html_:
                 pods.append((k, html_))
 
@@ -1325,11 +1363,10 @@ def build_consultation_html(
         # 3. Results by attribute.
         if scores:
             parts.append(section("sec.scores"))
-            parts.append(_score_chart(scores, threshold, attr_threshold, lang))
+            parts.append(_score_chart(scores, threshold, attr_threshold, lang, notes))
             parts.append(_table_view(
                 lang, [t("col.attribute", lang), t("col.score", lang), t("col.status", lang)],
-                [[k, f"{s:.4f}", t("status.over_attr" if s >= attr_threshold else
-                                   "status.over" if s >= threshold else "status.under", lang)]
+                [[k, f"{s:.4f}", _status_text(s, notes.get(k), threshold, attr_threshold, lang)]
                  for k, s in scores], (1,)))
 
         # Findings by attribute.
@@ -1410,6 +1447,11 @@ def build_consultation_markdown(payload: Dict[str, Any], *, lang: str = DEFAULT_
         if ref_p.get("period") or cur_p.get("period"):
             lines.append(f"| {t('subject.period', lang)} | {_md(period(ref_p))} | {_md(period(cur_p))} |")
     lines += [f"| {t('info.criteria', lang)} | {t('tile.criteria_sub', lang, threshold=threshold, attr_threshold=attr_threshold)} | |", ""]
+    grouped = dx.blocks_text((profile or {}).get("noise_blocks") or next(
+        (sm["noise_blocks"] for sm in (raw.get("summaries") or {}).values()
+         if isinstance(sm, dict) and sm.get("noise_blocks")), None), lang)
+    if grouped:
+        lines += [grouped, ""]
 
     if verdict == "BLIND":
         lines += [f"## {t('sec.reason', lang)}", "", payload.get("reason") or "", ""]
@@ -1417,6 +1459,10 @@ def build_consultation_markdown(payload: Dict[str, Any], *, lang: str = DEFAULT_
         if hints:
             lines += [f"## {t('sec.checks', lang)}", ""] + [f"- [ ] {h}" for h in hints] + [""]
         return "\n".join(lines)
+
+    why = [dx.rationale_text(r, lang) for r in diagnosis.get("rationale") or []]
+    if why:
+        lines += [f"## {t('sec.why', lang)}", ""] + [f"- {_md(w)}" for w in why] + [""]
 
     matched = [c for c in cards if c["match"] == "match"]
     if matched:

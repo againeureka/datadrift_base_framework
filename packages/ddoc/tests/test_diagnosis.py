@@ -396,3 +396,73 @@ def test_diagram_folds_passing_columns_when_there_are_many(tmp_path):
     body = note.read_text(encoding="utf-8")
     assert "passing columns not drawn" in body
     assert "data-col='c0'" in body  # the drifted column is always drawn
+
+
+# ── why a score is 0 ──────────────────────────────────────────────────
+
+
+def _rows(path, values):
+    path.write_text("x,flag\n" + "\n".join(f"{v},{f}" for v, f in values) + "\n", encoding="utf-8")
+    return str(path)
+
+
+def test_a_zero_says_whether_it_is_noise_or_nothing(tmp_path):
+    import random
+
+    rng = random.Random(2)
+    # x: a small shift on 40 rows (within noise); flag: the same on both sides
+    ref = _rows(tmp_path / "ref.csv", [(round(rng.gauss(0, 1), 3), "a") for _ in range(40)])
+    cur = _rows(tmp_path / "cur.csv", [(round(rng.gauss(0.6, 1), 3), "a") for _ in range(40)])
+    result = csv_diff([ref], [cur])
+    d = dx.build(verdict="OK", overall=0.0, top=[], threshold=0.15, attr_threshold=0.25,
+                 result=result, evidence=result["distributions"])
+    x, flag = d["noise"]["x"], d["noise"]["flag"]
+    assert x["state"] == "within_noise" and x["distance"] > 0.2 and x["p"] >= 0.001
+    assert flag["state"] == "same" and flag["distance"] == 0
+    # the zeros are ordered by how far they moved, and the reason is told
+    assert [a["name"] for a in d["attributes"]] == ["x", "flag"]
+    assert d["rationale"][1]["code"] == "noise" and d["rationale"][1]["attr"] == "x"
+    assert "no more than sampling noise" in dx.rationale_text(d["rationale"][1], "en")
+    assert dx.noise_text(x, "ko").startswith("잡음 범위 안 (거리 ")
+    assert dx.noise_text(flag, "en") == "same distribution"
+    assert dx.noise_text({**x, "state": "beyond"}, "en") is None
+
+
+def test_a_zero_with_more_missing_values_is_not_called_the_same(tmp_path):
+    ref = _rows(tmp_path / "ref.csv", [(i % 10, "a") for i in range(400)])
+    cur = _rows(tmp_path / "cur.csv", [("" if i % 4 == 0 else i % 10, "a") for i in range(400)])
+    result = csv_diff([ref], [cur])
+    d = dx.build(verdict="DRIFT", overall=0.0, top=[], threshold=0.15, attr_threshold=0.25,
+                 result=result, evidence=result["distributions"])
+    note = d["noise"]["x"]
+    assert result["attribute_drifts"]["x"] == 0 and note["state"] == "missing"
+    assert dx.noise_text(note, "en") == "values alike; missing 0.0% → 25.0%"
+
+
+def test_report_and_console_show_what_moved_within_noise(tmp_path):
+    from ddoc.cli.commands.diff_report import build_consultation_markdown
+
+    import random
+
+    rng = random.Random(2)
+    ref = _rows(tmp_path / "ref.csv", [(round(rng.gauss(0, 1), 3), "a") for _ in range(40)])
+    cur = _rows(tmp_path / "cur.csv", [(round(rng.gauss(0.6, 1), 3), "a") for _ in range(40)])
+    out = runner.invoke(app, ["diff", ref, cur, "--lang", "en"])
+    line = next(x for x in out.stdout.splitlines() if "Within noise:" in x)
+    assert out.exit_code == 0 and "x 0." in line and "flag" not in line     # the same is not noise
+    # a distance below the threshold would not have mattered: not worth a console line
+    quiet = runner.invoke(app, ["diff", ref, cur, "--lang", "en", "--threshold", "0.9"])
+    assert "Within noise:" not in quiet.stdout
+    payload = json.loads(runner.invoke(app, ["diff", ref, cur, "--json"]).stdout)
+    page = build_consultation_html(payload, payload["raw"]["distributions"], lang="en")
+    assert "within noise (distance " in page and "stroke-dasharray" in page
+    assert "same distribution" in page                       # flag: nothing to tell apart
+    md = build_consultation_markdown(payload, lang="en")
+    assert "## Basis for the verdict" in md and "no more than sampling noise" in md
+
+
+def test_blocks_are_described_in_words():
+    blocks = {"ref": {"unit": "day", "blocks": 14}, "cur": {"unit": "stretch", "blocks": 6, "seconds": 7200}}
+    assert dx.blocks_text(blocks, "en").endswith("14 days in the baseline, 6 stretches of 2 h in the current data.")
+    assert "기준 14일, 현재 2 h씩 6구간" in dx.blocks_text(blocks, "ko")
+    assert dx.blocks_text(None, "en") is None

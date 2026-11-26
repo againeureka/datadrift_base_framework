@@ -13,6 +13,7 @@ none of it claims to know how the change affects a model.
 """
 from __future__ import annotations
 
+import math
 from typing import Any, Dict, List, Optional, Tuple
 
 from .i18n import t
@@ -64,7 +65,11 @@ def _summary_from_counts(ref: Dict[str, float], cur: Dict[str, float]) -> Dict[s
         summary["n"] = {"ref": int(sum(ref.values())), "cur": int(sum(cur.values()))}
         tested = counts_score(ref, cur)
         if tested is not None:
+            from .scoring import js_divergence
+            keys = list(dict.fromkeys([*ref, *cur]))
             summary["noise_p"] = tested[1]
+            summary["distance"] = round(math.sqrt(js_divergence([ref.get(k) or 0 for k in keys],
+                                                                [cur.get(k) or 0 for k in keys])), 6)
     return summary
 
 
@@ -129,16 +134,119 @@ def summaries_of(result: Dict[str, Any], evidence: Optional[Dict[str, Any]] = No
     return summaries
 
 
+# ── Why a score is what it is ─────────────────────────────────────────
+#
+# A score of 0 means one of two things: the distributions are the same,
+# or they differ by no more than sampling noise would make them differ.
+# The note per attribute says which, with the distance before the noise
+# test and its p, so a report can show what moved within noise.
+
+
+def _noise_unit(result: Dict[str, Any], summary: Optional[Dict[str, Any]]) -> Optional[str]:
+    """``"day"`` / ``"stretch"`` when the noise test counted blocks of
+    rows close in time (see :func:`ddoc.scoring.time_blocks`)."""
+    blocks = (summary or {}).get("noise_blocks") or ((result.get("profile") or {}).get("noise_blocks")
+                                                     if isinstance(result.get("profile"), dict) else None)
+    if not isinstance(blocks, dict) or not (summary or {}).get("design_effect"):
+        return None
+    units = {(blocks.get(side) or {}).get("unit") for side in ("ref", "cur")}
+    return "day" if units == {"day"} else "stretch"
+
+
+def noise_note(name: str, score: float, summary: Optional[Dict[str, Any]],
+               result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """How the noise test bore on one attribute's score, or None when
+    nothing was tested (a plugin's own score):
+
+    * ``beyond``       — the difference is more than noise; the score is the distance
+    * ``within_noise`` — the distributions differ (``distance``), but no more than
+      sampling noise would make them (``p`` ≥ the significance)
+    * ``missing``      — the values are alike, but the share of missing ones moved
+    * ``same``         — nothing to tell apart
+    """
+    from .scoring import ALPHA
+
+    summary = summary if isinstance(summary, dict) else {}
+    if name == "embedding_separation":
+        proj = result.get("embedding_projection") if isinstance(result.get("embedding_projection"), dict) else {}
+        p, mixing = proj.get("separation_p"), proj.get("mixing")
+        distance = None if mixing is None else round(max(0.0, 1.0 - float(mixing)), 6)
+    else:
+        p, distance = summary.get("noise_p"), summary.get("distance")
+    if p is None:
+        return None
+    note: Dict[str, Any] = {"p": float(p), "distance": distance}
+    unit = _noise_unit(result, summary)
+    if unit:
+        note.update(unit=unit, design_effect=summary.get("design_effect"))
+    if score > 0:
+        note["state"] = "beyond"
+    elif (summary.get("missing_p") is not None and summary["missing_p"] < ALPHA
+          and summary.get("missing")):
+        note.update(state="missing", missing=summary["missing"])
+    elif (distance or 0) > 0 or (distance is None and float(p) < 0.9999):
+        note["state"] = "within_noise"
+    else:
+        note["state"] = "same"
+    return note
+
+
+def within_noise(diagnosis: Dict[str, Any]) -> List[Tuple[str, Dict[str, Any]]]:
+    """Attributes that differ only within noise, the farthest first."""
+    notes = (diagnosis or {}).get("noise") or {}
+    return sorted(((k, n) for k, n in notes.items() if n.get("state") == "within_noise"),
+                  key=lambda kn: -(kn[1].get("distance") or 0.0))
+
+
+def noise_text(note: Optional[Dict[str, Any]], lang: str) -> Optional[str]:
+    """``within noise (distance 0.312, p 0.25, by the day)`` and the like;
+    None for a score beyond noise, which speaks for itself."""
+    if not note or note.get("state") in (None, "beyond"):
+        return None
+    if note["state"] == "same":
+        return t("noise.same", lang)
+    if note["state"] == "missing":
+        miss = note.get("missing") or {}
+        return t("noise.missing", lang, ref=_pct(miss.get("ref")), cur=_pct(miss.get("cur")))
+    return t("noise.within", lang, p=f"{note['p']:.2g}",
+             distance="" if note.get("distance") is None
+             else t("noise.distance", lang, distance=note["distance"]),
+             unit=t(f"noise.unit.{note['unit']}", lang) if note.get("unit") else "")
+
+
+def blocks_text(blocks: Optional[Dict[str, Any]], lang: str) -> Optional[str]:
+    """One sentence on how the noise test grouped rows in time order."""
+    if not isinstance(blocks, dict) or not all(isinstance(blocks.get(s), dict) for s in ("ref", "cur")):
+        return None
+
+    def side(info: Dict[str, Any]) -> str:
+        if info.get("unit") == "day":
+            return t("noise.blocks.day", lang, count=info.get("blocks"))
+        seconds = float(info.get("seconds") or 0)
+        length = (f"{seconds / 3600:.3g} h" if seconds >= 3600 else f"{seconds / 60:.3g} min"
+                  if seconds >= 60 else f"{seconds:.3g} s")
+        return t("noise.blocks.stretch", lang, count=info.get("blocks"), length=length)
+
+    return t("noise.blocks", lang, ref=side(blocks["ref"]), cur=side(blocks["cur"]))
+
+
 def _rationale(verdict: str, overall: Optional[float], top: List[Tuple[str, float]],
                threshold: float, attr_threshold: float, reason: Optional[str],
-               linked: Optional[List[Tuple[str, str]]] = None) -> List[Dict[str, Any]]:
+               linked: Optional[List[Tuple[str, str]]] = None,
+               quiet: Optional[List[Tuple[str, Dict[str, Any]]]] = None) -> List[Dict[str, Any]]:
     if verdict == "BLIND":
         return [{"code": "blind", "reason": reason or ""}]
     overall = overall or 0.0
     max_attr = top[0] if top else ("", 0.0)
     if verdict == "OK":
-        return [{"code": "ok", "score": overall, "threshold": threshold,
-                 "attr_threshold": attr_threshold, "max_attr": max_attr[1]}]
+        out = [{"code": "ok", "score": overall, "threshold": threshold,
+                "attr_threshold": attr_threshold, "max_attr": max_attr[1]}]
+        if quiet:   # what moved, and why it does not count
+            name, note = quiet[0]
+            out.append({"code": "noise", "count": len(quiet), "attr": name,
+                        "distance": note.get("distance") or 0.0, "p": note["p"],
+                        "unit": note.get("unit") or ""})
+        return out
     out: List[Dict[str, Any]] = []
     for name, score in top:
         if score >= attr_threshold:
@@ -170,15 +278,22 @@ def build(
     summaries = summaries_of(result, evidence)
 
     scores = dict(result.get("attribute_drifts") or {}) or dict(top)
+    notes = {}
+    for name, value in scores.items():
+        if isinstance(value, (int, float)):
+            note = noise_note(name, float(value), summaries.get(name), result)
+            if note:
+                notes[name] = note
+    # by score; among equal scores (the zeros), what moved within noise first
     ordered = sorted(((k, float(v)) for k, v in scores.items() if isinstance(v, (int, float))),
-                     key=lambda kv: kv[1], reverse=True)
+                     key=lambda kv: (kv[1], (notes.get(kv[0]) or {}).get("distance") or 0.0), reverse=True)
 
     attributes, checks = [], []
     for name, score in ordered[:MAX_ATTRIBUTES]:
         summary = summaries.get(name)
         patterns = _patterns(summary) if summary else []
         attributes.append({"name": name, "score": round(score, 4),
-                           "summary": summary, "patterns": patterns})
+                           "summary": summary, "patterns": patterns, "noise": notes.get(name)})
         # Checks only for attributes that drove the verdict; patterns in
         # calmer attributes are still listed under "what changed".
         if verdict == "DRIFT" and score >= threshold:
@@ -229,9 +344,11 @@ def build(
 
     linked = archetypes.confirmed({k: v for k, v in summaries.items() if isinstance(v, dict)}, evidence) \
         if verdict == "DRIFT" else []
+    quiet = within_noise({"noise": notes})
     return {
         "rationale": _rationale(verdict, overall, ordered[:1] if verdict == "OK" else ordered,
-                                threshold, attr_threshold, reason, linked),
+                                threshold, attr_threshold, reason, linked, quiet),
+        "noise": notes,
         "samples": samples,
         "attributes": attributes,
         "warnings": warnings,
@@ -383,6 +500,8 @@ def rationale_text(item: Dict[str, Any], lang: str) -> str:
         from . import archetypes
         entry = archetypes.CATALOG.get(item.get("pattern"), {})
         fields["pattern"] = (entry.get(lang) or entry.get("en") or {}).get("title", item.get("pattern"))
+    if item["code"] == "noise":
+        fields["unit"] = t(f"noise.unit.{item['unit']}", lang) if item.get("unit") else ""
     return t(f"rationale.{item['code']}", lang, **fields)
 
 

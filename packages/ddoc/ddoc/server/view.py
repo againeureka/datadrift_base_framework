@@ -48,17 +48,24 @@ def diff_view(payload: Dict[str, Any], lang: str) -> Dict[str, Any]:
                       "actions": text["actions"][:2], "caveat": text["caveat"],
                       "attrs": card.get("attrs") or (card.get("signal") or {}).get("attrs") or []})
 
+    notes = diagnosis.get("noise") if isinstance(diagnosis.get("noise"), dict) else {}
+    # by score; among the zeros, what moved within noise first (as in the report)
     scores = sorted(((k, float(v)) for k, v in (raw.get("attribute_drifts")
                                                  or dict(payload.get("top_attributes") or [])).items()
-                     if isinstance(v, (int, float))), key=lambda kv: kv[1], reverse=True)
+                     if isinstance(v, (int, float))),
+                    key=lambda kv: (kv[1], (notes.get(kv[0]) or {}).get("distance") or 0.0), reverse=True)
     status, _ = rep._attr_status(diagnosis, dict(scores), threshold, attr_threshold)
     described = {a.get("name"): a for a in diagnosis.get("attributes") or [] if isinstance(a, dict)}
     summaries = raw.get("summaries") if isinstance(raw.get("summaries"), dict) else {}
     attributes = []
     for name, score in scores[:MAX_ATTRIBUTES]:
         summary = (described.get(name) or {}).get("summary") or summaries.get(name)
+        note = notes.get(name) if score == 0 else None
         attributes.append({
             "name": name, "score": round(score, 4), "status": status.get(name, "pass"),
+            # a 0: the same, or a difference within noise (and the distance it would have scored)
+            "noise": dx.noise_text(note, lang),
+            "distance": (note or {}).get("distance") if (note or {}).get("state") == "within_noise" else None,
             "kind": (summary or {}).get("kind"),
             "spark": rep._spark(dists.get(name), summary),
             "summary": dx.summary_text(summary, lang) if summary else None,
@@ -66,6 +73,8 @@ def diff_view(payload: Dict[str, Any], lang: str) -> Dict[str, Any]:
         })
 
     columns = (profile or {}).get("columns") or {}
+    blocks = (profile or {}).get("noise_blocks") or next(
+        (sm["noise_blocks"] for sm in summaries.values() if isinstance(sm, dict) and sm.get("noise_blocks")), None)
     return {
         "verdict": verdict, "severity": severity, "severity_label": severity_label(severity, lang),
         "token": token, "icon": icon,
@@ -77,6 +86,7 @@ def diff_view(payload: Dict[str, Any], lang: str) -> Dict[str, Any]:
         "attributes": attributes, "attributes_total": len(scores),
         "sides": {"ref": _side((profile or {}).get("ref")), "cur": _side((profile or {}).get("cur"))},
         "columns": {k: columns.get(k) or [] for k in ("compared", "time", "running", "only_ref", "only_cur")},
+        "blocks": dx.blocks_text(blocks, lang),
         "checks": dx.check_texts(diagnosis, lang)[:5],
         "warnings": [dx.warning_text(w, lang) for w in diagnosis.get("warnings") or []],
         "hints": [h for h in payload.get("hints") or [] if isinstance(h, str)],

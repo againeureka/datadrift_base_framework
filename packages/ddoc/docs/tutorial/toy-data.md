@@ -59,6 +59,8 @@ ddoc diff /tmp/ex/ref /tmp/ex/cur --lang ko
 # ⚠ DRIFT — 심각도: 높음 · 점수 0.2440 (기준 0.15)
 #    가장 변한 속성: weather/dew_point_c 0.953 · weather/humidity 0.525 ·
 #    weather/feels_like_c 0.486
+#    잡음 범위 안: weather/pressure_inhg 0.487 · weather/rain_hourly_mm 0.228 ·
+#    weather/wind_dir_deg 0.152 (하루 단위로 셈)
 ```
 
 데이터와 다른 기간의 이야기(연간 누적값 초기화, 계절 등)는 Drift Zoo 의

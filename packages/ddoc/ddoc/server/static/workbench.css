@@ -223,6 +223,10 @@ body { background: var(--page); color: var(--ink); }
 .gauge i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cur); border-radius: 5px; min-width: 2px; }
 .gauge u { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); border-radius: 1px; }
 .gauge.thin { height: 6px; margin-top: 5px; }
+/* within noise: the distance it would have scored, outlined, not filled */
+.gauge s { position: absolute; left: 0; top: -1px; bottom: -1px; border: 1px dashed var(--ink-2); border-radius: 4px;
+  box-sizing: border-box; opacity: .7; }
+.a-noise { margin-top: 4px !important; }
 .gauge.thin u { top: -3px; bottom: -3px; }
 .v-headline { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; margin-bottom: 4px !important; }
 .v-text p { font-size: 13px; line-height: 1.5; }

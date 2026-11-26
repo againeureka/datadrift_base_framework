@@ -377,11 +377,16 @@ def _profile(frame, files: List[str], time_cols: Dict[str, Any], sample_rows: in
 def _noise_score(rh, ch, cells: Optional[Tuple[Any, Any]], blocks: Optional[Tuple[Any, Any]],
                  k: int, summary: Dict[str, Any]) -> float:
     """Score two count vectors over ``k`` bins and put the noise test's p
-    in ``summary`` (``noise_p``). With ``blocks`` (each row's block label,
-    see :func:`ddoc.scoring.time_blocks`) and ``cells`` (each row's bin),
-    the test counts the blocks, and the design effect rides along."""
-    from ...scoring import block_counts, score, score_blocks
+    in ``summary`` (``noise_p``), with the distance before the test
+    (``distance``: what the score would be, were it beyond noise). With
+    ``blocks`` (each row's block label, see :func:`ddoc.scoring.time_blocks`)
+    and ``cells`` (each row's bin), the test counts the blocks, and the
+    design effect rides along."""
+    import math
 
+    from ...scoring import block_counts, js_divergence, score, score_blocks
+
+    summary["distance"] = round(math.sqrt(js_divergence(list(rh), list(ch))), 6)
     if blocks is None or cells is None:
         value, summary["noise_p"] = score(list(rh), list(ch))
         return value
@@ -404,7 +409,7 @@ def _numeric_column(r, c, base: Dict[str, Any], bins: int = 20,
     lo, hi = float(min(r.min(), c.min())), float(max(r.max(), c.max()))
     summary = {"kind": "numeric", **base, **_numeric_summary(r, c)}
     if hi == lo:
-        summary["noise_p"] = 1.0
+        summary.update(noise_p=1.0, distance=0.0)
         return 0.0, summary, None
     whole = bool((r % 1 == 0).all() and (c % 1 == 0).all())
     if whole and hi - lo + 1 <= bins:
@@ -652,6 +657,16 @@ def _print_human(payload: Dict[str, Any], lang: str) -> None:
     if moved:
         tops = " · ".join(f"{k} {v:.3f}" for k, v in moved[:3])
         rprint("   " + t("console.top_attrs", lang, tops=tops))
+    # what moved far enough to matter, but by no more than noise: the
+    # distance it would have scored (the report lists every attribute)
+    floor = payload.get("threshold") or 0.0
+    quiet = [(k, n) for k, n in dx.within_noise(payload.get("diagnosis") or {})
+             if (n.get("distance") or 0.0) >= floor][:3]
+    if quiet:
+        unit = quiet[0][1].get("unit")
+        rprint("   " + t("console.within_noise", lang,
+                          items=" · ".join(f"{k} {n['distance']:.3f}" for k, n in quiet),
+                          unit=f" ({t('noise.unit.' + unit, lang).lstrip(', ')})" if unit else ""))
     rprint("   " + t("console.meta", lang, modality=payload.get("modality") or "?",
                       engine=payload.get("engine"), ref=payload["ref"], cur=payload["cur"]))
     if verdict == "BLIND":

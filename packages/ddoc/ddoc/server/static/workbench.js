@@ -594,6 +594,8 @@
     ].filter(Boolean);
     const aside = asideBits.length ? h('p', { class: 'aside' }, h('i', { class: 'hatch' }),
       h('b', {}, t('res.aside')), ' ' + asideBits.join(' · ')) : null;
+    // rows in time order: how the noise test counted them
+    const blocks = v.blocks ? h('p', { class: 'aside' }, v.blocks) : null;
 
     const cards = h('div', { class: 'cards' },
       h('h3', {}, t('res.patterns')),
@@ -613,7 +615,10 @@
         h('span', { class: 'st tok-' + STATUS_TOKEN[a.status], title: t('status.' + a.status) }, STATUS_ICON[a.status]),
         h('div', { class: 'a-main' },
           h('div', { class: 'a-top' }, h('b', {}, a.name), h('span', { class: 'a-score' }, a.score.toFixed(3))),
-          h('div', { class: 'gauge thin' }, h('i', { style: `width:${pct(a.score)}` }), h('u', { style: `left:${pct(v.attr_threshold)}` })),
+          // within noise: a dashed outline to the distance it would have scored
+          h('div', { class: 'gauge thin' }, a.distance ? h('s', { style: `width:${pct(a.distance)}` }) : null,
+            h('i', { style: `width:${pct(a.score)}` }), h('u', { style: `left:${pct(v.attr_threshold)}` })),
+          a.noise ? h('p', { class: 'muted a-noise' }, a.noise) : null,
           a.summary ? h('p', { class: 'muted' }, a.summary) : null),
         a.spark ? h('div', { class: 'spark', html: a.spark }) : h('div', { class: 'spark' }))),
       v.attributes_total > v.attributes.length
@@ -644,7 +649,7 @@
     return h('div', { class: 'wb-result' },
       h('div', { class: 'res-top' },
         h('button', { class: 'wb-btn ghost', type: 'button', onclick: () => { S.result = null; render(); } }, icon('back', 16), ' ' + t('res.new'))),
-      band, caseNote, compared, aside,
+      band, caseNote, compared, aside, blocks,
       v.verdict === 'BLIND' ? null : h('section', { class: 'what' }, h('h2', {}, t('res.what')), h('div', { class: 'what-grid' }, cards, cols)),
       checks, report);
   }

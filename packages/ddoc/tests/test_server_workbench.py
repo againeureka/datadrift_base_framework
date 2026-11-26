@@ -62,6 +62,18 @@ def test_case_to_diagnosis_view(client):
     top = view["attributes"][0]
     assert top["name"] == "weight" and top["status"] == "fail" and top["spark"].startswith("<svg") and top["summary"]
     assert view["sides"]["ref"]["period"]["start"] == "2026-04-01" and view["checks"]
+    # dated rows: the noise test counted them by the day, and says so
+    assert view["blocks"] and "기준 30일" in view["blocks"]
+
+
+def test_view_tells_a_zero_within_noise_from_the_same(client):
+    built = client.post("/cases/yearly-reset").json()
+    view = client.post("/diff", json={"ref": built["ref"], "cur": built["cur"], "lang": "en"}).json()["view"]
+    assert view["verdict"] == "OK"
+    first = view["attributes"][0]          # the zeros, farthest first
+    assert first["name"] == "dew_point_c" and first["score"] == 0 and first["distance"] > 0.3
+    assert first["noise"].startswith("within noise (distance 0.31") and "counted by the day" in first["noise"]
+    assert any("no more than sampling noise" in r for r in view["rationale"])
 
 
 def test_uploads_keep_folders_and_stay_inside_the_session(client):
