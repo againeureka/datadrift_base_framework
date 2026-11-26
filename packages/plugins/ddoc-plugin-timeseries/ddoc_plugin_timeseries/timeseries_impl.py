@@ -117,6 +117,29 @@ class DOCTimeSeriesPlugin:
             'unique_count': len(value_counts)
         }
     
+    def _column_values(self, data_path) -> Dict[str, Any]:
+        """``{<dataset>/<col>: [values...]}`` for the numeric columns of the
+        ``ddoc.yaml``-declared timeseries datasets under ``data_path``."""
+        out: Dict[str, Any] = {}
+        input_path = Path(data_path)
+        if not input_path.is_dir():
+            return out
+        for item in sorted(input_path.iterdir()):
+            if not (item.is_dir() and (item / "ddoc.yaml").exists()):
+                continue
+            try:
+                config = self._load_ddoc_yaml(item)
+                if config.get('modality') != 'timeseries':
+                    continue
+                df = pd.read_csv(item / config['csv_file'])
+            except Exception:
+                continue
+            for col in config.get('numeric_columns', []):
+                if col in df.columns:
+                    values = pd.to_numeric(df[col], errors="coerce").dropna()
+                    out[f"{item.name}/{col}"] = [float(v) for v in values]
+        return out
+
     def _compute_attributes_from_path(self, data_path) -> Dict[str, Any]:
         """Walk ``data_path`` for ``ddoc.yaml`` -declared timeseries
         datasets and compute the per-column attributes dict in-process.
@@ -314,6 +337,16 @@ class DOCTimeSeriesPlugin:
         metrics_file = output_path / 'metrics.json'
         with open(metrics_file, 'w') as f:
             json.dump(drift_metrics, f, indent=2)
+
+        # The values themselves, for ddoc's reading and its common score
+        # scale (the differences above are in each column's own units).
+        if data_path_ref and data_path_cur:
+            ref_values = self._column_values(data_path_ref)
+            cur_values = self._column_values(data_path_cur)
+            drift_metrics['attribute_values'] = {
+                key: {"ref": ref_values[key], "cur": cur_values[key]}
+                for key in ref_values if key in cur_values
+            }
 
         return drift_metrics
 

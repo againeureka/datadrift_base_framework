@@ -42,13 +42,15 @@ ddoc diff data/ref.csv data/cur.csv --lang ko --report note.html
 ```
 
 ```
-⚠ DRIFT — 심각도: 높음 · 점수 0.3113 (기준 0.15)
-   가장 변한 속성: price 1.000 · channel 0.243 · day 0.002
+⚠ DRIFT — 심각도: 높음 · 점수 0.3733 (기준 0.15)
+   가장 변한 속성: price 1.000 · channel 0.493
    모달리티: tabular · 엔진: builtin · 기준: data/ref.csv · 현재: data/cur.csv
    ⤷ 진단서: note.html
    ⤷ 판독: 레짐 전환형 · 이동·확산형 · 구성비 이동형
    ⤷ 'price'의 값이 이동했습니다. 실제 환경 변화로 판단하기 전에 단위·스케일
      변경, 센서 교체·재보정이 아닌지 먼저 확인하세요.
+   ⤷ 'price'의 산포가 커졌습니다. 여러 출처의 데이터가 섞였거나 측정 잡음이
+     커졌는지 확인하세요.
    ⤷ 'channel'의 구성비가 바뀌었습니다 (store 75.6% → 19.3%). 모집단이 실제로
      바뀌었는지(현장, 채널, 시간대) 확인하고 ...
 ```
@@ -57,8 +59,8 @@ ddoc diff data/ref.csv data/cur.csv --lang ko --report note.html
 
 | 줄 | 뜻 |
 |---|---|
-| 첫 줄 | 판정과 심각도. 점수는 열별 분포 차이의 평균 |
-| 가장 변한 속성 | 열별 점수 (0 = 같음, 1 = 최대) |
+| 첫 줄 | 판정과 심각도. 점수는 열별 점수의 평균 |
+| 가장 변한 속성 | 열별 점수: 기준·현재 분포의 JS 거리 (0 = 같음, 1 = 겹침 없음). 표본 잡음으로 설명되는 차이는 0 이라 0 인 열은 줄에 나오지 않음 ([판정 민감도](../sensitivity.md)) |
 | 판독 | 측정값을 미리 정리해 둔 드리프트 유형에 대어 본 결과 ([용어](../glossary.md)) |
 | ⤷ 안내 | 유형마다 무엇부터 확인할지 |
 | 종료 코드 | `0` OK · `1` DRIFT · `2` BLIND — 이 예제는 1 |
@@ -142,7 +144,7 @@ ddoc report render -i result.json -o report.pdf
 ```bash
 ddoc diff data/ref.csv data/cur.csv --json | jq '.verdict, .overall_score'
 # "DRIFT"
-# 0.3113
+# 0.3733
 ```
 
 판독된 유형은 `.diagnosis.archetypes` 에 있습니다(`match` 가 `"match"` 인 것이 해당, `"near"` 가 가까움).

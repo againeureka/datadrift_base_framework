@@ -57,8 +57,8 @@ def test_zoo_regime_shift_report_evidence(tmp_path):
     ("creeping_degradation", {"shift_and_spread"}),
     # a daily rhythm is not drift
     ("rhythm_not_drift", {"stable"}),
-    # the rainy season: dew point rises and narrows, humidity steps up
-    ("weather_station", {"shift_and_narrow", "level_shift", "shift_and_spread"}),
+    # the rainy season: dew point rises and narrows, humidity steps up, most of it moves
+    ("weather_station", {"regime_shift", "shift_and_narrow", "level_shift", "shift_and_spread"}),
 ])
 def test_zoo_case_reads_as_its_story(tmp_path, case, expected):
     ref, cur = _make(case, tmp_path)
@@ -69,7 +69,8 @@ def test_zoo_case_reads_as_its_story(tmp_path, case, expected):
 
 @pytest.mark.parametrize("story,verdict,top", [
     ("monsoon", "DRIFT", "dew_point_c"),
-    ("yearly-reset", "OK", None),        # the reset total is set aside, the weather held
+    # the reset total is set aside; what is left is the weather, which moved a little
+    ("yearly-reset", "DRIFT", "dew_point_c"),
     ("season", "DRIFT", "dew_point_c"),
     ("next-days", "DRIFT", "pressure_inhg"),  # weather moves on a scale of days
 ])

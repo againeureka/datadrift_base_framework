@@ -9,7 +9,11 @@ usually means, common causes, what to do first, and what not to conclude.
 The data decides which write-ups apply. When every condition holds the
 archetype is a ``match``; when all but one hold and that one is close to
 its threshold (within :data:`NEAR`), it is ``near`` — an early signal
-rather than a finding. Output is language-neutral (codes and numbers);
+rather than a finding. A match whose attribute differs no more than
+sampling noise would (the noise test of :mod:`ddoc.scoring`) is also
+only ``near``; a match beyond noise makes the verdict DRIFT on its own
+(:func:`confirmed`), because some changes — a few far outliers, more
+empty values — barely move a distribution score. Output is language-neutral (codes and numbers);
 :func:`card_text` renders it through :data:`CATALOG`.
 
 The write-ups are general knowledge, not a diagnosis of this data; the
@@ -45,6 +49,31 @@ ATTR_CODES = ("unit_change", "stuck_values", "shift_and_spread", "shift_and_narr
 
 
 # ── Measuring ─────────────────────────────────────────────────────────
+
+
+def _noise_p(code: str, summary: Dict[str, Any]) -> Optional[float]:
+    """The noise test behind an attribute pattern: missing values are
+    tested on their counts, everything else on the value distribution.
+    None when the summary carries no test (then nothing is gated)."""
+    p = summary.get("missing_p" if code == "missing_surge" else "noise_p")
+    return float(p) if isinstance(p, (int, float)) else None
+
+
+def confirmed(summaries: Dict[str, Any], evidence: Optional[Dict[str, Any]] = None) -> List[Tuple[str, str]]:
+    """``(attribute, pattern)`` for every attribute pattern that matches
+    and holds beyond sampling noise; any one of them makes the verdict
+    DRIFT."""
+    from .scoring import ALPHA
+
+    out: List[Tuple[str, str]] = []
+    for name, summary in summaries.items():
+        if not isinstance(summary, dict) or summary.get("kind") not in ("numeric", "categorical"):
+            continue
+        for card in _attr_cards(name, _measure(summary, (evidence or {}).get(name))):
+            p = _noise_p(card["code"], summary)
+            if card["match"] == "match" and p is not None and p < ALPHA:
+                out.append((name, card["code"]))
+    return out
 
 
 def _shares(counts: Dict[str, float]) -> Dict[str, float]:
@@ -228,9 +257,14 @@ def read(*, verdict: str, scores: List[Tuple[str, float]], threshold: float,
 
     # Embeddings (image / text content) separated on the map. Not judged
     # on a handful of items: the map itself carries that caution.
+    from .scoring import ALPHA
+
+    noisy: List[str] = []   # attributes whose pattern holds only within sampling noise
     if isinstance(projection, dict) and projection.get("mixing") is not None \
             and not projection.get("few_points"):
         st = _status([(1 - projection["mixing"], EMBED_SEPARATION)])
+        if st == "match" and (projection.get("separation_p") or 0.0) >= ALPHA:
+            st = "near"
         if st:
             cards.append({"code": "embedding_shift", "match": st,
                           "signal": {"mixing": projection["mixing"],
@@ -252,6 +286,10 @@ def read(*, verdict: str, scores: List[Tuple[str, float]], threshold: float,
         if not isinstance(summary, dict) or summary.get("kind") not in ("numeric", "categorical"):
             continue
         for card in _attr_cards(name, _measure(summary, evidence.get(name))):
+            p = _noise_p(card["code"], summary)
+            if card["match"] == "match" and p is not None and p >= ALPHA:
+                card["match"] = "near"
+                noisy.append(name)
             per_attr.setdefault(card["code"], []).append(card)
     grouped = []
     for code in ATTR_CODES:
@@ -267,10 +305,10 @@ def read(*, verdict: str, scores: List[Tuple[str, float]], threshold: float,
                                 -max(score_of.get(a, 0.0) for a in c["attrs"])))
 
     matched_attr = [c for c in grouped if c["match"] == "match"]
-    if verdict == "OK" and matched_attr:
-        cards.append({"code": "hidden_change", "match": "match",
-                      "signal": {"attrs": sorted({a for c in matched_attr for a in c["attrs"]})}})
-    if verdict == "OK" and not matched_attr and not any(c["match"] == "match" for c in cards):
+    hidden = {a for c in matched_attr for a in c["attrs"]} | set(noisy)
+    if verdict == "OK" and hidden:
+        cards.append({"code": "hidden_change", "match": "match", "signal": {"attrs": sorted(hidden)}})
+    if verdict == "OK" and not hidden and not any(c["match"] == "match" for c in cards):
         cards.append({"code": "stable", "match": "match",
                       "signal": {"max_score": max(score_of.values()) if score_of else 0.0}})
     return cards + grouped
@@ -356,17 +394,17 @@ CATALOG: Dict[str, Dict[str, Dict[str, Any]]] = {
     },
     "hidden_change": {
         "en": {"title": "Hidden change",
-               "meaning": "The verdict is OK, yet some attributes show a change pattern over its threshold. Some changes barely move the distribution score — a mean shift in a column with few distinct values, for example.",
-               "causes": ["The score threshold is not sensitive for this column", "A change that is only starting"],
-               "actions": ["Track whether the same pattern shows next time", "For an important column, try a lower single-attribute threshold (--attr-threshold)"],
-               "caveat": "Do not read OK as \"nothing changed\".",
-               "signal": "patterns in {attrs}"},
+               "meaning": "The verdict is OK, yet some attributes meet the conditions of a change pattern. The difference is within what sampling alone would give, so it does not count toward the verdict: too few samples to tell a change from chance.",
+               "causes": ["A change that is only starting, seen on few samples", "Chance, on a small sample"],
+               "actions": ["Compare again when more data has come in", "Track whether the same pattern shows next time"],
+               "caveat": "Do not read OK as \"nothing changed\"; read it as \"not shown yet\".",
+               "signal": "patterns within sampling noise in {attrs}"},
         "ko": {"title": "잠복 변화형",
-               "meaning": "판정은 OK지만 일부 속성에서 기준을 넘는 변화 패턴이 보입니다. 값 종류가 적은 열의 평균 이동처럼, 분포 점수에는 잘 드러나지 않는 변화가 있습니다.",
-               "causes": ["점수 기준이 이 열에는 둔감함", "막 시작된 변화"],
-               "actions": ["다음 회차에도 같은 패턴이 나오는지 추적", "중요한 열이라면 단일 속성 기준을 낮춰 비교해 보기 (--attr-threshold)"],
-               "caveat": "OK를 '변화 없음'으로 읽지 마세요.",
-               "signal": "{attrs} 에서 패턴 확인"},
+               "meaning": "판정은 OK지만 일부 속성이 변화 유형의 조건을 채웁니다. 다만 그 차이가 표본 우연으로도 생길 수 있는 범위 안이라 판정에 넣지 않았습니다. 표본이 적어 변화와 우연을 아직 가를 수 없습니다.",
+               "causes": ["적은 표본에서 보이기 시작한 변화", "작은 표본의 우연"],
+               "actions": ["데이터가 더 모인 뒤 다시 비교", "다음 회차에도 같은 패턴이 나오는지 추적"],
+               "caveat": "OK를 '변화 없음'이 아니라 '아직 드러나지 않음'으로 읽으세요.",
+               "signal": "{attrs} 에서 잡음 범위 안의 패턴"},
     },
     "stable": {
         "en": {"title": "Stable",
@@ -618,8 +656,8 @@ WHEN: Dict[str, Dict[str, str]] = {
                      "ko": "속성 3개 이상 중 {regime} 이상이 기준 점수 이상"},
     "local_shift": {"en": "3 or more attributes, of which at most {local} score at or over the threshold",
                     "ko": "속성 3개 이상 중 {local} 이하만 기준 점수 이상"},
-    "hidden_change": {"en": "verdict OK while at least one attribute pattern matches",
-                      "ko": "판정은 OK인데 속성 유형이 하나 이상 해당"},
+    "hidden_change": {"en": "verdict OK while an attribute pattern's conditions hold, within sampling noise (G-test p ≥ {alpha})",
+                      "ko": "판정은 OK인데 속성 유형의 조건을 채운 속성이 있음 — 표본 잡음 범위 안 (G-검정 p ≥ {alpha})"},
     "stable": {"en": "verdict OK and no pattern matches",
                "ko": "판정이 OK이고 해당하는 유형이 없음"},
     "unit_change": {"en": "mean changed by ×{unit} or more (or ÷{unit}) and the spread by about the same factor",
@@ -650,13 +688,15 @@ WHEN: Dict[str, Dict[str, str]] = {
 def limits() -> Dict[str, Any]:
     """The thresholds, formatted for the criteria sentences."""
     from .embedding import FEW_POINTS
+    from .scoring import ALPHA
 
     return {"small": SMALL_SAMPLE, "regime": f"{REGIME_SHARE * 100:.0f}%", "local": f"{LOCAL_SHARE * 100:.0f}%",
             "unit": f"{UNIT_RATIO:g}", "stuck": f"{STUCK_SHARE * 100:.0f}%", "stuck_ref": f"{STUCK_REF_SHARE * 100:.0f}%",
             "shift": f"{MEAN_SHIFT_STD:g}σ", "spread": f"{SPREAD_RATIO:g}", "spread_shift": f"{SPREAD_WITH_SHIFT:g}",
             "bulk": f"{BULK_STEADY:g}", "out": f"{OUT_OF_RANGE * 100:.0f}%", "missing": f"{MISSING_CHANGE * 100:.0f}%p",
             "new": f"{NEW_VALUE_SHARE * 100:.0f}%", "share": f"{SHARE_SHIFT * 100:.0f}%p",
-            "mixing": f"{1 - EMBED_SEPARATION:g}", "few": FEW_POINTS, "near": f"{NEAR * 100:.0f}%"}
+            "mixing": f"{1 - EMBED_SEPARATION:g}", "few": FEW_POINTS, "near": f"{NEAR * 100:.0f}%",
+            "alpha": f"{ALPHA:g}"}
 
 
 def criterion_text(code: str, lang: str) -> str:

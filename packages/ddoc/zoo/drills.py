@@ -2,9 +2,10 @@
 
 The Drift Zoo tells stories; the drills check the pattern reading. Each
 drill builds a baseline and a current table where exactly one pattern is
-planted (columns that should not change are the baseline, shuffled), and
-names the archetypes `ddoc diff` must read and, for attribute patterns,
-on which columns.
+planted (columns that should not change are drawn again from the same
+distribution, so they carry real sampling noise), and names the
+archetypes `ddoc diff` must read and, for attribute patterns, on which
+columns.
 
 Attribute patterns are checked strictly: the planted one must be read, on
 the right column, and no other attribute pattern may appear. Dataset-level
@@ -19,6 +20,7 @@ The embedding pattern needs an image or text plugin and is not drilled here.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from statistics import NormalDist
 from typing import Callable, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -36,12 +38,8 @@ class Drill:
     verdict: Optional[str] = None                # checked only when given
 
 
-def _calm(ref: pd.Series, rng) -> pd.Series:
-    """The same values in another order: a column that did not change."""
-    return pd.Series(rng.permutation(ref.to_numpy()), name=ref.name)
-
-
 def _base(rng, n: int = N) -> pd.DataFrame:
+    """Columns that do not change: each call is a fresh sample."""
     return pd.DataFrame({
         "temp": np.round(rng.normal(20, 2, n), 2),
         "channel": rng.choice(["store", "online", "app"], n, p=[0.5, 0.3, 0.2]),
@@ -49,30 +47,41 @@ def _base(rng, n: int = N) -> pd.DataFrame:
 
 
 def _numeric(ref_values, cur_values, rng):
-    ref = _base(rng)
+    ref, cur = _base(rng, len(ref_values)), _base(rng, len(cur_values))
     ref["x"] = np.round(ref_values, 3)
-    cur = ref.apply(lambda s: _calm(s, rng))
     cur["x"] = np.round(cur_values, 3)
     return ref, cur
 
 
 def _categorical(ref_p: Dict[str, float], cur_p: Dict[str, float], rng):
-    ref = _base(rng)
+    ref, cur = _base(rng), _base(rng)
     ref["kind"] = rng.choice(list(ref_p), N, p=list(ref_p.values()))
-    cur = ref.apply(lambda s: _calm(s, rng))
     cur["kind"] = rng.choice(list(cur_p), N, p=list(cur_p.values()))
     return ref, cur
 
 
 def _stable(rng):
-    ref = _base(rng)
-    ref["x"] = np.round(rng.normal(50, 5, N), 3)
-    return ref, ref.apply(lambda s: _calm(s, rng))
+    return _numeric(rng.normal(50, 5, N), rng.normal(50, 5, N), rng)
 
 
 def _small(rng):
-    ref = _base(rng, 20)
-    return ref, ref.apply(lambda s: _calm(s, rng))
+    return _base(rng, 20), _base(rng, 20)
+
+
+def _mixed(rng, n: int) -> pd.DataFrame:
+    """Ten columns of the kinds real tables have."""
+    return pd.DataFrame({
+        **{f"c{i}": np.round(rng.normal(10 * i, 2, n), 2) for i in range(1, 5)},
+        "skew1": np.round(rng.lognormal(1, 0.6, n), 2), "skew2": np.round(rng.exponential(5, n), 2),
+        "rating": rng.choice([1, 2, 3, 4, 5], n, p=[0.05, 0.1, 0.25, 0.45, 0.15]),
+        "count": rng.poisson(3, n),
+        "channel": rng.choice(["store", "online", "app"], n, p=[0.5, 0.3, 0.2]),
+        "region": rng.choice(list("NSEW"), n),
+    })
+
+
+def _small_unchanged(rng):
+    return _mixed(rng, 30), _mixed(rng, 30)
 
 
 def _schema(rng):
@@ -86,7 +95,7 @@ def _regime(rng):
     ref["price"] = np.round(rng.normal(100, 10, N), 1)
     ref["qty"] = rng.integers(1, 5, N)
     cur = pd.DataFrame({
-        "temp": _calm(ref["temp"], rng),
+        "temp": np.round(rng.normal(20, 2, N), 2),
         "channel": rng.choice(["store", "online", "app"], N, p=[0.2, 0.3, 0.5]),
         "price": np.round(rng.normal(140, 10, N), 1),
         "qty": rng.integers(3, 7, N),
@@ -96,43 +105,41 @@ def _regime(rng):
 
 def _local(rng):
     ref = pd.DataFrame({f"m{i}": np.round(rng.normal(10 * i, 2, N), 2) for i in range(1, 7)})
-    cur = ref.apply(lambda s: _calm(s, rng))
+    cur = pd.DataFrame({f"m{i}": np.round(rng.normal(10 * i, 2, N), 2) for i in range(1, 7)})
     cur["m6"] = np.round(rng.normal(60 + 2 * 2, 2, N), 2)   # 2σ up, same spread
     return ref, cur
 
 
 def _hidden(rng):
-    ref = _base(rng)
-    ref["rating"] = np.repeat([1, 2, 3, 4, 5], [30, 60, 150, 270, 90])
-    cur = ref.apply(lambda s: _calm(s, rng))
-    cur["rating"] = rng.permutation(np.repeat([1, 2, 3, 4, 5], [150, 150, 120, 90, 90]))
-    return ref, cur
+    # 40 rows a side, the mean exactly 0.6σ up: the level-shift conditions
+    # hold, but on so few rows chance alone could make that difference
+    n = 40
+    q = np.array([NormalDist().inv_cdf((i + 0.5) / n) for i in range(n)])
+    return _numeric(50 + 5 * q, rng.permutation(50 + 5 * (q + 0.6)), rng)
 
 
 def _missing(rng):
-    values = rng.normal(50, 5, N)
-    ref, cur = _numeric(values, rng.permutation(values), rng)
+    ref, cur = _numeric(rng.normal(50, 5, N), rng.normal(50, 5, N), rng)
     cur.loc[cur.index % 4 == 0, "x"] = np.nan
     return ref, cur
 
 
 def _tail(rng):
-    values = rng.normal(50, 5, N)
-    cur_values = rng.permutation(values).copy()
+    cur_values = rng.normal(50, 5, N)
     cur_values[::12] = 200.0                     # about 8 % far above the baseline range
-    return _numeric(values, cur_values, rng)
+    return _numeric(rng.normal(50, 5, N), cur_values, rng)
 
 
 DRILLS: List[Drill] = [
     Drill("stable", "같은 분포의 다른 표본", _stable, {"stable": None}, "OK"),
-    Drill("small-sample", "같은 분포, 쪽마다 20행", _small, {"small_sample": None}, "OK"),
+    Drill("small-sample", "같은 분포, 쪽마다 20행", _small, {"small_sample": None, "hidden_change": None}, "OK"),
     Drill("schema-change", "같은 분포 + 현재에만 있는 열", _schema, {"schema_change": None}, "OK"),
     Drill("regime-shift", "4개 열 중 3개가 함께 이동 (가격대·수량·채널 구성)", _regime,
           {"regime_shift": None, "level_shift": ["price", "qty"], "mix_shift": ["channel"]}, "DRIFT"),
     Drill("local-shift", "6개 열 중 1개만 2σ 이동", _local,
           {"local_shift": None, "level_shift": ["m6"]}, "DRIFT"),
-    Drill("hidden-change", "1–5 점수의 평균이 크게 내려갔지만 분포 점수는 기준 아래", _hidden,
-          {"hidden_change": None, "shift_and_spread": ["rating"]}, "OK"),
+    Drill("hidden-change", "쪽마다 40행, 평균 0.6σ 이동 — 유형 조건은 채우지만 표본 잡음 범위 안", _hidden,
+          {"hidden_change": None}, "OK"),
     Drill("unit-change", "값 ×1000 (단위 변경)",
           lambda r: _numeric(r.normal(50, 5, N), r.normal(50, 5, N) * 1000, r), {"unit_change": ["x"]}),
     Drill("stuck-values", "값이 7.0 하나로 고정",
@@ -158,6 +165,7 @@ DRILLS: List[Drill] = [
     # (appended: a drill's seed is its position, so the ones above keep their data)
     Drill("shift-and-narrow", "평균 +1σ, 산포 ×0.5",
           lambda r: _numeric(r.normal(50, 5, N), r.normal(55, 2.5, N), r), {"shift_and_narrow": ["x"]}),
+    Drill("small-unchanged", "같은 분포에서 따로 뽑은 쪽마다 30행 · 10열 (오경보 확인)", _small_unchanged, {}, "OK"),
 ]
 
 # The Drift Zoo stories, read the same way (see each make.py).
@@ -166,8 +174,8 @@ STORIES: Dict[str, Dict[str, Optional[List[str]]]] = {
     "creeping_degradation": {"shift_and_spread": ["reading"]},
     "rhythm_not_drift": {"stable": None},
     # real data: the rainy season. Dew point, the column that moved most, rises
-    # and narrows as the air nears saturation.
-    "weather_station": {"shift_and_narrow": ["dew_point_c"],
+    # and narrows as the air nears saturation; most of the weather moved with it.
+    "weather_station": {"regime_shift": None, "shift_and_narrow": ["dew_point_c"],
                         "level_shift": ["humidity", "rain_hourly_mm", "temp_c"],
                         "shift_and_spread": ["feels_like_c", "pressure_inhg"]},
 }

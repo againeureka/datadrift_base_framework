@@ -42,13 +42,14 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 ```
 
 ```
-⚠ DRIFT — severity: high · score 0.3113 (threshold 0.15)
-   Most changed attributes: price 1.000 · channel 0.243 · day 0.002
+⚠ DRIFT — severity: high · score 0.3733 (threshold 0.15)
+   Most changed attributes: price 1.000 · channel 0.493
    modality: tabular · engine: builtin · ref: data/ref.csv · cur: data/cur.csv
    ⤷ Diagnostic report: note.html
    ⤷ Reading: Regime shift · Shift with wider spread · Mix shift
    ⤷ The values of 'price' moved. Rule out a unit or scale change, a sensor
      replacement or recalibration before treating it as a real change in the world.
+   ⤷ The spread of 'price' grew. Check for mixed sources or noisier measurement.
    ⤷ The mix of 'channel' changed (store 75.6% → 19.3%). Confirm whether the
      population really changed (site, channel, time of day) and ...
 ```
@@ -57,8 +58,8 @@ ddoc diff data/ref.csv data/cur.csv --report note.html
 
 | Line | Meaning |
 |---|---|
-| First line | Verdict and severity. The score is the mean distribution difference over the columns |
-| Most changed attributes | Score per column (0 = same, 1 = maximum) |
+| First line | Verdict and severity. The score is the mean of the column scores |
+| Most changed attributes | Score per column: the JS distance between the baseline and current distributions (0 = same, 1 = no overlap). A difference sampling noise explains scores 0, and columns at 0 are left off the line ([verdict sensitivity](../sensitivity.md), Korean) |
 | Reading | The measurements matched against drift patterns written up in advance ([glossary](../glossary.md), Korean) |
 | ⤷ hints | What to check first, per pattern |
 | Exit code | `0` OK · `1` DRIFT · `2` BLIND — 1 in this example |
@@ -146,7 +147,7 @@ ddoc report render -i result.json -o report.pdf
 ```bash
 ddoc diff data/ref.csv data/cur.csv --json | jq '.verdict, .overall_score'
 # "DRIFT"
-# 0.3113
+# 0.3733
 ```
 
 The patterns read are under `.diagnosis.archetypes` (`"match"` for a match, `"near"` for near).

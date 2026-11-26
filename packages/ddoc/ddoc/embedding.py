@@ -13,7 +13,9 @@ Besides the points it measures two things a reader can act on:
 * ``mixing`` — for each current point, the share of its nearest
   neighbours (in the full embedding space) that are baseline points,
   divided by the share expected if the two sets were one population.
-  1 = evenly mixed, 0 = fully separated.
+  1 = evenly mixed, 0 = fully separated. The neighbour counts behind it
+  ride along as ``neighbours`` so the separation can be tested against
+  sampling noise (:func:`ddoc.scoring.separation`).
 
 Given the item names, it also picks items to open and look at: the most
 typical of each set (nearest its centre) and the current items least like
@@ -75,6 +77,7 @@ def project(ref, cur, *, ref_names: Optional[List[str]] = None, cur_names: Optio
     k = min(NEIGHBOURS, len(pool) - 1)
     nearest = np.argpartition(d2, k - 1, axis=1)[:, :k]
     observed = float(is_ref[nearest].mean())
+    ref_neighbours = int(is_ref[nearest].sum())
     expected = len(xi) / (len(pool) - 1)
     mixing = min(1.0, observed / expected) if expected else 0.0
 
@@ -100,6 +103,7 @@ def project(ref, cur, *, ref_names: Optional[List[str]] = None, cur_names: Optio
         "centroid": {"ref": r4([cx])[0], "cur": r4([cy])[0]},
         "centroid_shift": None if shift is None else round(shift, 4),
         "mixing": round(float(mixing), 4),
+        "neighbours": {"ref": ref_neighbours, "total": int(nearest.size), "expected": round(float(expected), 6)},
         "few_points": bool(min(len(X), len(Y)) < FEW_POINTS),
         **({"examples": examples} if examples else {}),
     }

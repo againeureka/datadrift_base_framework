@@ -46,17 +46,19 @@ ddoc analyze drift \
 {"modality": "timeseries", "timestamp": "20261125_225058", "overall_score": 9403007.749453789}
 ```
 
-`identical` scenario 로 다시 돌리면 score 는 0 입니다. 점수가 이렇게 큰 것은 timeseries 플러그인이 열의 원래
-단위로 평균·분산·왜도·첨도의 차이를 더하기 때문입니다. 일사량(lux)처럼 값이 큰 열의 분산 차이가 점수를
-좌우하므로, 이 숫자는 0–1 점수가 아니고 다른 플러그인과 비교할 수도 없습니다([지금 상태](../status.md)의
-알려진 한계).
+`identical` scenario 로 다시 돌리면 score 는 0 입니다. `analyze drift` 는 플러그인이 낸 점수를 그대로 보여 주는
+저수준 명령이라, 이 숫자는 timeseries 플러그인의 척도(열의 원래 단위로 평균·분산·왜도·첨도의 차이를 더한 값)이고
+일사량(lux)처럼 값이 큰 열이 좌우합니다.
 
-같은 CSV 를 `ddoc diff` 로 비교하면 0–1 점수, 판정, 가장 변한 열과 판독을 볼 수 있습니다:
+판정은 `ddoc diff` 로 합니다. 플러그인이 넘긴 열 값을 모든 데이터에 같은 0–1 척도(열마다 JS 거리, 표본 잡음으로
+설명되면 0)로 다시 매겨 판정하고, 가장 변한 열과 판독을 보여 줍니다. 플러그인의 원래 점수는 `--json` 결과의
+`plugin_scores` 에 남습니다:
 
 ```bash
-ddoc diff /tmp/ex/ref/weather/data.csv /tmp/ex/cur/weather/data.csv --lang ko
-# ⚠ DRIFT — 심각도: 높음 · 점수 0.1782 (기준 0.15)
-#    가장 변한 속성: dew_point_c 0.909 · humidity 0.276 · pressure_inhg 0.237
+ddoc diff /tmp/ex/ref /tmp/ex/cur --lang ko
+# ⚠ DRIFT — 심각도: 높음 · 점수 0.3326 (기준 0.15)
+#    가장 변한 속성: weather/dew_point_c 0.953 · weather/humidity 0.525 ·
+#    weather/pressure_inhg 0.487
 ```
 
 데이터와 다른 기간의 이야기(연간 누적값 초기화, 계절 등)는 Drift Zoo 의

@@ -36,6 +36,11 @@ Three ways to use it:
   Adding a new detector means writing a plugin — zero framework changes.
 - **An honest verdict.** `ddoc diff` answers `OK`, `DRIFT` or `BLIND` —
   "cannot judge" is a first-class answer rather than a silent OK.
+- **One scale for every kind of data.** Each attribute — a CSV column, a property
+  measured on every image, text or clip, the counts of a category, the embedding
+  map — gets the same score: the Jensen–Shannon distance, 0 when sampling noise
+  explains the difference. The same thresholds hold everywhere, and small samples
+  do not raise alarms on noise ([why](packages/ddoc/docs/sensitivity.md), Korean).
 - **Recipes.** A YAML DSL (`ddoc recipe run <file>`) chains fetch → analyze →
   report → export steps with variable substitution, so an entire drift-check
   pipeline is a reviewable text file.
@@ -135,7 +140,7 @@ report to open, save as HTML, PDF or Markdown, or reproduce from the CLI:
 ## In-tree plugins
 
 `vision` (image EDA / embedding drift) · `text` · `timeseries` · `audio` ·
-`categorical` (JS-divergence on count dicts) · `tabular` · `evidently`
+`categorical` (count dicts) · `tabular` · `evidently`
 (third-party integration)
 
 Each plugin is an independent pip package registered through the

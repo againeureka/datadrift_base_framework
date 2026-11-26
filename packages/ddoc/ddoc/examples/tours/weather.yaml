@@ -149,17 +149,18 @@ steps:
 
   - id: judge-reset
     title:
-      en: An OK has its evidence too
-      ko: OK 에도 근거가 있습니다
+      en: A device setting must not hide the weather
+      ko: 기기 설정이 날씨를 가리지 않게
     note:
       en: >-
-        Compared as levels, the reset total alone would make this DRIFT. ddoc sets aside the
-        columns that only grow, says which and why, and reads the weather that is left: OK.
-        reset.html records it.
+        Compared as levels, the reset totals would top the list with a full 1.0: a device
+        setting, not the weather. ddoc sets aside the columns that only grow and says which
+        and why, so what it reads is the weather that is left. Into June, dew point and
+        pressure did move a little; reset.html shows how much.
       ko: >-
-        누적값을 수준으로 비교하면 이 열 하나로 DRIFT 가 납니다. ddoc 은 늘어나기만 하는 열을
-        비교에서 빼고 어떤 열을 왜 뺐는지 적은 뒤, 남은 날씨 열로 판정합니다: OK.
-        reset.html 에 남습니다.
+        누적값을 수준으로 비교하면 초기화된 열들이 1.0 으로 맨 위에 오릅니다. 날씨가 아니라 기기
+        설정입니다. ddoc 은 늘어나기만 하는 열을 빼고 어떤 열을 왜 뺐는지 적으므로, 읽는 것은 남은
+        날씨입니다. 6월로 넘어가며 이슬점과 기압이 조금 움직였고, 얼마나인지는 reset.html 에 있습니다.
     when: '${vars.example} != ""'
     run: diff
     with:

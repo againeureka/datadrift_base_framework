@@ -485,4 +485,9 @@ def _finish_drift(
         valid, hook_name="drift_detect",
         fusion=fusion, fusion_weights=fusion_weights,
     )
+    # The values measured per item are handed to `ddoc diff` for its own
+    # scale; this low-level envelope keeps the plugins' results as they were.
+    for part in [res, *((res.get("modalities") or {}).values())]:
+        if isinstance(part, dict):
+            part.pop("attribute_values", None)
     _emit(res, json_out=json_out)

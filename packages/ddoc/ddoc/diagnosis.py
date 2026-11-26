@@ -60,7 +60,11 @@ def _summary_from_counts(ref: Dict[str, float], cur: Dict[str, float]) -> Dict[s
                             if cs.get(k, 0.0) == 0 and rs.get(k, 0.0) >= NEW_VALUE_SHARE][:5],
     }
     if _looks_like_counts(ref) and _looks_like_counts(cur):
+        from .scoring import counts_score
         summary["n"] = {"ref": int(sum(ref.values())), "cur": int(sum(cur.values()))}
+        tested = counts_score(ref, cur)
+        if tested is not None:
+            summary["noise_p"] = tested[1]
     return summary
 
 
@@ -108,8 +112,26 @@ def patterns(summary: Dict[str, Any]) -> List[Dict[str, Any]]:
     return _patterns(summary)
 
 
+def summaries_of(result: Dict[str, Any], evidence: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Per-attribute summaries: the engine's own, plus ones built from the
+    ref/cur evidence (counts or summary statistics) for the rest."""
+    summaries: Dict[str, Any] = dict(result.get("summaries") or {})
+    for name, dists in (evidence or {}).items():
+        if name in summaries or not isinstance(dists, dict):
+            continue
+        ref, cur = dists.get("ref") or {}, dists.get("cur") or {}
+        if is_stat_dict(ref) or is_stat_dict(cur):
+            summaries[name] = {"kind": "stats",
+                               "values": {k: {"ref": ref.get(k), "cur": cur.get(k)}
+                                          for k in dict.fromkeys([*ref, *cur])}}
+        else:
+            summaries[name] = _summary_from_counts(ref, cur)
+    return summaries
+
+
 def _rationale(verdict: str, overall: Optional[float], top: List[Tuple[str, float]],
-               threshold: float, attr_threshold: float, reason: Optional[str]) -> List[Dict[str, Any]]:
+               threshold: float, attr_threshold: float, reason: Optional[str],
+               linked: Optional[List[Tuple[str, str]]] = None) -> List[Dict[str, Any]]:
     if verdict == "BLIND":
         return [{"code": "blind", "reason": reason or ""}]
     overall = overall or 0.0
@@ -123,6 +145,11 @@ def _rationale(verdict: str, overall: Optional[float], top: List[Tuple[str, floa
             out.append({"code": "attr", "attr": name, "score": score, "threshold": attr_threshold})
     if overall >= threshold:
         out.append({"code": "overall", "score": overall, "threshold": threshold})
+    named = {item.get("attr") for item in out}
+    for name, pattern in linked or []:
+        if name not in named:   # a pattern beyond noise, where no score reached a threshold
+            out.append({"code": "pattern", "attr": name, "pattern": pattern})
+            named.add(name)
     return out
 
 
@@ -140,17 +167,7 @@ def build(
     """Build the language-neutral diagnosis for one comparison."""
     result = result or {}
     evidence = evidence or {}
-    summaries: Dict[str, Any] = dict(result.get("summaries") or {})
-    for name, dists in evidence.items():
-        if name in summaries:
-            continue
-        ref, cur = dists.get("ref") or {}, dists.get("cur") or {}
-        if is_stat_dict(ref) or is_stat_dict(cur):
-            summaries[name] = {"kind": "stats",
-                               "values": {k: {"ref": ref.get(k), "cur": cur.get(k)}
-                                          for k in dict.fromkeys([*ref, *cur])}}
-        else:
-            summaries[name] = _summary_from_counts(ref, cur)
+    summaries = summaries_of(result, evidence)
 
     scores = dict(result.get("attribute_drifts") or {}) or dict(top)
     ordered = sorted(((k, float(v)) for k, v in scores.items() if isinstance(v, (int, float))),
@@ -210,9 +227,11 @@ def build(
         evidence=evidence, profile=profile, smallest=smallest,
         projection=result.get("embedding_projection") if isinstance(result.get("embedding_projection"), dict) else None)
 
+    linked = archetypes.confirmed({k: v for k, v in summaries.items() if isinstance(v, dict)}, evidence) \
+        if verdict == "DRIFT" else []
     return {
         "rationale": _rationale(verdict, overall, ordered[:1] if verdict == "OK" else ordered,
-                                threshold, attr_threshold, reason),
+                                threshold, attr_threshold, reason, linked),
         "samples": samples,
         "attributes": attributes,
         "warnings": warnings,
@@ -359,7 +378,12 @@ def _values(pairs: List[List[Any]]) -> str:
 
 
 def rationale_text(item: Dict[str, Any], lang: str) -> str:
-    return t(f"rationale.{item['code']}", lang, **{k: v for k, v in item.items() if k != "code"})
+    fields = {k: v for k, v in item.items() if k != "code"}
+    if item["code"] == "pattern":
+        from . import archetypes
+        entry = archetypes.CATALOG.get(item.get("pattern"), {})
+        fields["pattern"] = (entry.get(lang) or entry.get("en") or {}).get("title", item.get("pattern"))
+    return t(f"rationale.{item['code']}", lang, **fields)
 
 
 def summary_text(summary: Optional[Dict[str, Any]], lang: str) -> Optional[str]:

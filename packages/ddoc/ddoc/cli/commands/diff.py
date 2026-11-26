@@ -12,8 +12,9 @@ Design goals (the "ffmpeg test"):
 * **Tolerance** — sniffs the input modality itself. Prepared ddoc
   layouts go through the plugin ``drift_detect`` hook; bare CSV
   files/folders fall back to a built-in comparator (pandas +
-  Jensen-Shannon on per-column histograms) so the common case works
-  with zero setup and zero extra plugins.
+  per-column histograms) so the common case works with zero setup and
+  zero extra plugins. Every attribute, whoever measured it, is scored on
+  one scale (:mod:`ddoc.scoring`: JS distance net of sampling noise).
 * **Verdict** — every run ends in one of ``OK`` / ``DRIFT`` /
   ``BLIND``. BLIND is a first-class answer ("cannot determine"), not
   a stack trace.
@@ -104,31 +105,6 @@ def sniff_modality(path: Path) -> Tuple[str, Dict[str, Any]]:
 
 
 # ── Built-in CSV comparator (zero-plugin fallback) ────────────────────
-
-
-def _js_divergence(p: Dict[Any, float], q: Dict[Any, float]) -> float:
-    """Base-2 Jensen-Shannon divergence over aligned count dicts, ∈[0,1]."""
-    import math
-
-    keys = set(p) | set(q)
-    if not keys:
-        return 0.0
-
-    def norm(d: Dict[Any, float]) -> Dict[Any, float]:
-        total = sum(d.get(k, 0.0) for k in keys) or 1.0
-        return {k: d.get(k, 0.0) / total for k in keys}
-
-    pn, qn = norm(p), norm(q)
-    m = {k: (pn[k] + qn[k]) / 2.0 for k in keys}
-
-    def kl(a: Dict[Any, float], b: Dict[Any, float]) -> float:
-        s = 0.0
-        for k in keys:
-            if a[k] > 0 and b[k] > 0:
-                s += a[k] * math.log2(a[k] / b[k])
-        return s
-
-    return max(0.0, min(1.0, 0.5 * kl(pn, m) + 0.5 * kl(qn, m)))
 
 
 def _rate(part: float, whole: float) -> float:
@@ -400,14 +376,18 @@ def _profile(frame, files: List[str], time_cols: Dict[str, Any], sample_rows: in
 
 def _numeric_column(r, c, base: Dict[str, Any], bins: int = 20
                     ) -> Tuple[float, Dict[str, Any], Optional[Dict[str, Dict[str, int]]]]:
-    """One numeric attribute (two series without gaps): its JS divergence on a
-    shared-range histogram, its summary for the diagnosis, and the ref/cur
+    """One numeric attribute (two series without gaps): its score on a
+    shared-range histogram (see :mod:`ddoc.scoring`), its summary for the
+    diagnosis (with the noise test's p as ``noise_p``), and the ref/cur
     counts shown as evidence (None when every value is the same)."""
     import numpy as np
+
+    from ...scoring import score
 
     lo, hi = float(min(r.min(), c.min())), float(max(r.max(), c.max()))
     summary = {"kind": "numeric", **base, **_numeric_summary(r, c)}
     if hi == lo:
+        summary["noise_p"] = 1.0
         return 0.0, summary, None
     whole = bool((r % 1 == 0).all() and (c % 1 == 0).all())
     if whole and hi - lo + 1 <= bins:
@@ -419,7 +399,8 @@ def _numeric_column(r, c, base: Dict[str, Any], bins: int = 20
         rh = [int(rvc.get(v, 0)) for v in values]
         ch = [int(cvc.get(v, 0)) for v in values]
         summary["discrete"] = True
-        return _js_divergence(dict(enumerate(rh)), dict(enumerate(ch))), summary, {
+        value, summary["noise_p"] = score(rh, ch)
+        return value, summary, {
             "ref": {str(v): n for v, n, m in zip(values, rh, ch) if n or m},
             "cur": {str(v): m for v, n, m in zip(values, rh, ch) if n or m},
         }
@@ -427,23 +408,24 @@ def _numeric_column(r, c, base: Dict[str, Any], bins: int = 20
     rh, _ = np.histogram(r, bins=edges)
     ch, _ = np.histogram(c, bins=edges)
     labels = [f"{edges[i]:.4g}–{edges[i + 1]:.4g}" for i in range(len(edges) - 1)]
-    return _js_divergence(dict(enumerate(rh.tolist())), dict(enumerate(ch.tolist()))), summary, {
+    value, summary["noise_p"] = score(rh.tolist(), ch.tolist())
+    return value, summary, {
         "ref": {labels[i]: int(rh[i]) for i in range(len(labels)) if rh[i] or ch[i]},
         "cur": {labels[i]: int(ch[i]) for i in range(len(labels)) if rh[i] or ch[i]},
     }
 
 
 def attribute_evidence(values: Dict[str, Dict[str, List[float]]], bins: int = 20
-                       ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """Summaries and ref/cur distributions from a plugin's measured values
-    per item (``{attribute: {"ref": [...], "cur": [...]}}``, e.g. the
-    brightness of every image). They are read exactly as CSV columns are,
-    so the pattern reading and the report's graphs work for any plugin
-    that hands its values over; the plugin's own scores stay the verdict's."""
+                       ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, float]]:
+    """Summaries, ref/cur distributions and scores from a plugin's measured
+    values per item (``{attribute: {"ref": [...], "cur": [...]}}``, e.g.
+    the brightness of every image). They are read and scored exactly as
+    CSV columns are, so every kind of data is judged on the same scale."""
     import pandas as pd
 
     summaries: Dict[str, Any] = {}
     distributions: Dict[str, Any] = {}
+    scores: Dict[str, float] = {}
     for name, sides in values.items():
         if not isinstance(sides, dict):
             continue
@@ -451,20 +433,22 @@ def attribute_evidence(values: Dict[str, Dict[str, List[float]]], bins: int = 20
         c = pd.to_numeric(pd.Series(sides.get("cur") or [], dtype=object), errors="coerce").dropna()
         if r.empty or c.empty:
             continue
-        _, summaries[name], dist = _numeric_column(
+        scores[name], summaries[name], dist = _numeric_column(
             r.astype(float), c.astype(float), {"n": {"ref": int(len(r)), "cur": int(len(c))}}, bins)
         if dist is not None:
             distributions[name] = dist
-    return summaries, distributions
+    return summaries, distributions, scores
 
 
 def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
              sample_rows: int = 0, max_rows: int = MAX_ROWS) -> Dict[str, Any]:
     """Column-wise drift between two CSV datasets.
 
-    Numeric columns → shared-range histogram JS divergence;
-    non-numeric columns → value-count JS divergence.
-    ``overall_score`` = mean over shared columns. The per-column
+    Numeric columns → shared-range histogram, non-numeric columns →
+    value counts, each scored by :func:`ddoc.scoring.score` (the JS
+    distance, 0 when a G-test finds no more than sampling noise; the p
+    rides along in the summary as ``noise_p``, the missing values' own
+    test as ``missing_p``). ``overall_score`` = mean over shared columns. The per-column
     ref/cur distributions ride along under ``distributions`` so the
     consultation report can show *evidence*, not just scores, and
     ``summaries`` carries per-column statistics (sample size, missing
@@ -507,12 +491,16 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
     attribute_drifts: Dict[str, float] = {}
     distributions: Dict[str, Dict[str, Dict[str, float]]] = {}
     summaries: Dict[str, Dict[str, Any]] = {}
+    from ...scoring import g_test_p, score
+
     for col in shared:
         r, c = ref[col].dropna(), cur[col].dropna()
+        gaps = (len(ref) - len(r), len(cur) - len(c))
         base = {
             "n": {"ref": int(len(ref)), "cur": int(len(cur))},
-            "missing": {"ref": _rate(len(ref) - len(r), len(ref)),
-                        "cur": _rate(len(cur) - len(c), len(cur))},
+            "missing": {"ref": _rate(gaps[0], len(ref)), "cur": _rate(gaps[1], len(cur))},
+            # missing values tested on their own: they never show in the value distribution
+            "missing_p": g_test_p([gaps[0], len(r)], [gaps[1], len(c)]),
         }
         if r.empty and c.empty:
             continue
@@ -523,8 +511,9 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
         else:
             rvc = r.astype(str).value_counts()
             cvc = c.astype(str).value_counts()
-            attribute_drifts[col] = _js_divergence(rvc.to_dict(), cvc.to_dict())
-            summaries[col] = {"kind": "categorical", **base,
+            keys = list(dict.fromkeys([*rvc.index, *cvc.index]))
+            attribute_drifts[col], noise_p = score([rvc.get(k, 0) for k in keys], [cvc.get(k, 0) for k in keys])
+            summaries[col] = {"kind": "categorical", **base, "noise_p": noise_p,
                               **_category_changes(rvc.to_dict(), cvc.to_dict())}
             # Evidence: top categories by combined mass + an "(other)" bucket.
             top = list((rvc.add(cvc, fill_value=0)).sort_values(ascending=False).index[:8])
@@ -555,12 +544,15 @@ def csv_diff(ref_files: List[str], cur_files: List[str], bins: int = 20,
 
 
 def compute_verdict(
-    result: Dict[str, Any], *, threshold: float, attr_threshold: float
+    result: Dict[str, Any], *, threshold: float, attr_threshold: float,
+    evidence: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, str, List[Tuple[str, float]]]:
     """Map a drift envelope to (verdict, severity, top_attributes).
 
-    DRIFT when overall ≥ threshold OR any single attribute ≥
-    attr_threshold (a strong local shift shouldn't be averaged away).
+    DRIFT when overall ≥ threshold, OR any single attribute ≥
+    attr_threshold (a strong local shift shouldn't be averaged away), OR
+    an attribute pattern holds beyond sampling noise (a few far outliers
+    or more empty values barely move a distribution score).
     """
     overall = float(result.get("overall_score") or 0.0)
     attrs = result.get("attribute_drifts") or {}
@@ -573,6 +565,9 @@ def compute_verdict(
     if overall >= attr_threshold or max_attr >= attr_threshold:
         return "DRIFT", "high", top
     if overall >= threshold:
+        return "DRIFT", "medium", top
+    from ...diagnosis import summaries_of
+    if archetypes.confirmed(summaries_of(result, evidence), evidence):
         return "DRIFT", "medium", top
     if overall >= threshold / 3:
         return "OK", "low", top
@@ -597,8 +592,9 @@ def _print_human(payload: Dict[str, Any], lang: str) -> None:
         head += " · " + t("console.score", lang, score=payload["overall_score"],
                           threshold=payload["threshold"])
     rprint(head)
-    if payload.get("top_attributes"):
-        tops = " · ".join(f"{k} {v:.3f}" for k, v in payload["top_attributes"][:3])
+    moved = [(k, v) for k, v in payload.get("top_attributes") or [] if v > 0]   # 0 = within noise
+    if moved:
+        tops = " · ".join(f"{k} {v:.3f}" for k, v in moved[:3])
         rprint("   " + t("console.top_attrs", lang, tops=tops))
     rprint("   " + t("console.meta", lang, modality=payload.get("modality") or "?",
                       engine=payload.get("engine"), ref=payload["ref"], cur=payload["cur"]))
@@ -661,6 +657,54 @@ def _blind(reason: str, *, ref: str, cur: str, json_out: bool, lang: str,
         "diagnosis": dx.build(verdict="BLIND", overall=None, top=[], threshold=0.0,
                               attr_threshold=0.0, reason=reason),
     }, json_out=json_out, lang=lang, report=report, issuer=issuer)
+
+
+def _rescore(kind: str, ref: Path, cur: Path, result: Dict[str, Any]) -> None:
+    """Put a plugin's result on ddoc's own scale (:mod:`ddoc.scoring`), so
+    the thresholds mean the same for images, text, audio and tables.
+
+    * values measured per item (``attribute_values``) are summarised and
+      scored exactly as CSV columns;
+    * a categorical layout's counts (``distributions.json``) are scored
+      the same way; proportions and summary statistics carry no sample
+      size and keep the plugin's score;
+    * an embedding map adds ``embedding_separation`` (1 − neighbour
+      mixing, net of noise).
+
+    The plugin's own numbers stay under ``plugin_scores``."""
+    from ...diagnosis import _looks_like_counts, is_stat_dict
+    from ...scoring import counts_score, separation
+
+    scores: Dict[str, float] = {}
+    values = result.pop("attribute_values", None)
+    if isinstance(values, dict):
+        found, dists, scores = attribute_evidence(values)
+        result["summaries"] = {**found, **(result.get("summaries") or {})}
+        if dists and not isinstance(result.get("distributions"), dict):
+            result["distributions"] = dists
+    elif kind == "categorical":
+        own = dict(result.get("attribute_drifts") or {})
+        for attr, sides in _collect_evidence(kind, ref, cur, result).items():
+            r, c = sides.get("ref") or {}, sides.get("cur") or {}
+            got = (counts_score(r, c) if not (is_stat_dict(r) or is_stat_dict(c))
+                   and _looks_like_counts(r) and _looks_like_counts(c) else None)
+            if got is not None:
+                scores[attr] = got[0]
+            elif isinstance(own.get(attr), (int, float)):
+                scores[attr] = float(own[attr])
+    projection = result.get("embedding_projection")
+    if isinstance(projection, dict):
+        sep = separation(projection)
+        if sep is not None:
+            projection["separation_p"] = sep[1]
+            if scores:
+                scores["embedding_separation"] = sep[0]
+    if not scores:
+        return
+    result["plugin_scores"] = {"overall_score": result.get("overall_score"),
+                               "attribute_drifts": result.get("attribute_drifts")}
+    result["attribute_drifts"] = {k: round(v, 4) for k, v in scores.items()}
+    result["overall_score"] = round(sum(scores.values()) / len(scores), 4)
 
 
 def _collect_evidence(kind: str, ref: Path, cur: Path,
@@ -828,18 +872,13 @@ def diff_command(
             hints=hints, report=report, issuer=issuer,
         )
 
-    # A plugin that hands over its measured values per item gets the same
-    # summaries and evidence as CSV columns (the scores stay its own).
-    if engine == "plugin" and isinstance(result.get("attribute_values"), dict):
-        found, dists = attribute_evidence(result.pop("attribute_values"))
-        result["summaries"] = {**found, **(result.get("summaries") or {})}
-        if dists and not isinstance(result.get("distributions"), dict):
-            result["distributions"] = dists
+    if engine == "plugin":
+        _rescore(kind, ref, cur, result)
 
-    verdict, severity, top = compute_verdict(
-        result, threshold=threshold, attr_threshold=attr_threshold,
-    )
     evidence = _collect_evidence(kind, ref, cur, result)
+    verdict, severity, top = compute_verdict(
+        result, threshold=threshold, attr_threshold=attr_threshold, evidence=evidence,
+    )
     diagnosis = dx.build(
         verdict=verdict, overall=float(result.get("overall_score") or 0.0), top=top,
         threshold=threshold, attr_threshold=attr_threshold,

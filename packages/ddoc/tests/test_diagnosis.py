@@ -245,12 +245,11 @@ def test_few_distinct_integers_are_shown_per_value(tmp_path):
     assert list(result["distributions"]["rating"]["ref"]) == ["1", "2", "3", "4", "5"]
     # same score as the shared-range histogram: each integer has its own bin
     import numpy as np
-    from ddoc.cli.commands.diff import _js_divergence
+    from ddoc.scoring import score
     edges = np.linspace(1, 5, 21)
     rh, _ = np.histogram([1 + i % 5 for i in range(200)], bins=edges)
     ch, _ = np.histogram([3 + i % 3 for i in range(200)], bins=edges)
-    assert result["attribute_drifts"]["rating"] == round(_js_divergence(
-        dict(enumerate(rh.tolist())), dict(enumerate(ch.tolist()))), 4)
+    assert result["attribute_drifts"]["rating"] == round(score(rh.tolist(), ch.tolist())[0], 4)
     payload = {"verdict": "DRIFT", "severity": "high", "overall_score": 0.4, "threshold": 0.15,
                "attr_threshold": 0.25, "top_attributes": [["rating", 0.4]], "ref": "r", "cur": "c",
                "modality": "tabular", "engine": "builtin", "detector": "csv", "raw": result, "hints": []}

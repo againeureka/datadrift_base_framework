@@ -59,6 +59,12 @@ def _write_csv(path, rows):
     return str(path)
 
 
+# Prices around 105 against prices around 300: 40 rows a side, enough that
+# the difference cannot be chance (three rows a side could be).
+LOW = ["price"] + [str(100 + i % 11) for i in range(40)]
+HIGH = ["price"] + [str(290 + i % 21) for i in range(40)]
+
+
 def test_csv_diff_identical_is_zero(tmp_path):
     rows = ["price,color", "100,red", "120,blue", "110,red"]
     a = _write_csv(tmp_path / "a.csv", rows)
@@ -69,11 +75,23 @@ def test_csv_diff_identical_is_zero(tmp_path):
 
 
 def test_csv_diff_shifted_scores_high(tmp_path):
-    a = _write_csv(tmp_path / "a.csv", ["price", "100", "110", "105"])
-    b = _write_csv(tmp_path / "b.csv", ["price", "300", "290", "310"])
+    a = _write_csv(tmp_path / "a.csv", LOW)
+    b = _write_csv(tmp_path / "b.csv", HIGH)
     res = csv_diff([a], [b])
-    assert res["overall_score"] > 0.5
+    assert res["overall_score"] == 1.0                   # no overlap: the JS distance is 1
+    assert res["summaries"]["price"]["noise_p"] < 1e-6
     assert res["detector"] == "builtin:csv_js"
+
+
+def test_three_rows_a_side_cannot_tell_change_from_chance(tmp_path):
+    """Fully separated, but three against three splits that way by chance
+    one time in twenty: the score is gated, the verdict OK, and the
+    reading says the pattern is there but within noise."""
+    ref, cur = _mk_pair(tmp_path, ["price", "100", "110", "105"], ["price", "300", "290", "310"])
+    payload = json.loads(runner.invoke(app, ["diff", str(ref), str(cur), "--json"]).stdout.strip())
+    assert payload["verdict"] == "OK" and payload["overall_score"] == 0.0
+    codes = {c["code"] for c in payload["diagnosis"]["archetypes"] if c["match"] == "match"}
+    assert {"hidden_change", "small_sample"} <= codes
 
 
 def test_csv_diff_no_shared_columns_raises(tmp_path):
@@ -134,11 +152,7 @@ def test_diff_e2e_ok_exit_0(tmp_path):
 
 
 def test_diff_e2e_drift_exit_1_and_pure_json(tmp_path):
-    ref, cur = _mk_pair(
-        tmp_path,
-        ["price", "100", "110", "105"],
-        ["price", "300", "290", "310"],
-    )
+    ref, cur = _mk_pair(tmp_path, LOW, HIGH)
     result = runner.invoke(app, ["diff", str(ref), str(cur), "--json"])
     assert result.exit_code == 1, result.output
     payload = json.loads(result.stdout.strip())  # 전체 stdout이 JSON 하나여야 한다
@@ -169,8 +183,8 @@ def test_diff_e2e_unknown_kind_blind_exit_2(tmp_path):
 def test_diff_report_csv_evidence(tmp_path):
     ref, cur = _mk_pair(
         tmp_path,
-        ["price,color", "100,red", "110,red", "105,blue"],
-        ["price,color", "300,green", "290,green", "310,green"],
+        ["price,color"] + [f"{p},{'red' if i % 3 else 'blue'}" for i, p in enumerate(LOW[1:])],
+        ["price,color"] + [f"{p},green" for p in HIGH[1:]],
     )
     note = tmp_path / "note.html"
     result = runner.invoke(app, ["diff", str(ref), str(cur), "--json",
@@ -193,7 +207,7 @@ def test_a_report_that_fails_is_reported_not_swallowed(tmp_path, monkeypatch):
     def broken(*a, **k):
         raise KeyError("threshold")
     monkeypatch.setattr(diff_report, "build_consultation_html", broken)
-    ref, cur = _mk_pair(tmp_path, ["price", "100", "110", "105"], ["price", "300", "290", "310"])
+    ref, cur = _mk_pair(tmp_path, LOW, HIGH)
     note = tmp_path / "note.html"
     out = runner.invoke(app, ["diff", str(ref), str(cur), "--report", str(note)])
     assert out.exit_code == 1                      # the verdict still stands
@@ -389,7 +403,7 @@ def test_values_from_a_plugin_are_read_like_csv_columns():
     from ddoc.cli.commands.diff import attribute_evidence
 
     ref = [10.0 + (i % 7) for i in range(60)]
-    summaries, dists = attribute_evidence({
+    summaries, dists, scores = attribute_evidence({
         "sharpness": {"ref": ref, "cur": [3.0 + (i % 3) * 0.5 for i in range(60)]},
         "level": {"ref": [1, 2, 3] * 20, "cur": [2, 3, 4] * 20},     # few integers: a bar each
         "empty": {"ref": [], "cur": [1.0]},
@@ -401,3 +415,5 @@ def test_values_from_a_plugin_are_read_like_csv_columns():
     assert sum(dists["sharpness"]["ref"].values()) == 60
     assert summaries["level"]["discrete"] and dists["level"]["cur"] == {"1": 0, "2": 20, "3": 20, "4": 20}
     assert "same" not in dists                                      # nothing to draw
+    # scored like CSV columns: a clear move scores, no difference scores 0
+    assert scores["sharpness"] == pytest.approx(1.0) and scores["same"] == 0.0

@@ -157,12 +157,13 @@ steps:
       ko: 아무 일도 없을 때의 점수
     note:
       en: >-
-        Read this score as the floor. With about 60 frames a side, chance alone moves the image
-        scores around the thresholds, so the verdict here can tip either way. Changes worth
-        acting on are far above it, as the next step shows.
+        Nothing changed, and the verdict says so: OK, every score 0. Each measure is first tested
+        against sampling noise; a difference that 60 frames a side could show by chance scores 0,
+        so small samples do not raise alarms. A real fault stands out, as the next step shows.
       ko: >-
-        이 점수를 바닥으로 읽으세요. 쪽마다 60장쯤이면 우연만으로도 이미지 점수가 기준 근처를 오가서, 여기
-        판정은 어느 쪽으로든 기울 수 있습니다. 손봐야 할 변화는 이보다 훨씬 큽니다. 다음 단계가 그 예입니다.
+        바뀐 것이 없고, 판정도 그렇게 말합니다: OK, 모든 점수 0. 속성마다 먼저 표본 잡음과 견줘, 쪽마다
+        60장으로 우연히 생길 수 있는 차이는 0점입니다. 그래서 표본이 적어도 잡음에 경보가 울리지 않습니다.
+        진짜 고장은 분명히 드러납니다. 다음 단계가 그 예입니다.
     when: '${vars.example} != ""'
     run: diff
     with:
@@ -195,11 +196,11 @@ steps:
       ko: 고장은 잡음보다 훨씬 크게 드러납니다
     note:
       en: >-
-        Compare with the noise level above: sharpness, noise and dynamic range move many times
-        further. blur.html lists them by score.
+        Against the 0 above: sharpness, noise and dynamic range score close to 1, the most a score
+        can be, and sharpness reads as a shift with a narrower spread. blur.html graphs each one.
       ko: >-
-        위의 잡음 수준과 견줘 보세요. 선명도, 잡음, 명암 범위가 몇 배 더 크게 움직입니다. blur.html 에 점수
-        순으로 나옵니다.
+        위의 0 과 견줘 보세요. 선명도, 잡음, 명암 범위가 점수의 최대인 1 에 가깝고, 선명도는 이동·수축형으로
+        읽힙니다. blur.html 에 값마다 그래프가 있습니다.
     when: '${vars.example} != ""'
     run: diff
     with:

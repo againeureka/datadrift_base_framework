@@ -1,11 +1,13 @@
-"""Verdict sensitivity — how candidate scoring rules would judge.
+"""Verdict sensitivity — how candidate scoring rules judge.
 
-`ddoc diff` scores each column with the Jensen–Shannon divergence and calls
-DRIFT when one column reaches 0.25 (or the mean reaches 0.15). The drills
-show that rule missing clear single changes. This script compares the
-current rule with alternatives *without changing ddoc*:
+`ddoc diff` used to score each column with the Jensen–Shannon divergence
+and call DRIFT when one column reached 0.25 (or the mean 0.15). The drills
+showed that rule missing clear single changes, and small samples raising
+alarms on noise. This script compared it with alternatives; ddoc now uses
+the last one (``reading``, :mod:`ddoc.scoring`), and the script keeps the
+comparison reproducible:
 
-* ``js``       — current: JS divergence (base 2), 0.15 / 0.25
+* ``js``       — before: JS divergence (base 2), 0.15 / 0.25
 * ``js_dist``  — JS distance (square root of the divergence), same thresholds
 * ``psi``      — population stability index on baseline deciles, 0.10 / 0.25
 * ``gated``    — JS distance, but a column whose difference sample noise
@@ -17,8 +19,7 @@ and measures three things:
 
 1. the verdict on every drill and Drift Zoo story;
 2. false alarms — two independent samples of the *same* distribution, by
-   sample size (the drills cannot show this: their unchanged columns are
-   the same values reshuffled, which scores exactly 0);
+   sample size;
 3. the smallest change each rule catches in 90 % of runs, in plain units
    (σ of a mean shift, spread ratio, %p of a mix shift, ...).
 
@@ -48,64 +49,11 @@ sys.path.insert(0, str(HERE.parent))
 from drills import DRILLS  # noqa: E402
 
 from ddoc import archetypes as ar  # noqa: E402
-from ddoc.cli.commands.diff import _js_divergence, csv_diff  # noqa: E402
+from ddoc.cli.commands.diff import csv_diff  # noqa: E402
+from ddoc.scoring import ALPHA, g_test_p, js_divergence  # noqa: E402
 
 BINS = 20
-ALPHA = 0.001
 PSI_FLOOR = 1e-4
-
-
-# ── χ² tail without scipy (regularized upper incomplete gamma) ─────────
-
-
-def chi2_sf(x: float, df: int) -> float:
-    """P(χ²_df ≥ x)."""
-    if df <= 0 or x <= 0:
-        return 1.0
-    a, z = df / 2.0, x / 2.0
-    gln = math.lgamma(a)
-    if z < a + 1.0:                                   # series for P, then 1 − P
-        term = total = 1.0 / a
-        ap = a
-        for _ in range(1000):
-            ap += 1.0
-            term *= z / ap
-            total += term
-            if abs(term) < abs(total) * 1e-15:
-                break
-        return max(0.0, 1.0 - total * math.exp(-z + a * math.log(z) - gln))
-    tiny = 1e-300                                     # continued fraction for Q (Lentz)
-    b = z + 1.0 - a
-    c, d = 1.0 / tiny, 1.0 / b
-    h = d
-    for i in range(1, 1000):
-        an = -i * (i - a)
-        b += 2.0
-        d = an * d + b
-        d = tiny if abs(d) < tiny else d
-        c = b + an / c
-        c = tiny if abs(c) < tiny else c
-        d = 1.0 / d
-        h *= d * c
-        if abs(d * c - 1.0) < 1e-15:
-            break
-    return min(1.0, math.exp(-z + a * math.log(z) - gln) * h)
-
-
-def g_test_p(rh: np.ndarray, ch: np.ndarray) -> float:
-    """Homogeneity of two count vectors (2×k G-test); empty bins dropped."""
-    rh, ch = np.asarray(rh, float), np.asarray(ch, float)
-    keep = (rh + ch) > 0
-    rh, ch = rh[keep], ch[keep]
-    if len(rh) < 2 or rh.sum() == 0 or ch.sum() == 0:
-        return 1.0
-    total, col = rh.sum() + ch.sum(), rh + ch
-    g = 0.0
-    for obs in (rh, ch):
-        exp = col * obs.sum() / total
-        nz = obs > 0
-        g += 2.0 * float((obs[nz] * np.log(obs[nz] / exp[nz])).sum())
-    return chi2_sf(g, len(rh) - 1)
 
 
 # ── One comparison, the way `ddoc diff` makes it ────────────────────────
@@ -146,7 +94,7 @@ def psi(r: pd.Series, c: pd.Series) -> float:
 
 @dataclass
 class Column:
-    js: float               # the current score (as `ddoc diff` reports it)
+    js: float               # JS divergence on the comparator's bins (the old score)
     p: float                # G-test on the same bins
     psi: float
     patterns: List[str]     # matched attribute archetypes
@@ -161,12 +109,14 @@ def compare(ref: pd.DataFrame, cur: pd.DataFrame, tmp: Path) -> Dict[str, Column
     out = {}
     for col, score in payload["attribute_drifts"].items():
         rh, ch = histograms(r_df[col], c_df[col])
-        assert abs(_js_divergence(dict(enumerate(rh.tolist())), dict(enumerate(ch.tolist()))) - score) < 1e-4
+        js = js_divergence(rh, ch)
+        p = g_test_p(rh, ch)
+        assert abs((math.sqrt(js) if p < ALPHA else 0.0) - score) < 1e-4   # what ddoc diff reports
         summary = payload["summaries"][col]
         cards = ar._attr_cards(col, ar._measure(summary, payload["distributions"].get(col)))
         n, miss = summary["n"], summary["missing"]
         mr, mc = round(miss["ref"] * n["ref"]), round(miss["cur"] * n["cur"])
-        out[col] = Column(js=score, p=g_test_p(rh, ch), psi=psi(r_df[col], c_df[col]),
+        out[col] = Column(js=js, p=p, psi=psi(r_df[col], c_df[col]),
                           patterns=[c["code"] for c in cards if c["match"] == "match"],
                           missing_p=g_test_p(np.array([mr, n["ref"] - mr]), np.array([mc, n["cur"] - mc])))
     return out
@@ -205,11 +155,11 @@ def _gated(col: Column) -> float:
 
 
 RULES = [
-    Rule("js", "현행 JS 발산", lambda c: c.js, 0.15, 0.25),
+    Rule("js", "이전: JS 발산", lambda c: c.js, 0.15, 0.25),
     Rule("js_dist", "JS 거리", lambda c: math.sqrt(c.js), 0.15, 0.25),
     Rule("psi", "PSI", lambda c: c.psi, 0.10, 0.25),
     Rule("gated", "JS 거리 + 잡음 거름", _gated, 0.15, 0.25),
-    Rule("reading", "+ 판독 연동", _gated, 0.15, 0.25, reading=True),
+    Rule("reading", "+ 판독 연동 (현행)", _gated, 0.15, 0.25, reading=True),
 ]
 SWEEP = [Rule(f"gated{t}", f"잡음 거름, 단일 속성 {t}", _gated, 0.15, t) for t in (0.15, 0.20, 0.25, 0.30)]
 
@@ -225,7 +175,7 @@ def cases(tmp: Path) -> List[Dict[str, Any]]:
     for i, drill in enumerate(DRILLS):
         ref, cur = drill.make(np.random.default_rng(1000 + i))   # the seeds zoo/eval.py uses
         rows.append({"id": drill.id, "story": drill.story, "cols": compare(ref, cur, tmp),
-                     "expect": "OK" if drill.id in UNCHANGED else "DRIFT"})
+                     "expect": drill.verdict or ("OK" if drill.id in UNCHANGED else "DRIFT")})
     for case, expect in STORY_EXPECT.items():
         spec = importlib.util.spec_from_file_location(f"zoo_{case}", HERE / case / "make.py")
         mod = importlib.util.module_from_spec(spec)

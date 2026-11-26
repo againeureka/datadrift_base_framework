@@ -131,14 +131,37 @@ def test_regime_local_schema_and_small_sample(tmp_path):
     assert {"schema_change", "small_sample", "local_shift"} <= codes and "regime_shift" not in codes
 
 
-def test_hidden_change_when_ok_but_a_pattern_fires(tmp_path):
-    # a 1–5 rating whose mean drops 0.83σ while the distribution score stays under 0.15
-    ref = [[v] for v in [1] * 5 + [2] * 10 + [3] * 25 + [4] * 45 + [5] * 15] * 4
-    cur = [[v] for v in [1] * 25 + [2] * 25 + [3] * 20 + [4] * 15 + [5] * 15] * 4
-    verdict, cards = _read(tmp_path, "rating", ref, cur)
+def test_hidden_change_is_a_pattern_within_sampling_noise(tmp_path):
+    # a 1–5 rating whose mean drops 0.8σ: on 30 rows a side chance could do
+    # that (pattern only near, verdict OK, hidden change); on 400 it cannot
+    small_ref = [[v] for v in [1] * 2 + [2] * 3 + [3] * 7 + [4] * 13 + [5] * 5]
+    small_cur = [[v] for v in [1] * 8 + [2] * 7 + [3] * 6 + [4] * 5 + [5] * 4]
+    verdict, cards = _read(tmp_path, "rating", small_ref, small_cur)
     assert verdict == "OK"
-    codes = {c["code"] for c in cards if c["match"] == "match"}
-    assert "hidden_change" in codes and "shift_and_spread" in codes and "stable" not in codes
+    assert ("hidden_change", ()) in _codes(cards) and "stable" not in {c for c, _ in _codes(cards)}
+    assert ("shift_and_spread", ("rating",)) in _codes(cards, "near")
+    verdict, cards = _read(tmp_path, "rating", small_ref * 13, small_cur * 13)
+    assert verdict == "DRIFT" and ("shift_and_spread", ("rating",)) in _codes(cards)
+
+
+def test_a_pattern_beyond_noise_drifts_even_when_scores_stay_low(tmp_path):
+    """A few far outliers barely move a 20-bin distribution score, yet they
+    are a finding: a confirmed pattern makes the verdict DRIFT, and the
+    rationale says why."""
+    base = _gauss(50, 5)
+    tail = list(base)
+    for i in range(0, N, 20):
+        tail[i] = 500.0                                   # 5 % far outside the baseline range
+    calm_ref, calm_cur = _gauss(10, 2), _gauss(10, 2)     # a column that did not change
+    verdict, cards = _read(tmp_path, "x,y", list(zip(base, calm_ref)), list(zip(tail, calm_cur)))
+    assert verdict == "DRIFT" and ("tail_outliers", ("x",)) in _codes(cards)
+    result = csv_diff([str(tmp_path / "r.csv")], [str(tmp_path / "c.csv")])
+    assert result["attribute_drifts"]["x"] < 0.25 and result["overall_score"] < 0.15
+    _, _, top = compute_verdict(result, threshold=0.15, attr_threshold=0.25)
+    d = dx.build(verdict="DRIFT", overall=result["overall_score"], top=top, threshold=0.15,
+                 attr_threshold=0.25, result=result, evidence=result["distributions"])
+    assert [r["code"] for r in d["rationale"]] == ["pattern"]
+    assert "극단값 출현형" in dx.rationale_text(d["rationale"][0], "ko")
 
 
 def test_near_is_an_early_signal_not_a_match(tmp_path):
