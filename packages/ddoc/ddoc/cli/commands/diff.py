@@ -730,10 +730,15 @@ def _blind(reason: str, *, ref: str, cur: str, json_out: bool, lang: str,
     }, json_out=json_out, lang=lang, report=report, issuer=issuer)
 
 
-def _rescore(kind: str, ref: Path, cur: Path, result: Dict[str, Any]) -> None:
+def _rescore(kind: str, ref: Path, cur: Path, result: Dict[str, Any], *,
+             sample_rows: int = 0, max_rows: int = MAX_ROWS) -> None:
     """Put a plugin's result on ddoc's own scale (:mod:`ddoc.scoring`), so
     the thresholds mean the same for images, text, audio and tables.
 
+    * a plugin that compared the CSV files column by column says so
+      (``attribute_source: "csv_columns"``, e.g. Evidently): the same
+      files are scored exactly as the built-in comparator scores them,
+      time columns, running totals and all;
     * values measured per item (``attribute_values``) are summarised and
       scored exactly as CSV columns;
     * a categorical layout's counts (``distributions.json``) are scored
@@ -747,6 +752,17 @@ def _rescore(kind: str, ref: Path, cur: Path, result: Dict[str, Any]) -> None:
     from ...scoring import counts_score, separation
 
     scores: Dict[str, float] = {}
+    if result.get("attribute_source") == "csv_columns" and kind == "csv":
+        own = csv_diff(sniff_modality(ref)[1].get("files") or [str(ref)],
+                       sniff_modality(cur)[1].get("files") or [str(cur)],
+                       sample_rows=sample_rows, max_rows=max_rows)
+        result["plugin_scores"] = {"overall_score": result.get("overall_score"),
+                                   "attribute_drifts": result.get("attribute_drifts")}
+        for key in ("overall_score", "attribute_drifts", "distributions", "summaries", "rows",
+                    "columns_compared", "profile"):
+            result[key] = own[key]
+        result.setdefault("modality", own["modality"])
+        return
     values = result.pop("attribute_values", None)
     if isinstance(values, dict):
         found, dists, scores = attribute_evidence(values)
@@ -944,7 +960,7 @@ def diff_command(
         )
 
     if engine == "plugin":
-        _rescore(kind, ref, cur, result)
+        _rescore(kind, ref, cur, result, sample_rows=sample_rows, max_rows=max_rows)
 
     evidence = _collect_evidence(kind, ref, cur, result)
     verdict, severity, top = compute_verdict(

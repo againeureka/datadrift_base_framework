@@ -156,7 +156,7 @@ PSI 만 기준 데이터의 10분위로 나눕니다. 드릴의 "변하지 않�
 5. **드릴 보강**: 변하지 않은 열을 같은 분포의 독립 표본으로 바꾸고, 작은 표본의 무변화 드릴(`small-unchanged`,
    OK 기대)과 잡음 범위 안의 변화 드릴(`hidden-change`, OK 기대)을 더했습니다.
 6. **모든 데이터에 같은 척도.** 항목마다 잰 값을 넘기는 플러그인(vision·text·audio·timeseries)의 속성과
-   categorical 플러그인의 개수 분포도 같은 방식으로 매기고, 임베딩 지도는 `embedding_separation`(1 − 이웃
+   categorical 플러그인의 개수 분포도 같은 방식으로 매기고(evidently 는 비교한 CSV 파일을 ddoc 이 직접 매김), 임베딩 지도는 `embedding_separation`(1 − 이웃
    섞임, 이웃 구성의 같은 잡음 검정)으로 한 속성이 됩니다. 플러그인이 낸 원래 점수는 결과 JSON 의
    `plugin_scores` 에 남습니다.
 7. **시간 순서 기록은 묶어서 검정합니다.** 시간 열이 있으면(timeseries 플러그인은 `timestamp_column`) 행을

@@ -31,13 +31,28 @@ unchanged:
 ```
 {
   "status": "ok",
-  "overall_score": 0.0..1.0,
+  "overall_score": 0.0..1.0,          # Evidently's share of drifted columns
   "attribute_drifts": {col: score, ...},
   "backend": "evidently",
   "method": "chi2|wasserstein|psi|...",
-  "details": {col: {p_value: ..., test: ..., drifted: bool}, ...}
+  "details": {col: {value, kind, test, threshold, drifted}, ...},
+  "attribute_source": "csv_columns"   # path mode only, see below
 }
 ```
+
+Evidently picks a test per column: a p-value test (K-S, chi-square, ...;
+drifted when the p-value is under the threshold) or a distance
+(Wasserstein normed, Jensen–Shannon, PSI, ...; drifted at or over it).
+``details`` keeps the value, which of the two it is, the test and its
+threshold. The per-column score is Evidently's own magnitude on 0..1:
+``1 − p`` for a p-value test, the distance (capped at 1) otherwise; the
+two kinds do not share a scale.
+
+``ddoc diff`` judges every kind of data on one scale. In path mode the
+plugin compared the two CSV files column by column, and says so
+(``attribute_source``): ddoc then scores the same files with its own
+comparator for the verdict and keeps Evidently's numbers under
+``plugin_scores`` and ``details``.
 """
 from __future__ import annotations
 
@@ -111,11 +126,15 @@ class EvidentlyDriftPlugin:
             return _err(detector, f"failed to load inputs: {type(e).__name__}: {e}")
 
         try:
-            return _run_evidently(ref_df, cur_df, categorical_cols, numerical_cols,
+            result = _run_evidently(ref_df, cur_df, categorical_cols, numerical_cols,
                                     method, detector)
         except Exception as e:  # noqa: BLE001
             logger.exception("evidently drift_detect failed")
             return _err(detector, f"{type(e).__name__}: {e}")
+        if not _has_cfg_inputs(cfg):
+            # the two CSV files, column by column: ddoc can score them itself
+            result["attribute_source"] = "csv_columns"
+        return result
 
 
 # ── helpers ────────────────────────────────────────────────────
@@ -130,6 +149,13 @@ def _err(detector: str, message: str) -> Dict[str, Any]:
         "overall_score": None,
         "attribute_drifts": None,
     }
+
+
+_CFG_KEYS = ("baseline_categorical", "current_categorical", "baseline_numerical", "current_numerical")
+
+
+def _has_cfg_inputs(cfg: Optional[Dict[str, Any]]) -> bool:
+    return any((cfg or {}).get(k) for k in _CFG_KEYS)
 
 
 def _load_inputs(
@@ -227,16 +253,22 @@ def _run_evidently(ref_df, cur_df, cat_cols, num_cols,
         if name.startswith("ValueDrift"):
             # name format: ValueDrift(column=col,method=...,threshold=0.05)
             col = _parse_column_from_metric_name(name)
-            p_value = m.get("value")
-            if col and isinstance(p_value, (int, float)):
-                # Convert p-value to "drift score" 0..1 (lower p → higher score).
-                # We use 1 - p_value as the canonical magnitude.
-                score = max(0.0, min(1.0, 1.0 - float(p_value)))
-                attribute_drifts[col] = round(score, 4)
+            value = m.get("value")
+            if col and isinstance(value, (int, float)):
+                test = _extract_test_from_metric_name(name)
+                threshold = _extract_threshold_from_metric_name(name)
+                is_p = _is_p_value_test(test)
+                value = float(value)
+                # a small p-value, or a large distance, is the drift
+                score = 1.0 - value if is_p else value
+                attribute_drifts[col] = round(max(0.0, min(1.0, score)), 4)
+                limit = threshold if threshold is not None else 0.05 if is_p else 0.1
                 details[col] = {
-                    "p_value": float(p_value),
-                    "drifted": float(p_value) < 0.05,
-                    "test": _extract_test_from_metric_name(name),
+                    "value": value,
+                    "kind": "p_value" if is_p else "distance",
+                    "test": test,
+                    "threshold": threshold,
+                    "drifted": value < limit if is_p else value >= limit,
                 }
 
     overall_score = (
@@ -269,6 +301,23 @@ def _extract_test_from_metric_name(name: str) -> Optional[str]:
         return None
     after = name.split("method=", 1)[1]
     return after.split(",", 1)[0].strip()
+
+
+def _extract_threshold_from_metric_name(name: str) -> Optional[float]:
+    if "threshold=" not in name:
+        return None
+    try:
+        return float(name.split("threshold=", 1)[1].split(",", 1)[0].rstrip(")").strip())
+    except ValueError:
+        return None
+
+
+def _is_p_value_test(test: Optional[str]) -> bool:
+    """Evidently names its p-value tests so (``K-S p_value``,
+    ``chi-square p_value``, ``Z-test p_value``, ``Fisher's Exact test``...);
+    the rest are distances or divergences."""
+    text = (test or "").lower()
+    return "p_value" in text or "p-value" in text or "exact" in text
 
 
 def _safe_mean(values: Iterable[float]) -> Optional[float]:

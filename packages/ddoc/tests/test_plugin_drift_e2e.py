@@ -190,3 +190,35 @@ def test_drift_vision_identical(toy_vision_identical: Tuple[Path, Path]):
     # Same colour → near-zero drift. Threshold is loose because the
     # plugin's PCA-PSI stage can produce small numerical jitter.
     assert res.get("overall_score", 1.0) < 0.1, res
+
+
+def test_diff_with_evidently_is_judged_on_ddoc_scale(tmp_path):
+    """Evidently compares CSV files column by column on its own scales; the
+    verdict comes from ddoc's comparator on the same files, and Evidently's
+    numbers stay alongside."""
+    pytest.importorskip("evidently")
+    if not _plugin_installed("ddoc_evidently"):
+        pytest.skip("ddoc-plugin-evidently not installed")
+    import random
+
+    from typer.testing import CliRunner
+
+    from ddoc.cli.commands.diff import csv_diff
+    from ddoc.cli.main import app
+
+    rng = random.Random(5)
+    ref, cur = tmp_path / "ref.csv", tmp_path / "cur.csv"
+    ref.write_text("price,qty\n" + "\n".join(f"{rng.gauss(10, 1):.3f},{rng.randint(1, 5)}"
+                                               for _ in range(1500)) + "\n")
+    cur.write_text("price,qty\n" + "\n".join(f"{rng.gauss(20, 1):.3f},{rng.randint(1, 5)}"
+                                               for _ in range(1500)) + "\n")
+    out = CliRunner().invoke(app, ["diff", str(ref), str(cur), "--detector", "evidently:default", "--json"])
+    payload = json.loads(out.stdout.strip())
+    raw = payload["raw"]
+    assert payload["engine"] == "plugin" and payload["verdict"] == "DRIFT"
+    assert raw["attribute_drifts"] == csv_diff([str(ref)], [str(cur)])["attribute_drifts"]
+    assert raw["attribute_drifts"]["qty"] == 0.0 and raw["attribute_drifts"]["price"] == 1.0
+    # Evidently's own reading: the price distance is the drift, qty is not
+    assert raw["details"]["price"]["drifted"] and not raw["details"]["qty"]["drifted"]
+    assert raw["plugin_scores"]["attribute_drifts"]["price"] == 1.0
+    assert payload["modality"] == "tabular"
