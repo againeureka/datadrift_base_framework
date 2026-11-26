@@ -20,15 +20,20 @@ from ddoc.examples import cases, dashcam, factories
 runner = CliRunner()
 
 
-def _vision_ready() -> bool:
+def plugin_ready(kind: str) -> bool:
+    """The plugin for ``kind`` (vision, text, audio) is installed and loads."""
     try:
         import importlib.metadata as md
-        if not any(ep.name == "ddoc_vision" for ep in md.entry_points(group="ddoc")):
+        if not any(ep.name == f"ddoc_{kind}" for ep in md.entry_points(group="ddoc")):
             return False
-        importlib.import_module("ddoc_plugin_vision")
+        importlib.import_module(f"ddoc_plugin_{kind}")
         return True
-    except Exception:  # installed but torch or another dependency missing
+    except Exception:  # installed but torch, librosa or another dependency missing
         return False
+
+
+def _vision_ready() -> bool:
+    return plugin_ready("vision")
 
 
 def _sharpness(path: Path) -> float:
@@ -134,9 +139,11 @@ def test_zoo_make_writes_a_story_and_starts_clean(tmp_path):
     assert len(list(cur.glob("*.jpg"))) == 60 and not list(cur.glob("rear-*.jpg"))
 
 
-@vision
 @pytest.mark.parametrize("case", [c for c in cases.CASES if c.folders is not None], ids=lambda c: c.id)
-def test_image_cases_get_the_verdict_they_promise(case, tmp_path, monkeypatch):
+def test_folder_cases_get_the_verdict_they_promise(case, tmp_path, monkeypatch):
+    # image, text and audio cases, each where its plugin is
+    if not plugin_ready(case.needs):
+        pytest.skip(f"needs the {case.needs} plugin")
     monkeypatch.chdir(tmp_path)
     ref, cur = cases.build(case.id, tmp_path / "d")
     extra = ["--with-embeddings"] if case.options.get("with_embeddings") else []

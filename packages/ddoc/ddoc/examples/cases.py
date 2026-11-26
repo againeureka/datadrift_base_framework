@@ -22,7 +22,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from . import dashcam, weather
+from . import dashcam, machine, support, weather
 
 Rows = List[str]
 
@@ -48,6 +48,10 @@ def _days(start: date, n: int) -> List[str]:
 
 def _dashcam(story: str) -> Callable[[Path], Tuple[Path, Path]]:
     return lambda out_dir: dashcam.write_pair(story, out_dir)
+
+
+def _folders(module, story: str) -> Callable[[Path], Tuple[Path, Path]]:
+    return lambda out_dir: module.write_pair(story, out_dir)
 
 
 def _weather(story: str) -> Callable[[np.random.Generator], Tuple[Rows, Rows]]:
@@ -185,6 +189,31 @@ CASES: List[Case] = [
                "story": "주행의 같은 구간에서 3초씩 어긋난 프레임. 현재 쪽은 렌즈에 얼룩이나 김이 서린 것처럼 흐리게 했습니다.",
                "look": "선명도·잡음·명암 범위가 다른 무엇보다 크게 움직입니다. 풍경은 그대로입니다. 선명도는 이동·수축형으로 읽힙니다. 흐린 프레임들이 낮은 선명도 근처로 몰렸기 때문입니다."}},
          folders=_dashcam("blurry-lens"), needs="vision"),
+    # text and audio: generated stories, judged by their plugins
+    Case("app-update", "✉", "DRIFT", {
+        "en": {"title": "Support tickets after an app update",
+               "story": "Tickets to a note-taking app, an ordinary week against the week after version 5 shipped: sign-in and sync complaints crowd in.",
+               "look": "Messages grow longer and angrier. Only part of the topics changed, so the weeks still mix on the embedding map, yet the report's current tickets least like the baseline are nearly all about version 5."},
+        "ko": {"title": "앱 업데이트 뒤의 고객 문의",
+               "story": "메모 앱에 들어온 문의, 평범한 한 주와 버전 5 출시 다음 주. 로그인·동기화 불만이 몰려옵니다.",
+               "look": "글이 길어지고 격해집니다. 주제는 일부만 바뀌어 임베딩 지도에서 두 주가 섞이지만, 진단서가 꼽은 '기준과 가장 다른 현재 문의'는 거의 모두 버전 5 이야기입니다."}},
+         folders=_folders(support, "app-update"), needs="text", options={"with_embeddings": True}),
+    Case("bearing-wear", "⚙", "DRIFT", {
+        "en": {"title": "A motor whose bearing starts to wear",
+               "story": "One-second clips of an electric motor: healthy, then with knocks at the bearing's defect frequency ringing a high resonance.",
+               "look": "The spectral centroid and zero-crossing rate rise: high frequencies the motor never made. Each measure is graphed, baseline against current."},
+        "ko": {"title": "베어링 마모가 시작된 모터",
+               "story": "전기 모터 소리의 1초 클립. 정상 상태와, 베어링 결함 주파수마다 충격음이 높은 공진을 울리는 상태.",
+               "look": "스펙트럼 중심과 영교차율이 올라갑니다. 모터가 내지 않던 고주파가 생겼다는 뜻입니다. 값마다 기준과 현재의 그래프가 나옵니다."}},
+         folders=_folders(machine, "bearing-wear"), needs="audio"),
+    Case("louder-mic", "♪", "DRIFT", {
+        "en": {"title": "Same motor, microphone moved closer",
+               "story": "The same healthy motor recorded 2.2 times louder, as if the microphone was moved or its gain turned up.",
+               "look": "The reading says unit or scale change: loudness and its spread grew by the same factor, the pitch measures stayed. Check the microphone before the machine."},
+        "ko": {"title": "같은 모터, 가까이 옮긴 마이크",
+               "story": "같은 정상 모터를 2.2배 크게 녹음했습니다. 마이크를 옮겼거나 이득을 올린 상황입니다.",
+               "look": "판독은 단위·스케일 변경형입니다. 크기와 그 퍼짐이 같은 배율로 커졌고 음높이 쪽 값은 그대로입니다. 기계보다 마이크를 먼저 보세요."}},
+         folders=_folders(machine, "louder-mic"), needs="audio"),
 ]
 BY_ID = {c.id: c for c in CASES}
 

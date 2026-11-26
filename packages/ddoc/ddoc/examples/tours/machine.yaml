@@ -1,0 +1,161 @@
+# A guided tour on audio: an electric motor's sound (generated).
+#
+#   ddoc examples tour machine              # narrated, in ./ddoc-tour-machine
+#
+# Needs the audio plugin (librosa). The same file runs on your own two
+# folders of clips; each holds the clips and a ddoc.yaml (`modality: audio`):
+#
+#   ddoc examples tour machine --save check.yaml
+#   ddoc recipe run check.yaml --narrate --var example= --var ref=old_clips --var cur=new_clips
+name: tour-machine
+description: Generated machine sounds through probe and diff
+workspace: .ddoc-recipe-out
+required_plugins: [ddoc_audio]
+
+tour:
+  title:
+    en: A motor that starts to sound different
+    ko: 소리가 달라지기 시작한 모터
+  about:
+    en: >-
+      One-second clips of an electric motor, generated with known answers: a bearing that starts
+      to wear, a microphone moved closer, and the day shift against the night shift.
+    ko: >-
+      전기 모터 소리의 1초 클립을 정답이 있게 만든 것입니다. 마모가 시작된 베어링, 가까이 옮긴 마이크, 주간과
+      야간 교대.
+  needs:
+    en: the audio plugin (./run.sh setup audio)
+    ko: audio 플러그인 (./run.sh setup audio)
+  own: --var example= --var ref=<baseline folder> --var cur=<current folder>
+
+vars:
+  example: motor          # empty = use your own ref and cur folders
+  ref: wear/ref
+  cur: wear/cur
+  lang: ""                # empty: each command follows $DDOC_LANG
+
+steps:
+  - id: get
+    title:
+      en: Get the clips
+      ko: 클립 받기
+    note:
+      en: >-
+        Sound is compared as a folder of short clips with a ddoc.yaml (`modality: audio`). From a
+        long recording, `ffmpeg -i long.wav -f segment -segment_time 1 clips/%03d.wav` cuts them.
+        Each clip here is a motor: mains hum, rotation and a floor of noise. The first story: a
+        healthy motor against one whose bearing starts to wear, knocking at its defect frequency.
+      ko: >-
+        소리는 짧은 클립과 ddoc.yaml(`modality: audio`)이 든 폴더로 비교합니다. 긴 녹음이라면
+        `ffmpeg -i long.wav -f segment -segment_time 1 clips/%03d.wav` 로 자릅니다. 여기 클립은 모터 소리로,
+        전원 험·회전음·바닥 잡음입니다. 첫 이야기는 정상 모터와, 베어링 마모로 결함 주파수마다 충격음이 나는 모터입니다.
+    when: '${vars.example} != ""'
+    run: examples.generate
+    with:
+      modality: machine
+      out: wear
+      scenario: bearing-wear
+
+  - id: look
+    title:
+      en: Look before judging
+      ko: 판정 전에 미리 보기
+    note:
+      en: The folders are audio, judged by the audio plugin; without it, probe says BLIND here.
+      ko: 두 폴더는 오디오이고 audio 플러그인이 판정합니다. 플러그인이 없으면 probe 가 여기서 BLIND 라고 알려 줍니다.
+    run: probe
+    with:
+      ref: ${vars.ref}
+      cur: ${vars.cur}
+      lang: ${vars.lang}
+
+  - id: judge
+    title:
+      en: Judge, and read the shape of the change
+      ko: 판정하고 변화의 모양 읽기
+    note:
+      en: >-
+        Measured per clip: loudness (RMS energy), zero-crossing rate and spectral centroid. The
+        knocks ring high, so the spectral centroid and the zero-crossing rate rise: more high
+        frequencies than the motor ever made. note.html graphs each one, baseline against current.
+      ko: >-
+        클립마다 잰 값은 크기(RMS 에너지), 영교차율, 스펙트럼 중심입니다. 충격음이 높은 소리를 울려 스펙트럼
+        중심과 영교차율이 올라갑니다. 모터가 내지 않던 고주파가 생겼다는 뜻입니다. note.html 에 값마다 기준과
+        현재의 그래프가 있습니다.
+    run: diff
+    with:
+      ref: ${vars.ref}
+      cur: ${vars.cur}
+      report: note.html
+      lang: ${vars.lang}
+
+  - id: get-louder
+    title:
+      en: "Next: the microphone moved closer"
+      ko: "다음: 마이크를 가까이 옮김"
+    note:
+      en: The same healthy motor, recorded 2.2 times louder. Nothing about the machine changed.
+      ko: 같은 정상 모터를 2.2배 크게 녹음했습니다. 기계에는 바뀐 것이 없습니다.
+    when: '${vars.example} != ""'
+    run: examples.generate
+    with:
+      modality: machine
+      out: louder
+      scenario: louder-mic
+
+  - id: judge-louder
+    title:
+      en: Same sound, different numbers
+      ko: 같은 소리, 다른 숫자
+    note:
+      en: >-
+        The reading says unit or scale change: loudness and its spread grew by the same factor
+        while the pitch measures stayed. Check the microphone, its placement and gain, before
+        the machine. The audio score adds measures in different units (Hz, amplitude), so the
+        score alone barely tells this from nothing at all; read the patterns.
+      ko: >-
+        판독은 단위·스케일 변경형입니다. 크기와 그 퍼짐이 같은 배율로 커졌고 음높이 쪽 값은 그대로입니다. 기계보다
+        마이크의 위치와 이득을 먼저 보세요. 오디오 점수는 단위가 다른 값(Hz, 진폭)을 그대로 더해, 점수만으로는
+        이 변화와 아무 변화 없음을 거의 구별하지 못합니다. 판독을 보세요.
+    when: '${vars.example} != ""'
+    run: diff
+    with:
+      ref: louder/ref
+      cur: louder/cur
+      report: louder.html
+      lang: ${vars.lang}
+
+  - id: get-shifts
+    title:
+      en: "The control: day shift and night shift"
+      ko: "대조군: 주간과 야간"
+    note:
+      en: The same healthy motor, two different sets of clips. Nothing changed.
+      ko: 같은 정상 모터의 다른 클립 묶음 둘입니다. 바뀐 것이 없습니다.
+    when: '${vars.example} != ""'
+    run: examples.generate
+    with:
+      modality: machine
+      out: shifts
+      scenario: two-shifts
+
+  - id: judge-shifts
+    title:
+      en: When the score and the reading disagree
+      ko: 점수와 판독이 엇갈릴 때
+    note:
+      en: >-
+        No pattern is read: nothing changed shape. The verdict may still say DRIFT, because the
+        audio score is not on the 0–1 scale the thresholds assume (a known limitation, see
+        docs/status.md). Trust the reading here.
+      ko: >-
+        해당하는 유형이 없습니다. 모양이 바뀐 것이 없다는 뜻입니다. 그래도 판정은 DRIFT 로 나올 수 있습니다.
+        오디오 점수가 기준값이 전제하는 0–1 척도가 아니기 때문입니다(알려진 한계, docs/status.md). 여기서는
+        판독을 믿으세요.
+    when: '${vars.example} != ""'
+    run: diff
+    with:
+      ref: shifts/ref
+      cur: shifts/cur
+      report: shifts.html
+      lang: ${vars.lang}

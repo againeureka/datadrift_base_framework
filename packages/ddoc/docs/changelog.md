@@ -37,6 +37,9 @@
   안내가 PyPI 이름이던 문제
 - 🐛 플러그인으로 비교하면 실행한 폴더에 `.ddoc/`·`analysis/`, 이미지 폴더 안에 `cache/` 가 남던 문제 — 캐시는
   실제로 저장할 때만 만들고, 데이터 해시가 없는 경로 비교에서는 저장하지 않음
+- ✨ 생성 텍스트·오디오 예제: 메모 앱 고객 문의([support_tickets](../zoo/support_tickets/): 앱 업데이트 · 채팅 말투 ·
+  평범한 두 주), 모터 소리([machine_sound](../zoo/machine_sound/): 베어링 마모 · 마이크 이득 · 두 교대). 투어
+  `ddoc examples tour support|machine`, 진단 화면 예제 사례 3개, `examples generate support|machine`
 - ✨ 이미지·텍스트·오디오도 속성 판독과 분포 그래프 — 플러그인이 항목마다 잰 값을 넘기면 CSV 의 수치 열과 같은
   방식으로 읽음 (점수는 플러그인 것 그대로)
 - ✨ 레시피에 `diff`·`probe` 단계(판정은 실패가 아님), `${steps.<id>.verdict}`·`returncode`, 단계의 `title`·`note`,

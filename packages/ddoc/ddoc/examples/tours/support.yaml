@@ -1,0 +1,157 @@
+# A guided tour on text: support tickets of a note-taking app (generated).
+#
+#   ddoc examples tour support              # narrated, in ./ddoc-tour-support
+#
+# Needs the text plugin (and torch). The same file runs on your own two
+# folders of text; each holds a CSV and a ddoc.yaml naming its text column:
+#
+#   ddoc examples tour support --save check.yaml
+#   ddoc recipe run check.yaml --narrate --var example= --var ref=old_tickets --var cur=new_tickets
+name: tour-support
+description: Generated support tickets through probe and diff with the embedding map
+workspace: .ddoc-recipe-out
+required_plugins: [ddoc_text]
+
+tour:
+  title:
+    en: Support tickets after an app update
+    ko: 앱 업데이트 뒤의 고객 문의
+  about:
+    en: >-
+      What customers write to a note-taking app, generated with known answers: the week after
+      version 5 shipped, the same topics typed into a chat box, and two ordinary weeks.
+    ko: >-
+      메모 앱에 들어오는 고객 문의를 정답이 있게 만든 것입니다. 버전 5 출시 다음 주, 같은 주제를 채팅 창으로
+      쓴 경우, 평범한 두 주.
+  needs:
+    en: the text plugin and torch (./run.sh setup text)
+    ko: text 플러그인과 torch (./run.sh setup text)
+  own: --var example= --var ref=<baseline folder> --var cur=<current folder>
+
+vars:
+  example: tickets        # empty = use your own ref and cur folders
+  ref: update/ref
+  cur: update/cur
+  lang: ""                # empty: each command follows $DDOC_LANG
+
+steps:
+  - id: get
+    title:
+      en: Get the tickets
+      ko: 문의 받기
+    note:
+      en: >-
+        Text is compared as a folder holding a CSV and a ddoc.yaml that names the text column
+        (`modality: text`, `text_column: text`). The first story: an ordinary week of tickets
+        (baseline) against the week after version 5 shipped (current).
+      ko: >-
+        텍스트는 CSV 와, 어느 열이 글인지 적은 ddoc.yaml(`modality: text`, `text_column: text`)이 든 폴더로
+        비교합니다. 첫 이야기는 평범한 한 주의 문의(기준)와 버전 5 출시 다음 주(현재)입니다.
+    when: '${vars.example} != ""'
+    run: examples.generate
+    with:
+      modality: support
+      out: update
+      scenario: app-update
+
+  - id: look
+    title:
+      en: Look before judging
+      ko: 판정 전에 미리 보기
+    note:
+      en: The folders are text, judged by the text plugin; without it, probe says BLIND here.
+      ko: 두 폴더는 텍스트이고 text 플러그인이 판정합니다. 플러그인이 없으면 probe 가 여기서 BLIND 라고 알려 줍니다.
+    run: probe
+    with:
+      ref: ${vars.ref}
+      cur: ${vars.cur}
+      lang: ${vars.lang}
+
+  - id: judge
+    title:
+      en: Judge, with the embedding map
+      ko: 판정하고 임베딩 지도 보기
+    note:
+      en: >-
+        Measured per ticket (length, vocabulary, stop words, readability) and placed on an
+        embedding map by what it says. Sign-in and sync complaints crowd in and messages grow
+        longer. Only part of the topics changed, so the two weeks still mix on the map; the
+        report names the current tickets least like the baseline, mostly about version 5.
+      ko: >-
+        문의마다 잰 속성(길이, 어휘, 불용어, 가독성)과, 담은 내용에 따라 점을 찍은 임베딩 지도로 봅니다.
+        로그인·동기화 불만이 늘고 글이 길어졌습니다. 주제는 일부만 바뀌어 지도에서 두 주가 여전히 섞이지만,
+        진단서는 기준과 가장 다른 현재 문의를 꼽고, 대부분 버전 5 이야기입니다.
+    run: diff
+    with:
+      ref: ${vars.ref}
+      cur: ${vars.cur}
+      with_embeddings: true
+      report: note.html
+      lang: ${vars.lang}
+
+  - id: get-chat
+    title:
+      en: "Next: the same topics, typed into a chat box"
+      ko: "다음: 같은 주제, 채팅 창에서"
+    note:
+      en: >-
+        The same mix of topics, but most tickets now come from an in-app chat box: short,
+        lower-case, no greeting.
+      ko: 주제 구성은 같고, 이제 대부분 앱 안의 채팅 창으로 들어옵니다. 짧고, 소문자이고, 인사가 없습니다.
+    when: '${vars.example} != ""'
+    run: examples.generate
+    with:
+      modality: support
+      out: chat
+      scenario: chat-widget
+
+  - id: judge-chat
+    title:
+      en: Same questions, another voice
+      ko: 같은 질문, 다른 말투
+    note:
+      en: >-
+        Nothing new is asked, yet the map separates the two weeks: embeddings carry how people
+        write as well as what they say. Length reads as a shift with a narrower spread. A model
+        trained on emails may stumble on chat even when the requests are the same.
+      ko: >-
+        새로 묻는 것은 없는데 지도에서 두 주가 갈라집니다. 임베딩은 무슨 말을 하는지뿐 아니라 어떻게 쓰는지도
+        담습니다. 길이는 이동·수축형으로 읽힙니다. 이메일로 학습한 모델은 요청이 같아도 채팅 문장에서 헤맬 수
+        있습니다.
+    when: '${vars.example} != ""'
+    run: diff
+    with:
+      ref: chat/ref
+      cur: chat/cur
+      with_embeddings: true
+      report: chat.html
+      lang: ${vars.lang}
+
+  - id: get-weeks
+    title:
+      en: "The control: two ordinary weeks"
+      ko: "대조군: 평범한 두 주"
+    note:
+      en: Two ordinary weeks of tickets, written by the same rules. Nothing changed.
+      ko: 같은 규칙으로 쓴 평범한 두 주의 문의입니다. 바뀐 것이 없습니다.
+    when: '${vars.example} != ""'
+    run: examples.generate
+    with:
+      modality: support
+      out: weeks
+      scenario: two-weeks
+
+  - id: judge-weeks
+    title:
+      en: A detector must be able to say no
+      ko: 탐지기는 '아니오'라고도 말해야 합니다
+    note:
+      en: OK, and the reading says stable.
+      ko: OK, 판독은 안정형입니다.
+    when: '${vars.example} != ""'
+    run: diff
+    with:
+      ref: weeks/ref
+      cur: weeks/cur
+      report: weeks.html
+      lang: ${vars.lang}

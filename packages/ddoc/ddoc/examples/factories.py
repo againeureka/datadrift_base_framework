@@ -422,10 +422,38 @@ def make_pair_dashcam(out_dir: str | Path, *, scenario: str = "shifted") -> Tupl
     return dashcam.write_pair(story, Path(out_dir))
 
 
+def make_pair_support(out_dir: str | Path, *, scenario: str = "shifted") -> Tuple[Path, Path]:
+    """Return ``(ref_dir, cur_dir)``: two folders of generated support
+    tickets (text). ``scenario`` is a story in
+    :data:`ddoc.examples.support.STORIES` (``app-update``, ``chat-widget``,
+    ``two-weeks``); ``shifted`` is ``app-update``, ``identical`` ``two-weeks``."""
+    from . import support
+
+    story = {"shifted": "app-update", "identical": "two-weeks"}.get(scenario, scenario)
+    if story not in support.STORIES:
+        raise ValueError(f"unsupported scenario: {scenario!r}")
+    return support.write_pair(story, Path(out_dir))
+
+
+def make_pair_machine(out_dir: str | Path, *, scenario: str = "shifted") -> Tuple[Path, Path]:
+    """Return ``(ref_dir, cur_dir)``: two folders of generated machine
+    sounds (audio). ``scenario`` is a story in
+    :data:`ddoc.examples.machine.STORIES` (``bearing-wear``, ``louder-mic``,
+    ``two-shifts``); ``shifted`` is ``bearing-wear``, ``identical`` ``two-shifts``."""
+    from . import machine
+
+    story = {"shifted": "bearing-wear", "identical": "two-shifts"}.get(scenario, scenario)
+    if story not in machine.STORIES:
+        raise ValueError(f"unsupported scenario: {scenario!r}")
+    return machine.write_pair(story, Path(out_dir))
+
+
 # Index for the ``ddoc examples`` CLI to enumerate.
 PAIR_BUILDERS = {
     "weather": make_pair_weather,
     "dashcam": make_pair_dashcam,
+    "support": make_pair_support,
+    "machine": make_pair_machine,
     "timeseries": make_pair_timeseries,
     "audio": make_pair_audio,
     "text": make_pair_text,
@@ -441,9 +469,10 @@ def scenarios_of(modality: str) -> Tuple[str, ...]:
     if modality == "weather":
         from .weather import STORIES
         return (*SUPPORTED_SCENARIOS, *STORIES)
-    if modality == "dashcam":
-        from .dashcam import STORIES
-        return (*SUPPORTED_SCENARIOS, *STORIES)
+    stories = {"dashcam": "dashcam", "support": "support", "machine": "machine"}.get(modality)
+    if stories:
+        import importlib
+        return (*SUPPORTED_SCENARIOS, *importlib.import_module(f".{stories}", __package__).STORIES)
     return SUPPORTED_SCENARIOS
 
 
